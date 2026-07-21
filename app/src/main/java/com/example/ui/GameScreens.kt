@@ -76,11 +76,23 @@ fun getItemImageRes(imageResName: String, itemType: String): Int {
         "img_item_ring_1784593597914" -> R.drawable.img_item_ring_1784593597914
         "img_item_shield_1784593608106" -> R.drawable.img_item_shield_1784593608106
         "img_item_potion_1784593618142" -> R.drawable.img_item_potion_1784593618142
+        "img_item_helmet_1784658214656" -> R.drawable.img_item_helmet_1784658214656
+        "img_item_wings_1784658202673" -> R.drawable.img_item_wings_1784658202673
+        "img_item_gloves_1784658226142" -> R.drawable.img_item_gloves_1784658226142
+        "img_item_boots_1784658239207" -> R.drawable.img_item_boots_1784658239207
+        "img_item_earring_1784658263366" -> R.drawable.img_item_earring_1784658263366
+        "img_item_relic_1784658251007" -> R.drawable.img_item_relic_1784658251007
         else -> {
             when (itemType.uppercase()) {
+                "HELMET" -> R.drawable.img_item_helmet_1784658214656
+                "WINGS" -> R.drawable.img_item_wings_1784658202673
                 "WEAPON" -> R.drawable.img_item_sword_1784593548868
                 "ARMOR" -> R.drawable.img_item_plate_1784593577913
+                "GLOVES" -> R.drawable.img_item_gloves_1784658226142
+                "BOOTS" -> R.drawable.img_item_boots_1784658239207
                 "RING" -> R.drawable.img_item_ring_1784593597914
+                "EARRING" -> R.drawable.img_item_earring_1784658263366
+                "RELIC" -> R.drawable.img_item_relic_1784658251007
                 "SHIELD" -> R.drawable.img_item_shield_1784593608106
                 else -> R.drawable.img_item_potion_1784593618142
             }
@@ -832,6 +844,7 @@ fun WorldMapScreen(viewModel: GameViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
+            .verticalScroll(rememberScrollState())
             .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -958,8 +971,8 @@ fun WorldMapScreen(viewModel: GameViewModel) {
         // Grid Representation Styled as a Medieval Map Board
         Box(
             modifier = Modifier
-                .weight(1.2f)
                 .fillMaxWidth()
+                .height(310.dp)
                 .clip(RoundedCornerShape(12.dp))
                 .border(1.5.dp, MedievalGold.copy(alpha = 0.35f), RoundedCornerShape(12.dp)),
             contentAlignment = Alignment.Center
@@ -1124,7 +1137,7 @@ fun WorldMapScreen(viewModel: GameViewModel) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .weight(0.9f),
+                    .padding(vertical = 4.dp),
                 shape = RoundedCornerShape(12.dp),
                 border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.4f)),
                 colors = CardDefaults.cardColors(containerColor = MedievalCardBg)
@@ -1322,252 +1335,256 @@ fun ShopScreen(viewModel: GameViewModel) {
     val shopItems by viewModel.shopItems.collectAsState()
     val p = progress ?: return
 
-    Column(
+    val inventory = GameJsonParser.listFromJson<Item>(p.inventoryJson).filter { it.type != "EMPTY" }
+
+    LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         // Decorative Medieval Market Header
-        Text(
-            text = "Mercado Real de Eldoria",
-            color = MedievalGold,
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp
-        )
-        Text(
-            text = "Intercambia tu oro acumulado por armas forjadas o vende tus tesoros.",
-            color = Color.White.copy(alpha = 0.6f),
-            fontSize = 11.sp,
-            textAlign = TextAlign.Center
-        )
-
-        Spacer(modifier = Modifier.height(10.dp))
+        item {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Mercado Real de Eldoria",
+                    color = MedievalGold,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+                Text(
+                    text = "Intercambia tu oro por armas forjadas o vende tus tesoros.",
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 11.sp,
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
 
         // Grommar the Merchant Card
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 6.dp),
-            colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-            border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.35f)),
-            shape = RoundedCornerShape(12.dp)
-        ) {
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.35f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_shop_merchant_1784605357079),
+                        contentDescription = "Grommar, el Herrero de la Corona",
+                        modifier = Modifier
+                            .size(60.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .border(1.5.dp, MedievalGold, RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = "Grommar, el Herrero de la Corona",
+                            color = MedievalGold,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "«¡Saludos! Forjo el mejor acero de Eldoria y compro reliquias de las mazmorras.»",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 10.sp,
+                            fontStyle = FontStyle.Italic,
+                            lineHeight = 13.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Miniscule Potion & Refresh Row
+        item {
             Row(
-                modifier = Modifier.padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.img_shop_merchant_1784605357079),
-                    contentDescription = "Grommar, el Herrero de la Corona",
+                // Buy Potion Button
+                Button(
+                    onClick = { viewModel.buyPotion() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MedievalCardBg),
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
                     modifier = Modifier
-                        .size(72.dp)
-                        .clip(RoundedCornerShape(8.dp))
-                        .border(1.5.dp, MedievalGold, RoundedCornerShape(8.dp)),
-                    contentScale = ContentScale.Crop
-                )
-                Spacer(modifier = Modifier.width(12.dp))
-                Column {
-                    Text(
-                        text = "Grommar, el Herrero de la Corona",
-                        color = MedievalGold,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "«¡Saludos, viajero! Forjo el mejor acero de Eldoria y compro reliquias de las mazmorras. ¿Qué buscas hoy?»",
-                        color = Color.White.copy(alpha = 0.85f),
-                        fontSize = 9.sp,
-                        fontStyle = FontStyle.Italic,
-                        lineHeight = 13.sp
-                    )
+                        .weight(1f)
+                        .height(36.dp)
+                        .testTag("buy_potion_btn"),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.LocalPharmacy, "Poción", tint = MedievalCrimson, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("+50% HP/MP", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(Icons.Default.MonetizationOn, "Oro", tint = MedievalGold, modifier = Modifier.size(14.dp))
+                        Text(" 40", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MedievalGold)
+                    }
+                }
+
+                // Refresh Shop Button
+                Button(
+                    onClick = { viewModel.refreshShop() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MedievalCardBg),
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(36.dp)
+                        .testTag("refresh_shop_btn"),
+                    contentPadding = PaddingValues(horizontal = 6.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Refresh, "Reabastecer", tint = MedievalGold, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Reabastecer", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(Icons.Default.MonetizationOn, "Oro", tint = MedievalGold, modifier = Modifier.size(14.dp))
+                        Text(" 20", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MedievalGold)
+                    }
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
-
-        // Quick buying of potions & Refresh Market
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            // buy potion button
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { viewModel.buyPotion() },
-                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-                border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.3f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.LocalPharmacy,
-                        contentDescription = "Comprar Poción",
-                        tint = MedievalGold,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Poción Rejuvenecedora", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    Text("Cuesta 40 oro (Sana 50% HP/MP)", color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
-                }
-            }
-
-            // refresh shop items
-            Card(
-                modifier = Modifier
-                    .weight(1f)
-                    .clickable { viewModel.refreshShop() },
-                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-                border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.3f))
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Refresh,
-                        contentDescription = "Reabastecer Mercancía",
-                        tint = MedievalGold,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text("Reabastecer Mercado", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                    Text("Cuesta 20 oro (Nuevos objetos)", color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
-                }
-            }
+        // Buy Section Title
+        item {
+            Text(
+                text = "Armas y Equipo Disponibles (Comprar)",
+                color = MedievalGold,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Available items list
-        Text(
-            text = "Armas y Equipo Disponibles (Comprar)",
-            color = MedievalGold,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
-            modifier = Modifier.align(Alignment.Start)
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Box(
-            modifier = Modifier
-                .weight(1.2f)
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                .border(1.dp, MedievalGold.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                .padding(6.dp)
-        ) {
-            if (shopItems.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("El mercado ha sido agotado. ¡Reabastece de mercancías!", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
-                }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxSize()
+        // Shop Items list
+        if (shopItems.isEmpty()) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(shopItems) { item ->
-                        val cost = when (item.rarity.uppercase()) {
-                            "UNIVERSAL" -> 600
-                            "ARCANO" -> 450
-                            "LEGENDARIO", "LEGENDARY" -> 300
-                            "ÉPICO", "EPIC" -> 160
-                            "RARO", "RARE" -> 80
-                            else -> 30
-                        }
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-                            border = BorderStroke(1.dp, getRarityColor(item.rarity).copy(alpha = 0.4f)),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Image(
-                                    painter = painterResource(id = getItemImageRes(item.imageResName, item.type)),
-                                    contentDescription = item.name,
-                                    modifier = Modifier
-                                        .size(44.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .border(1.dp, getRarityColor(item.rarity), RoundedCornerShape(6.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(item.name, color = getRarityColor(item.rarity), fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text(item.description, color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    val stats = remember(item) {
-                                        val list = mutableListOf<String>()
-                                        if (item.strBonus > 0) list.add("Fuerza +${item.strBonus}")
-                                        if (item.dexBonus > 0) list.add("Destreza +${item.dexBonus}")
-                                        if (item.intBonus > 0) list.add("Inteligencia +${item.intBonus}")
-                                        if (item.conBonus > 0) list.add("Constitución +${item.conBonus}")
-                                        if (item.dmgBonus > 0) list.add("Daño +${item.dmgBonus}")
-                                        if (item.defBonus > 0) list.add("Defensa +${item.defBonus}")
-                                        if (item.hpRegen > 0) list.add("Reg. HP +${item.hpRegen}")
-                                        list
-                                    }
+                    Text(
+                        "El mercado está agotado. ¡Reabastece de mercancías!",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(16.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            items(shopItems) { item ->
+                val cost = when (item.rarity.uppercase()) {
+                    "UNIVERSAL" -> 600
+                    "ARCANO" -> 450
+                    "LEGENDARIO", "LEGENDARY" -> 300
+                    "ÉPICO", "EPIC" -> 160
+                    "RARO", "RARE" -> 80
+                    else -> 30
+                }
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                    border = BorderStroke(1.dp, getRarityColor(item.rarity).copy(alpha = 0.4f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Image(
+                            painter = painterResource(id = getItemImageRes(item.imageResName, item.type)),
+                            contentDescription = item.name,
+                            modifier = Modifier
+                                .size(44.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(1.dp, getRarityColor(item.rarity), RoundedCornerShape(6.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(item.name, color = getRarityColor(item.rarity), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Text(item.description, color = Color.White.copy(alpha = 0.7f), fontSize = 10.sp)
+                            Spacer(modifier = Modifier.height(2.dp))
+                            val stats = remember(item) {
+                                val list = mutableListOf<String>()
+                                if (item.strBonus > 0) list.add("Fuerza +${item.strBonus}")
+                                if (item.dexBonus > 0) list.add("Destreza +${item.dexBonus}")
+                                if (item.intBonus > 0) list.add("Inteligencia +${item.intBonus}")
+                                if (item.conBonus > 0) list.add("Constitución +${item.conBonus}")
+                                if (item.dmgBonus > 0) list.add("Daño +${item.dmgBonus}")
+                                if (item.defBonus > 0) list.add("Defensa +${item.defBonus}")
+                                if (item.hpRegen > 0) list.add("Reg. HP +${item.hpRegen}")
+                                list
+                            }
 
-                                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text("Nivel ${item.itemLevel}", color = MedievalGold, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                            Text(item.type, color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
-                                            Text(item.rarity.uppercase(), color = getRarityColor(item.rarity), fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                                        }
-                                        stats.chunked(2).forEach { chunk ->
-                                            Row(
-                                                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                                verticalAlignment = Alignment.CenterVertically
+                            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text("Nivel ${item.itemLevel}", color = MedievalGold, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                    Text(item.type, color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
+                                    Text(item.rarity.uppercase(), color = getRarityColor(item.rarity), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                }
+                                stats.chunked(2).forEach { chunk ->
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        chunk.forEach { statText ->
+                                            val isRegen = statText.contains("Reg")
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(
+                                                        if (isRegen) MedievalXpGreen.copy(alpha = 0.15f)
+                                                        else MedievalGold.copy(alpha = 0.12f),
+                                                        RoundedCornerShape(4.dp)
+                                                    )
+                                                    .border(
+                                                        0.5.dp,
+                                                        if (isRegen) MedievalXpGreen.copy(alpha = 0.3f)
+                                                        else MedievalGold.copy(alpha = 0.3f),
+                                                        RoundedCornerShape(4.dp)
+                                                    )
+                                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                                             ) {
-                                                chunk.forEach { statText ->
-                                                    val isRegen = statText.contains("Reg")
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .background(
-                                                                if (isRegen) MedievalXpGreen.copy(alpha = 0.15f)
-                                                                else MedievalGold.copy(alpha = 0.12f),
-                                                                RoundedCornerShape(4.dp)
-                                                            )
-                                                            .border(
-                                                                0.5.dp,
-                                                                if (isRegen) MedievalXpGreen.copy(alpha = 0.3f)
-                                                                else MedievalGold.copy(alpha = 0.3f),
-                                                                RoundedCornerShape(4.dp)
-                                                            )
-                                                            .padding(horizontal = 4.dp, vertical = 2.dp)
-                                                    ) {
-                                                        Text(
-                                                            text = statText,
-                                                            color = if (isRegen) MedievalXpGreen else MedievalGold,
-                                                            fontSize = 8.sp,
-                                                            fontWeight = FontWeight.Bold
-                                                        )
-                                                    }
-                                                }
+                                                Text(
+                                                    text = statText,
+                                                    color = if (isRegen) MedievalXpGreen else MedievalGold,
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
                                             }
                                         }
                                     }
                                 }
-                                Button(
-                                    onClick = { viewModel.buyItem(item, cost) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
-                                    shape = RoundedCornerShape(4.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                                    modifier = Modifier.padding(start = 8.dp)
-                                ) {
-                                    Text("Comprar ($cost)", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                }
+                            }
+                        }
+                        Button(
+                            onClick = { viewModel.buyItem(item, cost) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.padding(start = 6.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Comprar", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Icon(Icons.Default.MonetizationOn, "Oro", tint = Color.Black, modifier = Modifier.size(12.dp))
+                                Text(" $cost", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                             }
                         }
                     }
@@ -1575,77 +1592,81 @@ fun ShopScreen(viewModel: GameViewModel) {
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        // Sell Section Title
+        item {
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = "Vender Tu Equipo del Inventario",
+                color = MedievalGold,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp
+            )
+        }
 
-        // Selling equipment section
-        Text(
-            text = "Vender tu Equipo del Inventario (Recibe Oro)",
-            color = MedievalGold,
-            fontWeight = FontWeight.Bold,
-            fontSize = 14.sp,
-            modifier = Modifier.align(Alignment.Start)
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(12.dp))
-                .border(1.dp, MedievalGold.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                .padding(6.dp)
-        ) {
-            val inventory = GameJsonParser.listFromJson<Item>(p.inventoryJson).filter { it.type != "EMPTY" }
-            if (inventory.isEmpty()) {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No tienes equipo para vender en tu mochila.", color = Color.White.copy(alpha = 0.4f), fontSize = 12.sp)
-                }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    modifier = Modifier.fillMaxSize()
+        // Inventory Items for selling
+        if (inventory.isEmpty()) {
+            item {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(inventory) { item ->
-                        val sellPrice = when (item.rarity.uppercase()) {
-                            "UNIVERSAL" -> 300
-                            "ARCANO" -> 225
-                            "LEGENDARIO", "LEGENDARY" -> 150
-                            "ÉPICO", "EPIC" -> 80
-                            "RARO", "RARE" -> 40
-                            else -> 15
+                    Text(
+                        "No tienes equipo para vender en tu mochila.",
+                        color = Color.White.copy(alpha = 0.5f),
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(16.dp),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+        } else {
+            items(inventory) { item ->
+                val sellPrice = when (item.rarity.uppercase()) {
+                    "UNIVERSAL" -> 300
+                    "ARCANO" -> 225
+                    "LEGENDARIO", "LEGENDARY" -> 150
+                    "ÉPICO", "EPIC" -> 80
+                    "RARO", "RARE" -> 40
+                    else -> 15
+                }
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg.copy(alpha = 0.7f)),
+                    border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Image(
+                            painter = painterResource(id = getItemImageRes(item.imageResName, item.type)),
+                            contentDescription = item.name,
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .border(1.dp, getRarityColor(item.rarity), RoundedCornerShape(6.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("${item.name} [Niv.${item.itemLevel}]", color = getRarityColor(item.rarity), fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Precio: ", color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
+                                Icon(Icons.Default.MonetizationOn, "Oro", tint = MedievalGold, modifier = Modifier.size(11.dp))
+                                Text(" $sellPrice", color = MedievalGold, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = MedievalCardBg.copy(alpha = 0.7f)),
-                            border = BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
-                            modifier = Modifier.fillMaxWidth()
+                        Button(
+                            onClick = { viewModel.sellItem(item) },
+                            colors = ButtonDefaults.buttonColors(containerColor = MedievalCrimson),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                         ) {
-                            Row(
-                                modifier = Modifier.padding(8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Image(
-                                    painter = painterResource(id = getItemImageRes(item.imageResName, item.type)),
-                                    contentDescription = item.name,
-                                    modifier = Modifier
-                                        .size(36.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .border(1.dp, getRarityColor(item.rarity), RoundedCornerShape(6.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("${item.name} [Niv.${item.itemLevel}]", color = getRarityColor(item.rarity), fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                    Text("Precio de reventa: $sellPrice monedas de oro", color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp)
-                                }
-                                Button(
-                                    onClick = { viewModel.sellItem(item) },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MedievalCrimson),
-                                    shape = RoundedCornerShape(4.dp),
-                                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
-                                ) {
-                                    Text("Vender (+$sellPrice)", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
-                                }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Vender +", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                Icon(Icons.Default.MonetizationOn, "Oro", tint = Color.Yellow, modifier = Modifier.size(11.dp))
+                                Text("$sellPrice", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                             }
                         }
                     }
@@ -2786,8 +2807,10 @@ fun CharacterScreen(viewModel: GameViewModel) {
     val progress by viewModel.progressState.collectAsState()
     val p = progress ?: return
     val playerStats by viewModel.playerStats.collectAsState()
+    val allCharacters by viewModel.allCharactersState.collectAsState()
 
     val unspentStats = viewModel.getUnspentStatPoints(p)
+    var showCharSelectionDialog by remember { mutableStateOf(false) }
 
     LazyColumn(
         modifier = Modifier
@@ -2804,12 +2827,16 @@ fun CharacterScreen(viewModel: GameViewModel) {
                     border = BorderStroke(1.5.dp, MedievalXpGreen)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Text(
-                            "Métricas de PlayerStats",
-                            color = MedievalXpGreen,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Analytics, "Métricas", tint = MedievalXpGreen, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                "Métricas de PlayerStats",
+                                color = MedievalXpGreen,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
                         Spacer(modifier = Modifier.height(8.dp))
                         
                         Row(
@@ -3041,53 +3068,73 @@ fun CharacterScreen(viewModel: GameViewModel) {
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Atributos de Combate", color = MedievalGold, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.MilitaryTech, "Atributos", tint = MedievalGold, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Atributos de Combate", color = MedievalGold, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        }
+
                         if (unspentStats > 0) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            Button(
+                                onClick = { viewModel.autoAllocateAllStatPoints() },
+                                colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                modifier = Modifier.testTag("btn_auto_allocate_hero")
                             ) {
-                                TextButton(
-                                    onClick = { viewModel.autoAllocateAllStatPoints() },
-                                    modifier = Modifier.testTag("btn_auto_allocate_hero")
-                                ) {
-                                    Text("Auto Asignar", color = MedievalGold, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                }
-                                Card(
-                                    colors = CardDefaults.cardColors(containerColor = MedievalCrimson)
-                                ) {
-                                    Text(
-                                        "Disponibles: $unspentStats",
-                                        color = Color.White,
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                                    )
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.AutoMode, "Auto", tint = Color.Black, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text("Auto Asignar", color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                             }
+                        }
+                    }
+
+                    if (unspentStats > 0) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MedievalCrimson),
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(6.dp)
+                        ) {
+                            Text(
+                                "Puntos Disponibles para Asignar: $unspentStats",
+                                color = Color.White,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                            )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
                     val statRows = listOf(
-                        Triple("STR", "Fuerza (+Daño físico)", p.statStr),
-                        Triple("DEX", "Destreza (+Crítico/Evasión)", p.statDex),
-                        Triple("INT", "Inteligencia (+Daño Mágico/MP)", p.statInt),
-                        Triple("CON", "Constitución (+Salud Máxima)", p.statCon)
+                        Quadruple("STR", "Fuerza (+Daño físico)", p.statStr, Icons.Default.FitnessCenter),
+                        Quadruple("DEX", "Destreza (+Crítico/Evasión)", p.statDex, Icons.Default.DirectionsRun),
+                        Quadruple("INT", "Inteligencia (+Daño Mágico/MP)", p.statInt, Icons.Default.Psychology),
+                        Quadruple("CON", "Constitución (+Salud Máxima)", p.statCon, Icons.Default.Favorite)
                     )
 
-                    statRows.forEach { (code, name, value) ->
+                    statRows.forEach { (code, name, value, icon) ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 4.dp),
+                                .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column {
-                                Text(code, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                Text(name, color = Color.White.copy(alpha = 0.5f), fontSize = 11.sp)
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                                Icon(icon, code, tint = MedievalGold, modifier = Modifier.size(20.dp))
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Column {
+                                    Text(code, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text(name, color = Color.White.copy(alpha = 0.6f), fontSize = 10.sp)
+                                }
                             }
 
                             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3117,20 +3164,151 @@ fun CharacterScreen(viewModel: GameViewModel) {
             }
         }
 
+        // Multi-Character Management Section (Replaces Old Reset Game Button)
         item {
-            Spacer(modifier = Modifier.height(20.dp))
-            Button(
-                onClick = { viewModel.deleteCharacterAndReset() },
-                colors = ButtonDefaults.buttonColors(containerColor = MedievalCrimson),
-                shape = RoundedCornerShape(8.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("reset_game_button")
+            Spacer(modifier = Modifier.height(10.dp))
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("BORRAR PARTIDA Y REINICIAR", color = Color.White, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = { viewModel.startNewCharacterCreator() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("create_new_character_btn")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.PersonAdd, "Crear Personaje", tint = Color.Black)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("CREAR OTRO PERSONAJE", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                Button(
+                    onClick = { showCharSelectionDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = MedievalCardBg),
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                        .testTag("switch_character_btn")
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.People, "Mis Personajes", tint = MedievalGold)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("MIS PERSONAJES / CAMBIAR HÉROE (${allCharacters.size})", color = MedievalGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
             }
             Spacer(modifier = Modifier.height(30.dp))
         }
+    }
+
+    // Modal Dialog for Multi-Character Switch / Selection
+    if (showCharSelectionDialog) {
+        AlertDialog(
+            onDismissRequest = { showCharSelectionDialog = false },
+            containerColor = MedievalCardBg,
+            title = {
+                Text(
+                    "Seleccionar Personaje / Partida",
+                    color = MedievalGold,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        "Elige qué héroe deseas controlar o elimina una partida antigua:",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 11.sp
+                    )
+
+                    allCharacters.forEach { charItem ->
+                        val isCurrent = charItem.id == p.id
+                        Card(
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isCurrent) MedievalGold.copy(alpha = 0.15f) else Color.Black.copy(alpha = 0.3f)
+                            ),
+                            border = BorderStroke(
+                                1.dp,
+                                if (isCurrent) MedievalGold else Color.White.copy(alpha = 0.1f)
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            charItem.charName,
+                                            color = if (isCurrent) MedievalGold else Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp
+                                        )
+                                        if (isCurrent) {
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text("(ACTIVO)", color = MedievalXpGreen, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+                                    Text(
+                                        "${charItem.charRace} ${charItem.charClass} - Niv.${charItem.charLevel}",
+                                        color = Color.White.copy(alpha = 0.6f),
+                                        fontSize = 10.sp
+                                    )
+                                }
+
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (!isCurrent) {
+                                        Button(
+                                            onClick = {
+                                                viewModel.selectCharacter(charItem.id)
+                                                showCharSelectionDialog = false
+                                            },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                                            shape = RoundedCornerShape(4.dp),
+                                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                        ) {
+                                            Text("Jugar", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                        }
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
+
+                                    if (allCharacters.size > 1) {
+                                        IconButton(
+                                            onClick = { viewModel.deleteCharacter(charItem.id) },
+                                            modifier = Modifier.size(28.dp)
+                                        ) {
+                                            Icon(Icons.Default.Delete, "Borrar", tint = MedievalCrimson, modifier = Modifier.size(16.dp))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = { showCharSelectionDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                    shape = RoundedCornerShape(6.dp)
+                ) {
+                    Text("Cerrar", color = Color.Black, fontWeight = FontWeight.Bold)
+                }
+            }
+        )
     }
 }
 
@@ -3654,6 +3832,69 @@ fun TalentsScreen(viewModel: GameViewModel) {
     }
 }
 
+@Composable
+fun MuEquipmentSlot(
+    label: String,
+    code: String,
+    item: Item?,
+    icon: ImageVector,
+    onUnequip: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .size(54.dp)
+            .border(
+                1.5.dp,
+                if (item != null) getRarityColor(item.rarity) else MedievalGold.copy(alpha = 0.25f),
+                RoundedCornerShape(8.dp)
+            )
+            .clickable(enabled = item != null) { onUnequip() }
+            .testTag("equip_slot_$code"),
+        colors = CardDefaults.cardColors(
+            containerColor = if (item != null) MedievalCardBg else Color.Black.copy(alpha = 0.4f)
+        ),
+        shape = RoundedCornerShape(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(2.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (item != null) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(id = getItemImageRes(item.imageResName, item.type)),
+                        contentDescription = item.name,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(6.dp)),
+                        contentScale = ContentScale.Crop
+                    )
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(bottomEnd = 4.dp))
+                            .padding(horizontal = 3.dp, vertical = 1.dp)
+                    ) {
+                        Text("Niv.${item.itemLevel}", color = MedievalGold, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            } else {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(icon, label, tint = Color.White.copy(alpha = 0.35f), modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.height(1.dp))
+                    Text(label, color = Color.White.copy(alpha = 0.4f), fontSize = 7.sp, fontWeight = FontWeight.Medium)
+                }
+            }
+        }
+    }
+}
+
 // --- DYNAMIC INVENTORY & EQUIPMENT SCREEN ---
 @Composable
 fun InventoryScreen(viewModel: GameViewModel) {
@@ -3662,14 +3903,20 @@ fun InventoryScreen(viewModel: GameViewModel) {
 
     val inventory = GameJsonParser.listFromJson<Item>(p.inventoryJson)
     val weapon = GameJsonParser.fromJson<Item>(p.equippedWeaponJson)
-    val armor = GameJsonParser.fromJson<Item>(p.equippedArmorJson)
-    val ring = GameJsonParser.fromJson<Item>(p.equippedRingJson)
     val shield = GameJsonParser.fromJson<Item>(p.equippedShieldJson)
+    val armor = GameJsonParser.fromJson<Item>(p.equippedArmorJson)
+    val helmet = GameJsonParser.fromJson<Item>(p.equippedHelmetJson)
+    val wings = GameJsonParser.fromJson<Item>(p.equippedWingsJson)
+    val gloves = GameJsonParser.fromJson<Item>(p.equippedGlovesJson)
+    val boots = GameJsonParser.fromJson<Item>(p.equippedBootsJson)
+    val ring = GameJsonParser.fromJson<Item>(p.equippedRingJson)
+    val earring = GameJsonParser.fromJson<Item>(p.equippedEarringJson)
+    val relic = GameJsonParser.fromJson<Item>(p.equippedRelicJson)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Row(
@@ -3678,10 +3925,10 @@ fun InventoryScreen(viewModel: GameViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
-                "Equipo Equipado",
+                "Equipo Equipado (Estilo MU Online)",
                 color = MedievalGold,
                 fontWeight = FontWeight.Bold,
-                fontSize = 14.sp
+                fontSize = 13.sp
             )
             Button(
                 onClick = { viewModel.autoEquip() },
@@ -3697,87 +3944,58 @@ fun InventoryScreen(viewModel: GameViewModel) {
         }
         Spacer(modifier = Modifier.height(6.dp))
 
-        Row(
+        // MU Online Equipment Matrix Panel
+        Card(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+            border = BorderStroke(1.5.dp, MedievalGold.copy(alpha = 0.4f)),
+            shape = RoundedCornerShape(12.dp)
         ) {
-            val slots = listOf(
-                Quadruple("Arma", "WEAPON", weapon, Icons.Default.Gavel),
-                Quadruple("Pecho", "ARMOR", armor, Icons.Default.Shield),
-                Quadruple("Anillo", "RING", ring, Icons.Default.TripOrigin),
-                Quadruple("Escudo", "SHIELD", shield, Icons.Default.Shield)
-            )
-
-            slots.forEach { (label, code, item, icon) ->
-                Card(
-                    modifier = Modifier
-                        .weight(1f)
-                        .aspectRatio(1f)
-                        .border(
-                            1.dp,
-                            if (item != null) getRarityColor(item.rarity) else Color.White.copy(alpha = 0.1f),
-                            RoundedCornerShape(8.dp)
-                        )
-                        .clickable(enabled = item != null) {
-                            viewModel.unequipItem(code)
-                        }
-                        .testTag("equip_slot_$code"),
-                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-                    shape = RoundedCornerShape(8.dp)
+            Column(
+                modifier = Modifier.padding(10.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Row 1: Wings, Helmet, Relic
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(4.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (item != null) {
-                            Box(modifier = Modifier.fillMaxSize()) {
-                                Image(
-                                    painter = painterResource(id = getItemImageRes(item.imageResName, item.type)),
-                                    contentDescription = item.name,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clip(RoundedCornerShape(8.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                                // Item Level overlay badge
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.TopStart)
-                                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(bottomEnd = 6.dp))
-                                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                                ) {
-                                    Text("Niv.${item.itemLevel}", color = MedievalGold, fontSize = 7.sp, fontWeight = FontWeight.Bold)
-                                }
-                                // Name overlay at the bottom
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .fillMaxWidth()
-                                        .background(Color.Black.copy(alpha = 0.7f))
-                                        .padding(vertical = 2.dp)
-                                ) {
-                                    Text(
-                                        item.name.split(" ").last(),
-                                        color = getRarityColor(item.rarity),
-                                        fontSize = 8.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        textAlign = TextAlign.Center,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-                        } else {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Icon(icon, contentDescription = label, tint = Color.White.copy(alpha = 0.2f), modifier = Modifier.size(20.dp))
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(label, color = Color.White.copy(alpha = 0.3f), fontSize = 9.sp)
-                            }
-                        }
-                    }
+                    MuEquipmentSlot("Alas", "WINGS", wings, Icons.Default.FlightTakeoff, { viewModel.unequipItem("WINGS") })
+                    MuEquipmentSlot("Casco", "HELMET", helmet, Icons.Default.MilitaryTech, { viewModel.unequipItem("HELMET") })
+                    MuEquipmentSlot("Reliquia", "RELIC", relic, Icons.Default.AutoAwesome, { viewModel.unequipItem("RELIC") })
+                }
+
+                // Row 2: Weapon (Primary), Armor, Shield (Secondary)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MuEquipmentSlot("Arma", "WEAPON", weapon, Icons.Default.Gavel, { viewModel.unequipItem("WEAPON") })
+                    MuEquipmentSlot("Pechera", "ARMOR", armor, Icons.Default.Shield, { viewModel.unequipItem("ARMOR") })
+                    MuEquipmentSlot("Escudo", "SHIELD", shield, Icons.Default.Shield, { viewModel.unequipItem("SHIELD") })
+                }
+
+                // Row 3: Gloves, Boots
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MuEquipmentSlot("Guantes", "GLOVES", gloves, Icons.Default.PanTool, { viewModel.unequipItem("GLOVES") })
+                    MuEquipmentSlot("Botas", "BOOTS", boots, Icons.Default.DirectionsWalk, { viewModel.unequipItem("BOOTS") })
+                }
+
+                // Row 4: Ring, Earring
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    MuEquipmentSlot("Anillo", "RING", ring, Icons.Default.TripOrigin, { viewModel.unequipItem("RING") })
+                    MuEquipmentSlot("Pendientes", "EARRING", earring, Icons.Default.AutoAwesome, { viewModel.unequipItem("EARRING") })
                 }
             }
         }

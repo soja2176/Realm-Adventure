@@ -141,7 +141,45 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     private val _isAutoNavigation = MutableStateFlow(false)
     val isAutoNavigation: StateFlow<Boolean> = _isAutoNavigation.asStateFlow()
 
+    val allCharactersState: StateFlow<List<GameProgress>> = repository.allCharactersFlow
+        .stateIn(
+            scope = viewModelScope,
+            started = SharingStarted.WhileSubscribed(5000),
+            initialValue = emptyList()
+        )
+
     private var isFirstLoad = true
+
+    fun startNewCharacterCreator() {
+        viewModelScope.launch {
+            repository.deactivateAll()
+            _screenState.value = GameScreen.CREATING_CHARACTER
+            _creatorName.value = ""
+            _creatorPointsAvailable.value = 15
+            recalculateCreatorBaseStats()
+            showNotification("Crea un nuevo héroe para comenzar tu aventura en Eldoria.")
+        }
+    }
+
+    fun selectCharacter(characterId: Int) {
+        viewModelScope.launch {
+            repository.setActive(characterId)
+            isFirstLoad = true
+            _screenState.value = GameScreen.WORLD_MAP
+            showNotification("Partida cargada.")
+        }
+    }
+
+    fun deleteCharacter(characterId: Int) {
+        viewModelScope.launch {
+            repository.deleteCharacter(characterId)
+            showNotification("Personaje eliminado.")
+            val remaining = repository.getProgress()
+            if (remaining == null) {
+                _screenState.value = GameScreen.CREATING_CHARACTER
+            }
+        }
+    }
 
     fun toggleAutoCombat() {
         _isAutoCombat.value = !_isAutoCombat.value
@@ -522,6 +560,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         viewModelScope.launch {
+            repository.deactivateAll()
+
             val maxHp = _creatorCon.value * 12
             val maxMp = _creatorInt.value * 6
 
@@ -540,7 +580,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val talentsList = getBaseTalentTree()
 
             val progress = GameProgress(
-                hasActiveChar = true,
+                id = 0,
+                isActiveChar = true,
                 charName = name,
                 charRace = _creatorRace.value,
                 charClass = _creatorClass.value,
@@ -558,10 +599,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 currentHp = maxHp,
                 maxMp = maxMp,
                 currentMp = maxMp,
+                equippedHelmetJson = "",
+                equippedWingsJson = "",
                 equippedWeaponJson = GameJsonParser.toJson(starterWeapon),
-                equippedArmorJson = GameJsonParser.toJson(starterArmor),
-                equippedRingJson = "",
                 equippedShieldJson = "",
+                equippedArmorJson = GameJsonParser.toJson(starterArmor),
+                equippedGlovesJson = "",
+                equippedBootsJson = "",
+                equippedRingJson = "",
+                equippedEarringJson = "",
+                equippedRelicJson = "",
                 inventoryJson = "[]",
                 talentsJson = GameJsonParser.listToJson(talentsList),
                 skillsJson = GameJsonParser.listToJson(skillsList),
@@ -1604,27 +1651,32 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     }
 
     // --- PROCEDURAL ITEMS DROP ENGINE ---
-    fun getHpRegenerationValue(progress: GameProgress): Int {
-        val weapon = GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)
-        val armor = GameJsonParser.fromJson<Item>(progress.equippedArmorJson)
-        val ring = GameJsonParser.fromJson<Item>(progress.equippedRingJson)
-        val shield = GameJsonParser.fromJson<Item>(progress.equippedShieldJson)
+    fun getAllEquippedItems(progress: GameProgress): List<Item> {
+        val items = mutableListOf<Item>()
+        GameJsonParser.fromJson<Item>(progress.equippedHelmetJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedWingsJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedShieldJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedArmorJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedGlovesJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedBootsJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedRingJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedEarringJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedRelicJson)?.let { items.add(it) }
+        return items
+    }
 
-        val itemRegen = (weapon?.hpRegen ?: 0) + (armor?.hpRegen ?: 0) + (ring?.hpRegen ?: 0) + (shield?.hpRegen ?: 0)
+    fun getHpRegenerationValue(progress: GameProgress): Int {
+        val equipped = getAllEquippedItems(progress)
+        val itemRegen = equipped.sumOf { it.hpRegen }
         val baseRegen = 2 + (progress.statCon * 0.15).toInt()
-        
         return baseRegen + itemRegen
     }
 
     fun getMpRegenerationValue(progress: GameProgress): Int {
-        val weapon = GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)
-        val armor = GameJsonParser.fromJson<Item>(progress.equippedArmorJson)
-        val ring = GameJsonParser.fromJson<Item>(progress.equippedRingJson)
-        val shield = GameJsonParser.fromJson<Item>(progress.equippedShieldJson)
-
-        val itemRegen = (weapon?.intBonus ?: 0) / 4 + (armor?.intBonus ?: 0) / 4 + (ring?.intBonus ?: 0) / 4
+        val equipped = getAllEquippedItems(progress)
+        val itemRegen = equipped.sumOf { it.intBonus } / 4
         val baseRegen = 1 + (progress.statInt * 0.10).toInt()
-
         return baseRegen + itemRegen
     }
 
@@ -1644,7 +1696,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             }
         }
 
-        val type = listOf("WEAPON", "ARMOR", "RING", "SHIELD").random()
+        val type = listOf("HELMET", "WINGS", "WEAPON", "SHIELD", "ARMOR", "GLOVES", "BOOTS", "RING", "EARRING", "RELIC").random()
         val prefix = when (rarity) {
             "UNIVERSAL" -> listOf("Celestial", "Infinito", "Omnipresente", "Sideral", "Cosmológico").random()
             "ARCANO" -> listOf("Secreto", "Esotérico", "Místico", "Inescrutable", "Eldritch").random()
@@ -1655,13 +1707,18 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val name = when (type) {
+            "HELMET" -> listOf("Casco", "Yelmo", "Corona").random() + " $prefix"
+            "WINGS" -> listOf("Alas Archangélicas", "Plumas Celestiales", "Manto de Alas").random() + " $prefix"
             "WEAPON" -> listOf("Mandoble", "Báculo", "Daga", "Espada").random() + " $prefix"
+            "SHIELD" -> listOf("Escudo", "Baluarte", "Pavés").random() + " $prefix"
             "ARMOR" -> listOf("Pechera de Placas", "Túnica Arcana", "Armadura de Cuero").random() + " $prefix"
+            "GLOVES" -> listOf("Guantes", "Manoplas", "Manoplas de Placas").random() + " $prefix"
+            "BOOTS" -> listOf("Botas", "Grebas", "Botas de Cuero").random() + " $prefix"
             "RING" -> "Anillo $prefix"
-            else -> "Baluarte $prefix"
+            "EARRING" -> listOf("Pendiente", "Zarcillo", "Pendiente de Gemas").random() + " $prefix"
+            else -> listOf("Reliquia", "Orbe", "Tótem").random() + " $prefix"
         }
 
-        // Stats budget based on level and rarity
         val multiplier = when (rarity) {
             "UNIVERSAL" -> 6
             "ARCANO" -> 5
@@ -1672,7 +1729,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
         val budget = level * multiplier + Random.nextInt(2, 6)
 
-        // Procedural attribute splits
         var s = 0
         var d = 0
         var i = 0
@@ -1693,10 +1749,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         if (type == "WEAPON") dmg = level * multiplier + r.nextInt(5, 10)
-        if (type == "ARMOR") def = level * multiplier + r.nextInt(3, 8)
+        if (type == "ARMOR" || type == "HELMET" || type == "GLOVES" || type == "BOOTS") def = level * multiplier + r.nextInt(3, 8)
         if (type == "SHIELD") def = level * multiplier + r.nextInt(2, 6)
+        if (type == "WINGS" || type == "RELIC") dmg = level * multiplier + r.nextInt(3, 7)
 
-        if (type == "RING" || rarity == "ÉPICO" || rarity == "EPIC" || rarity == "LEGENDARIO" || rarity == "LEGENDARY" || rarity == "ARCANO" || rarity == "UNIVERSAL") {
+        if (type == "RING" || type == "EARRING" || rarity == "ÉPICO" || rarity == "EPIC" || rarity == "LEGENDARIO" || rarity == "LEGENDARY" || rarity == "ARCANO" || rarity == "UNIVERSAL") {
             if (r.nextInt(100) < 55) {
                 hpReg = level * multiplier / 2 + r.nextInt(1, 4)
             }
@@ -1712,6 +1769,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val imageResName = when (type) {
+            "HELMET" -> "img_item_helmet_1784658214656"
+            "WINGS" -> "img_item_wings_1784658202673"
             "WEAPON" -> {
                 when {
                     name.contains("Báculo", ignoreCase = true) -> "img_item_staff_1784593558118"
@@ -1725,7 +1784,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     else -> "img_item_plate_1784593577913"
                 }
             }
+            "GLOVES" -> "img_item_gloves_1784658226142"
+            "BOOTS" -> "img_item_boots_1784658239207"
             "RING" -> "img_item_ring_1784593597914"
+            "EARRING" -> "img_item_earring_1784658263366"
+            "RELIC" -> "img_item_relic_1784658251007"
             "SHIELD" -> "img_item_shield_1784593608106"
             else -> "img_item_potion_1784593618142"
         }
@@ -1775,15 +1838,21 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         var updatedProgress = progress
-        val slots = listOf("WEAPON", "ARMOR", "RING", "SHIELD")
+        val slots = listOf("HELMET", "WINGS", "WEAPON", "SHIELD", "ARMOR", "GLOVES", "BOOTS", "RING", "EARRING", "RELIC")
         val equippedNames = mutableListOf<String>()
 
         for (slot in slots) {
             val currentEquippedJson = when (slot) {
+                "HELMET" -> updatedProgress.equippedHelmetJson
+                "WINGS" -> updatedProgress.equippedWingsJson
                 "WEAPON" -> updatedProgress.equippedWeaponJson
-                "ARMOR" -> updatedProgress.equippedArmorJson
-                "RING" -> updatedProgress.equippedRingJson
                 "SHIELD" -> updatedProgress.equippedShieldJson
+                "ARMOR" -> updatedProgress.equippedArmorJson
+                "GLOVES" -> updatedProgress.equippedGlovesJson
+                "BOOTS" -> updatedProgress.equippedBootsJson
+                "RING" -> updatedProgress.equippedRingJson
+                "EARRING" -> updatedProgress.equippedEarringJson
+                "RELIC" -> updatedProgress.equippedRelicJson
                 else -> ""
             }
             val currentEquipped = if (currentEquippedJson.isNotEmpty()) {
@@ -1792,7 +1861,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             val currentScore = currentEquipped?.let { getItemScore(it) } ?: -1
 
-            // Limit auto-equip only to items whose itemLevel <= progress.charLevel
             val slotItemsInInv = invList.filter { it.type == slot && it.itemLevel <= progress.charLevel }
             val bestItemInInv = slotItemsInInv.maxByOrNull { getItemScore(it) }
 
@@ -1804,10 +1872,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         invList.add(currentEquipped)
                     }
                     updatedProgress = when (slot) {
+                        "HELMET" -> updatedProgress.copy(equippedHelmetJson = GameJsonParser.toJson(bestItemInInv))
+                        "WINGS" -> updatedProgress.copy(equippedWingsJson = GameJsonParser.toJson(bestItemInInv))
                         "WEAPON" -> updatedProgress.copy(equippedWeaponJson = GameJsonParser.toJson(bestItemInInv))
-                        "ARMOR" -> updatedProgress.copy(equippedArmorJson = GameJsonParser.toJson(bestItemInInv))
-                        "RING" -> updatedProgress.copy(equippedRingJson = GameJsonParser.toJson(bestItemInInv))
                         "SHIELD" -> updatedProgress.copy(equippedShieldJson = GameJsonParser.toJson(bestItemInInv))
+                        "ARMOR" -> updatedProgress.copy(equippedArmorJson = GameJsonParser.toJson(bestItemInInv))
+                        "GLOVES" -> updatedProgress.copy(equippedGlovesJson = GameJsonParser.toJson(bestItemInInv))
+                        "BOOTS" -> updatedProgress.copy(equippedBootsJson = GameJsonParser.toJson(bestItemInInv))
+                        "RING" -> updatedProgress.copy(equippedRingJson = GameJsonParser.toJson(bestItemInInv))
+                        "EARRING" -> updatedProgress.copy(equippedEarringJson = GameJsonParser.toJson(bestItemInInv))
+                        "RELIC" -> updatedProgress.copy(equippedRelicJson = GameJsonParser.toJson(bestItemInInv))
                         else -> updatedProgress
                     }
                     equippedNames.add(bestItemInInv.name)
@@ -1847,26 +1921,55 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             var updatedProgress = progress
             when (item.type) {
+                "HELMET" -> {
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedHelmetJson)
+                    if (current != null) invList.add(current)
+                    updatedProgress = updatedProgress.copy(equippedHelmetJson = GameJsonParser.toJson(item))
+                }
+                "WINGS" -> {
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedWingsJson)
+                    if (current != null) invList.add(current)
+                    updatedProgress = updatedProgress.copy(equippedWingsJson = GameJsonParser.toJson(item))
+                }
                 "WEAPON" -> {
-                    // Unequip current weapon, place in inventory
-                    val currentWeapon = GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)
-                    if (currentWeapon != null) invList.add(currentWeapon)
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)
+                    if (current != null) invList.add(current)
                     updatedProgress = updatedProgress.copy(equippedWeaponJson = GameJsonParser.toJson(item))
                 }
+                "SHIELD" -> {
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedShieldJson)
+                    if (current != null) invList.add(current)
+                    updatedProgress = updatedProgress.copy(equippedShieldJson = GameJsonParser.toJson(item))
+                }
                 "ARMOR" -> {
-                    val currentArmor = GameJsonParser.fromJson<Item>(progress.equippedArmorJson)
-                    if (currentArmor != null) invList.add(currentArmor)
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedArmorJson)
+                    if (current != null) invList.add(current)
                     updatedProgress = updatedProgress.copy(equippedArmorJson = GameJsonParser.toJson(item))
                 }
+                "GLOVES" -> {
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedGlovesJson)
+                    if (current != null) invList.add(current)
+                    updatedProgress = updatedProgress.copy(equippedGlovesJson = GameJsonParser.toJson(item))
+                }
+                "BOOTS" -> {
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedBootsJson)
+                    if (current != null) invList.add(current)
+                    updatedProgress = updatedProgress.copy(equippedBootsJson = GameJsonParser.toJson(item))
+                }
                 "RING" -> {
-                    val currentRing = GameJsonParser.fromJson<Item>(progress.equippedRingJson)
-                    if (currentRing != null) invList.add(currentRing)
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedRingJson)
+                    if (current != null) invList.add(current)
                     updatedProgress = updatedProgress.copy(equippedRingJson = GameJsonParser.toJson(item))
                 }
-                "SHIELD" -> {
-                    val currentShield = GameJsonParser.fromJson<Item>(progress.equippedShieldJson)
-                    if (currentShield != null) invList.add(currentShield)
-                    updatedProgress = updatedProgress.copy(equippedShieldJson = GameJsonParser.toJson(item))
+                "EARRING" -> {
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedEarringJson)
+                    if (current != null) invList.add(current)
+                    updatedProgress = updatedProgress.copy(equippedEarringJson = GameJsonParser.toJson(item))
+                }
+                "RELIC" -> {
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedRelicJson)
+                    if (current != null) invList.add(current)
+                    updatedProgress = updatedProgress.copy(equippedRelicJson = GameJsonParser.toJson(item))
                 }
             }
 
@@ -1892,21 +1995,45 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             var itemToStore: Item? = null
 
             when (slot) {
+                "HELMET" -> {
+                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedHelmetJson)
+                    updated = updated.copy(equippedHelmetJson = "")
+                }
+                "WINGS" -> {
+                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedWingsJson)
+                    updated = updated.copy(equippedWingsJson = "")
+                }
                 "WEAPON" -> {
                     itemToStore = GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)
                     updated = updated.copy(equippedWeaponJson = "")
+                }
+                "SHIELD" -> {
+                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedShieldJson)
+                    updated = updated.copy(equippedShieldJson = "")
                 }
                 "ARMOR" -> {
                     itemToStore = GameJsonParser.fromJson<Item>(progress.equippedArmorJson)
                     updated = updated.copy(equippedArmorJson = "")
                 }
+                "GLOVES" -> {
+                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedGlovesJson)
+                    updated = updated.copy(equippedGlovesJson = "")
+                }
+                "BOOTS" -> {
+                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedBootsJson)
+                    updated = updated.copy(equippedBootsJson = "")
+                }
                 "RING" -> {
                     itemToStore = GameJsonParser.fromJson<Item>(progress.equippedRingJson)
                     updated = updated.copy(equippedRingJson = "")
                 }
-                "SHIELD" -> {
-                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedShieldJson)
-                    updated = updated.copy(equippedShieldJson = "")
+                "EARRING" -> {
+                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedEarringJson)
+                    updated = updated.copy(equippedEarringJson = "")
+                }
+                "RELIC" -> {
+                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedRelicJson)
+                    updated = updated.copy(equippedRelicJson = "")
                 }
             }
 
