@@ -1,0 +1,6 @@
+{
+  "name": "Eldoria RPG",
+  "description": "Un juego de rol de fantasía medieval procedural con misiones, árbol de talentos, personalización, gestión de inventario y combates de jefes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
