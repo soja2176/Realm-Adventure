@@ -1,5 +1,6 @@
 package com.example.data
 
+import com.example.audio.SoundManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import kotlin.random.Random
 enum class GameScreen {
     CREATING_CHARACTER,
     WORLD_MAP,
+    DUNGEON,
     COMBAT,
     CHARACTER_SCREEN,
     TALENTS,
@@ -95,6 +97,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
     private val _combatState = MutableStateFlow(CombatState())
     val combatState: StateFlow<CombatState> = _combatState.asStateFlow()
+
+    private val _dungeonRunState = MutableStateFlow(DungeonRunState())
+    val dungeonRunState: StateFlow<DungeonRunState> = _dungeonRunState.asStateFlow()
 
     // Character creator temp state
     private val _creatorName = MutableStateFlow("")
@@ -366,10 +371,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             return
         }
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
-        if (invList.size >= 12) {
-            showNotification("¡No tienes espacio suficiente en el inventario!")
-            return
-        }
         viewModelScope.launch {
             invList.add(item)
             val updatedProgress = progress.copy(
@@ -382,18 +383,23 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
     }
 
+    fun calculateSellPrice(item: Item): Int {
+        val basePrice = when (item.rarity.uppercase()) {
+            "LEGENDARY", "LEGENDARIO" -> 150
+            "EPIC", "ÉPICO" -> 80
+            "RARE", "RARO" -> 40
+            else -> 15
+        }
+        return basePrice + (item.itemLevel * 3)
+    }
+
     fun sellItem(item: Item) {
         val progress = _progressState.value ?: return
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
         val index = invList.indexOfFirst { it.id == item.id }
         if (index == -1) return
 
-        val sellPrice = when (item.rarity) {
-            "LEGENDARY" -> 150
-            "EPIC" -> 80
-            "RARE" -> 40
-            else -> 15
-        }
+        val sellPrice = calculateSellPrice(item)
 
         viewModelScope.launch {
             invList.removeAt(index)
@@ -402,7 +408,37 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
             repository.saveProgress(updatedProgress)
-            showNotification("¡Vendiste ${item.name} por $sellPrice de oro!")
+            showNotification("¡Vendiste ${item.name} por $sellPrice 🪙 de oro!")
+        }
+    }
+
+    fun massSellItems(itemsToSell: List<Item>) {
+        val progress = _progressState.value ?: return
+        if (itemsToSell.isEmpty()) return
+
+        val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+        val idsToSell = itemsToSell.map { it.id }.toSet()
+
+        var totalEarnedGold = 0
+        val remainingInv = invList.filter { item ->
+            if (idsToSell.contains(item.id)) {
+                totalEarnedGold += calculateSellPrice(item)
+                false
+            } else {
+                true
+            }
+        }
+
+        if (totalEarnedGold <= 0) return
+
+        viewModelScope.launch {
+            SoundManager.playButtonClick()
+            val updatedProgress = progress.copy(
+                charGold = progress.charGold + totalEarnedGold,
+                inventoryJson = GameJsonParser.listToJson(remainingInv)
+            )
+            repository.saveProgress(updatedProgress)
+            showNotification("¡Venta Masiva! Vendiste ${itemsToSell.size} objetos por $totalEarnedGold 🪙 de oro.")
         }
     }
 
@@ -998,9 +1034,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             else -> baseName
         }
 
-        val hp = if (isBoss) (180 * baseMultiplier * tierMultiplier).toInt() else (70 * baseMultiplier * tierMultiplier).toInt()
-        val attack = if (isBoss) (15 * baseMultiplier * 1.5).toInt() else (8 * baseMultiplier * tierMultiplier).toInt()
-        val defense = if (isBoss) (10 * baseMultiplier * 1.4).toInt() else (4 * baseMultiplier * tierMultiplier).toInt()
+        val hp = if (isBoss) (180 * baseMultiplier * tierMultiplier * 3.0).toInt() else (70 * baseMultiplier * tierMultiplier * 3.0).toInt()
+        val attack = if (isBoss) (15 * baseMultiplier * 1.5 * 3.0).toInt() else (8 * baseMultiplier * tierMultiplier * 3.0).toInt()
+        val defense = if (isBoss) (10 * baseMultiplier * 1.4 * 3.0).toInt() else (4 * baseMultiplier * tierMultiplier * 3.0).toInt()
 
         val enemy = Combatant(
             name = name,
@@ -1081,6 +1117,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val isCrit = Random.nextInt(100) < critChance
             if (isCrit) {
                 finalDmg = (finalDmg * 1.8).toInt()
+                SoundManager.playCriticalHit()
+            } else {
+                SoundManager.playSwordSlash()
             }
 
             // Apply to enemy
@@ -1148,6 +1187,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         viewModelScope.launch {
+            if (skill.healingMultiplier > 0.0) {
+                SoundManager.playHealPotion()
+            } else {
+                SoundManager.playMagicSpell()
+            }
             // Mana cost discount talent and Elf passive
             val manaCostDiscount = if (getTalentRank("t_6") > 0) 0.8 else 1.0
             val raceManaDiscount = if (progress.charRace == "Elfo" && progress.charLevel >= 5) 0.8 else 1.0
@@ -1244,6 +1288,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         viewModelScope.launch {
+            SoundManager.playHealPotion()
             invList.removeAt(potionIndex)
             val healAmount = (progress.maxHp * 0.5).toInt()
             val manaAmount = (progress.maxMp * 0.5).toInt()
@@ -1282,6 +1327,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
         viewModelScope.launch {
             kotlinx.coroutines.delay(800)
+            SoundManager.playEnemyAttack()
 
             val enemy = currentCombat.enemy
             val enemyAtk = enemy.attack
@@ -1495,9 +1541,46 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         viewModelScope.launch {
+            SoundManager.playVictory()
             val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
-            if (droppedItem != null) {
-                invList.add(droppedItem)
+            
+            val dungeonRun = _dungeonRunState.value
+            var finalDroppedItem = droppedItem
+
+            if (dungeonRun.inDungeonRun) {
+                val dungeon = DUNGEONS_LIST.find { it.id == dungeonRun.dungeonId }
+                val isFinalBoss = dungeonRun.currentStage == 10
+
+                if (isFinalBoss && dungeon != null) {
+                    finalDroppedItem = dungeon.uniqueTreasure
+                    invList.add(finalDroppedItem)
+                    
+                    val nextUnlocked = maxOf(progress.highestUnlockedDungeon, dungeonRun.dungeonId + 1)
+                    val completedList = GameJsonParser.listFromJson<Int>(progress.completedDungeonsJson).toMutableList()
+                    if (!completedList.contains(dungeonRun.dungeonId)) {
+                        completedList.add(dungeonRun.dungeonId)
+                    }
+
+                    _dungeonRunState.value = dungeonRun.copy(
+                        persistentHp = currentCombat.playerCurrentHp,
+                        persistentMp = currentCombat.playerCurrentMp,
+                        stageVictoryPending = false,
+                        dungeonCompletedJustNow = true
+                    )
+                } else {
+                    if (droppedItem != null) {
+                        invList.add(droppedItem)
+                    }
+                    _dungeonRunState.value = dungeonRun.copy(
+                        persistentHp = currentCombat.playerCurrentHp,
+                        persistentMp = currentCombat.playerCurrentMp,
+                        stageVictoryPending = true
+                    )
+                }
+            } else {
+                if (droppedItem != null) {
+                    invList.add(droppedItem)
+                }
             }
 
             var currentExp = progress.charExp + expReward
@@ -1522,7 +1605,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 addedStatPoints += 5
                 addedTalentPoints += 1
 
-                // Automatic incremental stats scaling
                 pStr += 1
                 pDex += 1
                 pInt += 1
@@ -1555,8 +1637,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             if (didLevelUp) {
                 victoryLogs += " ¡¡SUBISTE DE NIVEL!! Ahora eres Nivel $currentLevel. Ganas +$addedStatPoints atributos y +$addedTalentPoints talentos."
             }
-            if (droppedItem != null) {
-                victoryLogs += " Encontraste: ${droppedItem.name} [${droppedItem.rarity}]"
+            if (finalDroppedItem != null) {
+                victoryLogs += " Encontraste: ${finalDroppedItem.name} [${finalDroppedItem.rarity}]"
             }
             if (equippedNames.isNotEmpty()) {
                 victoryLogs += " ¡Auto-equipado: ${equippedNames.joinToString(", ")}!"
@@ -1564,7 +1646,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             _combatState.value = currentCombat.copy(
                 victory = true,
-                lootDropped = droppedItem,
+                lootDropped = finalDroppedItem,
                 expGained = expReward,
                 goldGained = finalGoldReward,
                 combatLogs = currentCombat.combatLogs + victoryLogs
@@ -1573,7 +1655,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             if (_isAutoCombat.value || _isAutoNavigation.value) {
                 kotlinx.coroutines.delay(2500)
                 if (_combatState.value.victory == true) {
-                    exitCombatScreen()
+                    if (_dungeonRunState.value.stageVictoryPending) {
+                        advanceDungeonStage()
+                    } else {
+                        exitCombatScreen()
+                    }
                 }
             }
         }
@@ -1584,6 +1670,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val progress = _progressState.value ?: return
 
         viewModelScope.launch {
+            SoundManager.playDefeat()
+
+            if (_dungeonRunState.value.inDungeonRun) {
+                val stage = _dungeonRunState.value.currentStage
+                _dungeonRunState.value = DungeonRunState(inDungeonRun = false)
+                showNotification("¡Caíste derrotado en la Etapa $stage/10 del Calabozo! Fortalécete e inténtalo de nuevo.")
+            }
+
             // Revive at starting safe room with gold penalty of 15%
             val penaltyGold = (progress.charGold * 0.15).toInt()
             val newGold = maxOf(0, progress.charGold - penaltyGold)
@@ -1985,11 +2079,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val progress = _progressState.value ?: return
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
 
-        if (invList.size >= 12) {
-            showNotification("¡No tienes espacio suficiente en el inventario para desequipar!")
-            return
-        }
-
         viewModelScope.launch {
             var updated = progress
             var itemToStore: Item? = null
@@ -2066,10 +2155,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
-        if (invList.size >= 12) {
-            showNotification("¡Tu inventario está completamente lleno!")
-            return
-        }
 
         viewModelScope.launch {
             val potion = Item(
@@ -2343,4 +2428,415 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             }
         }
     }
+
+    // --- DUNGEONS ENGINE ---
+    fun startDungeonRun(dungeonId: Int) {
+        val progress = _progressState.value ?: return
+        val dungeon = DUNGEONS_LIST.find { it.id == dungeonId } ?: return
+
+        if (progress.charLevel < dungeon.levelReq) {
+            showNotification("¡Necesitas Nivel ${dungeon.levelReq} para desafiar el Calabozo de ${dungeon.species}!")
+            return
+        }
+
+        if (dungeonId > progress.highestUnlockedDungeon) {
+            showNotification("¡Debes conquistar el calabozo anterior para desbloquear este!")
+            return
+        }
+
+        _dungeonRunState.value = DungeonRunState(
+            inDungeonRun = true,
+            dungeonId = dungeonId,
+            currentStage = 1,
+            persistentHp = progress.currentHp,
+            persistentMp = progress.currentMp,
+            stageVictoryPending = false,
+            dungeonCompletedJustNow = false
+        )
+
+        startDungeonStageCombat(dungeon, 1, progress.currentHp, progress.currentMp)
+    }
+
+    fun advanceDungeonStage() {
+        val run = _dungeonRunState.value
+        val progress = _progressState.value ?: return
+        if (!run.inDungeonRun) return
+
+        val dungeon = DUNGEONS_LIST.find { it.id == run.dungeonId } ?: return
+        val nextStage = run.currentStage + 1
+        if (nextStage > 10) return
+
+        _dungeonRunState.value = run.copy(
+            currentStage = nextStage,
+            stageVictoryPending = false
+        )
+
+        startDungeonStageCombat(dungeon, nextStage, run.persistentHp, run.persistentMp)
+    }
+
+    fun exitDungeonRun() {
+        _dungeonRunState.value = DungeonRunState(inDungeonRun = false)
+        _screenState.value = GameScreen.DUNGEON
+        showNotification("Has salido del Calabozo.")
+    }
+
+    private fun startDungeonStageCombat(
+        dungeon: DungeonData,
+        stage: Int,
+        playerHp: Int,
+        playerMp: Int
+    ) {
+        val isFinalBoss = stage == 10
+        val baseMultiplier = 1.0 + (dungeon.levelReq * 0.12) + (stage * 0.15)
+
+        val enemyName = if (isFinalBoss) {
+            "🔥 ${dungeon.finalBossName}"
+        } else {
+            "⚔️ ${dungeon.subBosses.getOrElse(stage - 1) { "Subjefe de ${dungeon.species}" }}"
+        }
+
+        val enemyHp = if (isFinalBoss) (320 * baseMultiplier * 3.0).toInt() else (100 * baseMultiplier * 3.0).toInt()
+        val enemyAtk = if (isFinalBoss) (26 * baseMultiplier * 3.0).toInt() else (13 * baseMultiplier * 3.0).toInt()
+        val enemyDef = if (isFinalBoss) (20 * baseMultiplier * 3.0).toInt() else (9 * baseMultiplier * 3.0).toInt()
+
+        val enemy = Combatant(
+            name = enemyName,
+            maxHp = enemyHp,
+            currentHp = enemyHp,
+            maxMp = 100,
+            currentMp = 100,
+            attack = enemyAtk,
+            defense = enemyDef,
+            level = dungeon.levelReq + stage,
+            isBoss = isFinalBoss,
+            rarity = if (isFinalBoss) "UNIVERSAL" else if (stage >= 7) "LEGENDARY" else "ELITE"
+        )
+
+        val stageTitle = if (isFinalBoss) "¡¡JEFE FINAL: ${dungeon.finalBossName.uppercase()}!!" else "Subjefe $stage/9 de ${dungeon.species}"
+
+        _combatState.value = CombatState(
+            active = true,
+            enemy = enemy,
+            playerCurrentHp = playerHp,
+            playerCurrentMp = playerMp,
+            combatLogs = listOf(
+                "🏛️ CALABOZO ${dungeon.id}: ${dungeon.name}",
+                "⚔️ ETAPA $stage DE 10 - $stageTitle",
+                "⚠️ Tu salud y maná persisten de combates anteriores."
+            ),
+            playerTurn = true,
+            victory = null
+        )
+
+        _screenState.value = GameScreen.COMBAT
+    }
 }
+
+data class DungeonData(
+    val id: Int,
+    val name: String,
+    val species: String,
+    val levelReq: Int,
+    val finalBossName: String,
+    val finalBossTitle: String,
+    val subBosses: List<String>,
+    val uniqueTreasure: Item,
+    val bossImageResName: String,
+    val description: String
+)
+
+data class DungeonRunState(
+    val inDungeonRun: Boolean = false,
+    val dungeonId: Int = 1,
+    val currentStage: Int = 1,
+    val persistentHp: Int = 100,
+    val persistentMp: Int = 50,
+    val stageVictoryPending: Boolean = false,
+    val dungeonCompletedJustNow: Boolean = false
+)
+
+val DUNGEONS_LIST = listOf(
+    DungeonData(
+        id = 1,
+        name = "Cavernas del Clan Goblin",
+        species = "Goblins",
+        levelReq = 1,
+        finalBossName = "Hobgoblin",
+        finalBossTitle = "Gran Warlord Hobgoblin",
+        subBosses = listOf(
+            "Goblin Explorador", "Goblin Chamán", "Goblin Asesino",
+            "Goblin Táctico", "Goblin Cuadrillero", "Goblin Tamborilero",
+            "Goblin Trampero", "Goblin Fanático", "Goblin Capataz"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_1",
+            name = "Anillo de Avaricia del Hobgoblin",
+            type = "RING",
+            rarity = "UNIVERSAL",
+            itemLevel = 10,
+            strBonus = 35,
+            dexBonus = 35,
+            intBonus = 15,
+            conBonus = 25,
+            dmgBonus = 100,
+            defBonus = 40,
+            imageResName = "img_item_ring_1784593597914",
+            description = "Anillo supremo forjado en el vientre de las cavernas goblin. Otorga poder masivo."
+        ),
+        bossImageResName = "img_boss_hobgoblin_1784674116743",
+        description = "Calabozo inicial habitado por la vil plaga goblin. Derrota a los 9 subjefes para enfrentar al Hobgoblin."
+    ),
+    DungeonData(
+        id = 2,
+        name = "Fortaleza Orqueta de Hierro",
+        species = "Orcos",
+        levelReq = 10,
+        finalBossName = "Rey Orco",
+        finalBossTitle = "Soberano Sangriento de la Horda",
+        subBosses = listOf(
+            "Orco Berserker", "Chamán Orco", "Demoledor Orco",
+            "Cazador Orco", "Tambor de Guerra Orco", "Asaltante Orco",
+            "Warg Rider", "Capataz de Hierro", "Gladiador Orco"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_2",
+            name = "Hacha de Guerra del Rey Orco",
+            type = "WEAPON",
+            rarity = "UNIVERSAL",
+            itemLevel = 20,
+            strBonus = 80,
+            conBonus = 50,
+            dmgBonus = 180,
+            defBonus = 30,
+            imageResName = "img_item_sword_1784593548868",
+            description = "Devastadora hacha bidentada empuñada por el Rey Orco. Aplasta la armadura enemiga."
+        ),
+        bossImageResName = "img_enemy_ogre_1784386944311",
+        description = "Bastión inexpugnable donde los orcos preparan sus invasiones. Su soberano no muestra piedad."
+    ),
+    DungeonData(
+        id = 3,
+        name = "Guarida de las Sombras",
+        species = "Ladrones",
+        levelReq = 20,
+        finalBossName = "Ladrón Asesino",
+        finalBossTitle = "Gran Maestro de la Guilda de las Sombras",
+        subBosses = listOf(
+            "Humano Mercenario", "Humano Ballestero", "Humano Sombra",
+            "Envenenador Nocturno", "Matón de Callejón", "Capitán Filo",
+            "Pirata del Puerto", "Infiltrador Humano", "Verdugo de las Sombras"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_3",
+            name = "Daga Sombra del Ladrón Asesino",
+            type = "WEAPON",
+            rarity = "UNIVERSAL",
+            itemLevel = 30,
+            dexBonus = 100,
+            strBonus = 40,
+            dmgBonus = 220,
+            imageResName = "img_item_dagger_1784593567531",
+            description = "Hoja emponzoñada con veneno estigio. Ejecuta asaltos silenciosos y mortales."
+        ),
+        bossImageResName = "img_portrait_humano_picaro_1784507327963",
+        description = "Catarro subterráneo repleto de mercenarios y asesinos humanos highly entrenados."
+    ),
+    DungeonData(
+        id = 4,
+        name = "Colinas Ferales de las Bestias",
+        species = "Hombres bestia",
+        levelReq = 30,
+        finalBossName = "Rey Lobo Fenrir",
+        finalBossTitle = "Titán Primigenio de las Colinas",
+        subBosses = listOf(
+            "Bestia Alfa", "Minotauro Feroz", "Hombre Jabalí",
+            "Chacal Furioso", "Centauro de Guerra", "Licántropo Garra",
+            "Pantera Umbría", "Oso de las Cavernas", "Chamán Bestial"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_4",
+            name = "Manto Feroz de Fenrir",
+            type = "ARMOR",
+            rarity = "UNIVERSAL",
+            itemLevel = 40,
+            strBonus = 70,
+            conBonus = 80,
+            defBonus = 180,
+            dmgBonus = 50,
+            imageResName = "img_item_plate_1784593577913",
+            description = "Pelaje indestructible impregnado con el aliento de hielo de Fenrir."
+        ),
+        bossImageResName = "img_enemy_boss_1784386985144",
+        description = "Bosque salvaje habitado por bestias feroces. Fenrir destroza a quienes pisan su territorio."
+    ),
+    DungeonData(
+        id = 5,
+        name = "Fosa Abisal de las Mareas",
+        species = "Naga",
+        levelReq = 40,
+        finalBossName = "Rey del Océano Neptuno",
+        finalBossTitle = "Emperador de las Profundidades",
+        subBosses = listOf(
+            "Naga Cazador", "Sireno de Coral", "Mago de Mareas",
+            "Tritón de las Profundidades", "Serpiente Abisal", "Guardián de Perlas",
+            "Devorador de Fosas", "Bruja de Coral", "Leviatán Cazador"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_5",
+            name = "Tridente Celestial de Neptuno",
+            type = "WEAPON",
+            rarity = "UNIVERSAL",
+            itemLevel = 50,
+            intBonus = 130,
+            conBonus = 60,
+            dmgBonus = 260,
+            defBonus = 40,
+            imageResName = "img_item_staff_1784593558118",
+            description = "Arma legendaria de los mares que desata maremotos y rayos abisales."
+        ),
+        bossImageResName = "img_enemy_mud_golem_1784386930907",
+        description = "Templo inundado habitado por guerreros naga y criaturas del abismo oceánico."
+    ),
+    DungeonData(
+        id = 6,
+        name = "Cripta Necrótica Sangrienta",
+        species = "Muertos vivientes",
+        levelReq = 50,
+        finalBossName = "Vampiro de alto nivel",
+        finalBossTitle = "Conde Sangriento Inmortal",
+        subBosses = listOf(
+            "Esqueleto Guerrero", "Lich Menor", "Caballero de la Muerte",
+            "Momia Ancestral", "Alma en Pena", "Necrófago Voraz",
+            "Necromante Oscuro", "Espectro de Hielo", "Dragón de Hueso"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_6",
+            name = "Cáliz de Sangre del Vampiro Supremo",
+            type = "RELIC",
+            rarity = "UNIVERSAL",
+            itemLevel = 60,
+            conBonus = 90,
+            intBonus = 90,
+            defBonus = 150,
+            dmgBonus = 100,
+            imageResName = "img_item_relic_1784658251007",
+            description = "Reliquia maldita que drena constantemente la esencia vital de los enemigos."
+        ),
+        bossImageResName = "img_boss_high_vampire_1784674139269",
+        description = "Mausoleo ancestral plagado de no-muertos. El Conde Vampiro bebe la sangre de los intrusos."
+    ),
+    DungeonData(
+        id = 7,
+        name = "Santuario de las Almas Perdidas",
+        species = "Espíritus",
+        levelReq = 60,
+        finalBossName = "Rey Necromancer",
+        finalBossTitle = "Soberano Inmaterial del Infierno",
+        subBosses = listOf(
+            "Espectro del Vacío", "Alma Penante", "Sombra Tormentosa",
+            "Orbe Etéreo", "Poltergeist Furioso", "Guardián Astral",
+            "Lamento de las Sombras", "Furia del Viento", "Fuego Fatuo Ancestral"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_7",
+            name = "Filacteria Etérea del Rey Necromancer",
+            type = "EARRING",
+            rarity = "UNIVERSAL",
+            itemLevel = 70,
+            intBonus = 150,
+            dexBonus = 60,
+            dmgBonus = 300,
+            imageResName = "img_item_earring_1784658263366",
+            description = "Artefacto inmortal que canaliza el poder de miles de almas atrapadas."
+        ),
+        bossImageResName = "img_enemy_spectre_1784386971041",
+        description = "Reino etéreo envuelto en brumas místicas. Los espíritus atormentados defienden a su Rey."
+    ),
+    DungeonData(
+        id = 8,
+        name = "Templo Viperino Esmeralda",
+        species = "Hombres serpiente",
+        levelReq = 70,
+        finalBossName = "Rey serpiente dragon",
+        finalBossTitle = "Titán Viperino Primigenio",
+        subBosses = listOf(
+            "Guerrero Cobra", "Sacerdote Víbora", "Gorgona de Hierro",
+            "Basilisco Menor", "Cascabel de Muerte", "Nagani Guardián",
+            "Ilusionista Escamado", "Devorador de Veneno", "Asesino Anaconda"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_8",
+            name = "Escudo Draco-Serpiente del Rey",
+            type = "SHIELD",
+            rarity = "UNIVERSAL",
+            itemLevel = 80,
+            conBonus = 140,
+            defBonus = 320,
+            dmgBonus = 60,
+            imageResName = "img_item_shield_1784593608106",
+            description = "Escudo impenetrable forjado con escamas de dragón viperino esmeralda."
+        ),
+        bossImageResName = "img_enemy_spider_1784386956688",
+        description = "Pirámide antigua habitada por adoradores de la gran serpiente. Su Rey escupe veneno dracónico."
+    ),
+    DungeonData(
+        id = 9,
+        name = "Laberinto Cibernético Titanium",
+        species = "Máquinas",
+        levelReq = 80,
+        finalBossName = "Igdrasil El cerebro de las máquinas",
+        finalBossTitle = "Superinteligencia Sintética Titánica",
+        subBosses = listOf(
+            "Autómata de Bronce", "Golem de Engranajes", "Centinela de Energía",
+            "Dron Láser", "Destructor de Titanio", "Célula Voltáica",
+            "Coloso Mecánico", "Núcleo de Plasma", "Ejecutor Cibernético"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_9",
+            name = "Matriz Cuántica de Igdrasil",
+            type = "RELIC",
+            rarity = "UNIVERSAL",
+            itemLevel = 90,
+            strBonus = 90,
+            dexBonus = 90,
+            intBonus = 90,
+            conBonus = 90,
+            defBonus = 250,
+            dmgBonus = 150,
+            imageResName = "img_item_relic_1784658251007",
+            description = "El cerebro central sintético. Procesa y neutraliza todas las amenazas de batalla."
+        ),
+        bossImageResName = "img_boss_yggdrasil_machine_1784674150126",
+        description = "Complejo futurista subterráneo gobernado por constructos autómatas y el procesador Yggdrasil."
+    ),
+    DungeonData(
+        id = 10,
+        name = "Abismo de la Calamidad",
+        species = "Dragones",
+        levelReq = 90,
+        finalBossName = "Dragon Oscuro",
+        finalBossTitle = "Emperador Supremo del Caos Inmemorial",
+        subBosses = listOf(
+            "Cría de Dragón", "Wyvern de Fuego", "Drakoniano de Magma",
+            "Dragón de Viento", "Hidra Venenosa", "Dragón Dorado",
+            "Drake Caótico", "Wyrm de Hielo", "Dragón Ancestral"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_10",
+            name = "Alas de la Calamidad Oscura",
+            type = "WINGS",
+            rarity = "UNIVERSAL",
+            itemLevel = 100,
+            strBonus = 160,
+            dexBonus = 160,
+            intBonus = 160,
+            conBonus = 160,
+            dmgBonus = 400,
+            defBonus = 400,
+            imageResName = "img_item_wings_1784658202673",
+            description = "Las alas del mítico Dragón Oscuro. Otorgan supremacía absoluta sobre la creación."
+        ),
+        bossImageResName = "img_boss_dark_dragon_1784674128719",
+        description = "El desafío definitivo de Eldoria. Derrota a los 9 supremos dragones antes de enfrentar al Dragón Oscuro."
+    )
+)
