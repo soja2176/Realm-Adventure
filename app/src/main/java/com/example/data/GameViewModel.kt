@@ -889,48 +889,85 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     }
                     
                     val currentProgress = _progressState.value ?: break
+                    val originX = currentProgress.currentX
+                    val originY = currentProgress.currentY
                     val exploredList = GameJsonParser.listFromJson<String>(currentProgress.mapPointsExploredJson).toMutableList()
                     val tileKey = "${stepTile.x},${stepTile.y}"
                     val wasAlreadyExplored = exploredList.contains(tileKey)
 
-                    if (!wasAlreadyExplored) {
-                        exploredList.add(tileKey)
-                    }
+                    val isMonsterEncounter = (stepTile.encounterType == "MONSTER" || stepTile.encounterType == "BOSS") && !wasAlreadyExplored
 
-                    val hpRegVal = getHpRegenerationValue(currentProgress)
-                    val mpRegVal = getMpRegenerationValue(currentProgress)
-                    
-                    val finalHp = minOf(currentProgress.maxHp, currentProgress.currentHp + hpRegVal)
-                    val finalMp = minOf(currentProgress.maxMp, currentProgress.currentMp + mpRegVal)
-
-                    val updatedProgress = currentProgress.copy(
-                        currentX = stepTile.x,
-                        currentY = stepTile.y,
-                        currentHp = finalHp,
-                        currentMp = finalMp,
-                        mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
-                    )
-
-                    repository.saveProgress(updatedProgress)
-                    generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList))
-
-                    if (!wasAlreadyExplored) {
+                    if (isMonsterEncounter) {
                         triggerEncounter(stepTile)
+
+                        // Pause map movement until combat concludes
+                        while (_combatState.value.active) {
+                            kotlinx.coroutines.delay(100)
+                        }
+
+                        val combatVictory = _combatState.value.victory
+                        if (combatVictory == true) {
+                            if (!exploredList.contains(tileKey)) {
+                                exploredList.add(tileKey)
+                            }
+                            val postProgress = _progressState.value ?: currentProgress
+                            val updatedProgress = postProgress.copy(
+                                currentX = stepTile.x,
+                                currentY = stepTile.y,
+                                mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
+                            )
+                            repository.saveProgress(updatedProgress)
+                            generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList))
+                        } else {
+                            // Player was defeated or fled: return to previous tile, leave monster tile unexplored
+                            val postProgress = _progressState.value ?: currentProgress
+                            val returnedProgress = postProgress.copy(
+                                currentX = originX,
+                                currentY = originY,
+                                mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
+                            )
+                            repository.saveProgress(returnedProgress)
+                            generateMapAround(originX, originY, GameJsonParser.listToJson(exploredList))
+                            showNotification("Te retiras al cuadro anterior. El enemigo sigue custodiando la casilla.")
+                            break
+                        }
                     } else {
-                        showNotification("Has viajado a: ${stepTile.biome} ($tileKey).")
+                        if (!wasAlreadyExplored) {
+                            exploredList.add(tileKey)
+                        }
+
+                        val hpRegVal = getHpRegenerationValue(currentProgress)
+                        val mpRegVal = getMpRegenerationValue(currentProgress)
+                        
+                        val finalHp = minOf(currentProgress.maxHp, currentProgress.currentHp + hpRegVal)
+                        val finalMp = minOf(currentProgress.maxMp, currentProgress.currentMp + mpRegVal)
+
+                        val updatedProgress = currentProgress.copy(
+                            currentX = stepTile.x,
+                            currentY = stepTile.y,
+                            currentHp = finalHp,
+                            currentMp = finalMp,
+                            mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
+                        )
+
+                        repository.saveProgress(updatedProgress)
+                        generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList))
+
+                        if (!wasAlreadyExplored) {
+                            triggerEncounter(stepTile)
+                        } else {
+                            showNotification("Has viajado a: ${stepTile.biome} ($tileKey).")
+                        }
+
+                        while (_combatState.value.active) {
+                            kotlinx.coroutines.delay(100)
+                        }
+
+                        if (_combatState.value.victory == false) {
+                            break
+                        }
                     }
 
-                    // Pause map movement until combat concludes
-                    while (_combatState.value.active) {
-                        kotlinx.coroutines.delay(100)
-                    }
-
-                    // If player was defeated, they respawn at (0,0); halt path progression
-                    val postCombatProgress = _progressState.value ?: break
-                    if (postCombatProgress.currentX == 0 && postCombatProgress.currentY == 0 && (stepTile.x != 0 || stepTile.y != 0)) {
-                        break
-                    }
-                    
                     kotlinx.coroutines.delay(250)
                 }
             } finally {
@@ -1005,7 +1042,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val rarity = when {
             isBoss -> "LEGENDARY"
             roll >= 90 -> "CHAMPION"
-            roll >= 70 -> "ELITE"
+            roll >= 74 -> "ELITE"
             else -> "NORMAL"
         }
 
@@ -1526,7 +1563,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val rarity = when (enemy.rarity) {
                 "LEGENDARY" -> if (Random.nextInt(100) < 50) "LEGENDARY" else "EPIC"
                 "CHAMPION" -> if (Random.nextInt(100) < 30) "LEGENDARY" else "EPIC"
-                "ELITE" -> if (Random.nextInt(100) < 15) "LEGENDARY" else if (Random.nextInt(100) < 45) "EPIC" else "RARE"
+                "ELITE" -> {
+                    val r = Random.nextInt(100)
+                    when {
+                        r < 10 -> "LEGENDARY"
+                        r < 60 -> "EPIC"
+                        else -> "RARE"
+                    }
+                }
                 else -> {
                     val roll = Random.nextInt(100)
                     when {
@@ -1685,15 +1729,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val updatedProgress = progress.copy(
                 currentHp = progress.maxHp,
                 currentMp = progress.maxMp,
-                charGold = newGold,
-                currentX = 0,
-                currentY = 0
+                charGold = newGold
             )
 
             repository.saveProgress(updatedProgress)
             _combatState.value = currentCombat.copy(
                 victory = false,
-                combatLogs = currentCombat.combatLogs + "Has caído en combate... Te despiertas exhausto en el Santuario Inicial. Perdiste $penaltyGold monedas de oro de penalización."
+                combatLogs = currentCombat.combatLogs + "Has caído en combate... Te retiras al cuadro anterior. Perdiste $penaltyGold monedas de oro de penalización."
             )
 
             if (_isAutoCombat.value || _isAutoNavigation.value) {

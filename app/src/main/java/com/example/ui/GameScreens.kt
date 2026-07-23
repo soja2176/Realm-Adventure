@@ -302,53 +302,60 @@ fun GameTopHeader(progress: GameProgress, onHelpClick: () -> Unit) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
                 .statusBarsPadding(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.weight(1f, fill = false)
+            ) {
                 Image(
                     painter = painterResource(id = getCharacterPortrait(progress.charRace, progress.charClass)),
                     contentDescription = "Portrait",
                     modifier = Modifier
-                        .size(42.dp)
+                        .size(40.dp)
                         .clip(CircleShape)
                         .border(1.5.dp, MedievalGold, CircleShape),
                     contentScale = ContentScale.Crop
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column {
                     Text(
                         text = progress.charName,
                         color = Color.White,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp,
+                        fontSize = 14.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "Lvl ${progress.charLevel} ${progress.charRace} ${progress.charClass}",
                         color = MedievalGold,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Medium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
+            Spacer(modifier = Modifier.width(8.dp))
+
             // Stats Quick Bars
             Column(
-                modifier = Modifier.width(130.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.width(110.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp)
             ) {
                 // HP Bar
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("HP", color = MedievalCrimson, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(18.dp))
+                    Text("HP", color = MedievalCrimson, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(18.dp), maxLines = 1)
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .height(7.dp)
+                            .clip(RoundedCornerShape(3.dp))
                             .background(Color.Black)
                     ) {
                         val hpPercent = if (progress.maxHp > 0) progress.currentHp.toFloat() / progress.maxHp else 0f
@@ -360,17 +367,17 @@ fun GameTopHeader(progress: GameProgress, onHelpClick: () -> Unit) {
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("${progress.currentHp}/${progress.maxHp}", color = Color.White, fontSize = 9.sp)
+                    Text("${progress.currentHp}/${progress.maxHp}", color = Color.White, fontSize = 8.sp, maxLines = 1)
                 }
 
                 // MP Bar
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("MP", color = MedievalManaBlue, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(18.dp))
+                    Text("MP", color = MedievalManaBlue, fontSize = 9.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(18.dp), maxLines = 1)
                     Box(
                         modifier = Modifier
                             .weight(1f)
-                            .height(8.dp)
-                            .clip(RoundedCornerShape(4.dp))
+                            .height(7.dp)
+                            .clip(RoundedCornerShape(3.dp))
                             .background(Color.Black)
                     ) {
                         val mpPercent = if (progress.maxMp > 0) progress.currentMp.toFloat() / progress.maxMp else 0f
@@ -382,36 +389,39 @@ fun GameTopHeader(progress: GameProgress, onHelpClick: () -> Unit) {
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("${progress.currentMp}/${progress.maxMp}", color = Color.White, fontSize = 9.sp)
+                    Text("${progress.currentMp}/${progress.maxMp}", color = Color.White, fontSize = 8.sp, maxLines = 1)
                 }
             }
+
+            Spacer(modifier = Modifier.width(8.dp))
 
             // Gold counter
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.MonetizationOn,
                     contentDescription = "Oro",
                     tint = MedievalGold,
-                    modifier = Modifier.size(18.dp)
+                    modifier = Modifier.size(16.dp)
                 )
                 Text(
                     text = "${progress.charGold}",
                     color = MedievalGold,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    fontSize = 13.sp,
+                    maxLines = 1
                 )
                 IconButton(
                     onClick = onHelpClick,
-                    modifier = Modifier.size(24.dp)
+                    modifier = Modifier.size(22.dp)
                 ) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.Help,
                         contentDescription = "Ayuda",
                         tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                 }
             }
@@ -2557,69 +2567,95 @@ fun CombatScreen(viewModel: GameViewModel) {
             }
         }
 
-        // TOP: Sleek Compact Enemy Header Bar (prevents title from eating vertical space)
+        // TOP: Sleek Compact 2-Row Enemy Header Bar (strictly restricted height)
         Card(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp),
             colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-            border = BorderStroke(1.5.dp, if (enemy.rarity == "LEGENDARY") MedievalGold else if (enemy.rarity == "CHAMPION") Color(0xFFFF9800) else if (enemy.rarity == "ELITE") Color(0xFF0288D1) else MedievalCrimson),
-            shape = RoundedCornerShape(10.dp)
+            border = BorderStroke(
+                1.5.dp,
+                if (enemy.rarity == "LEGENDARY") MedievalGold else if (enemy.rarity == "CHAMPION") Color(0xFFFF9800) else if (enemy.rarity == "ELITE") Color(0xFF0288D1) else MedievalCrimson
+            ),
+            shape = RoundedCornerShape(8.dp)
         ) {
+            val enemyColor = when (enemy.rarity) {
+                "LEGENDARY" -> MedievalGold
+                "CHAMPION" -> Color(0xFFFF9800)
+                "ELITE" -> Color(0xFF0288D1)
+                else -> Color.White
+            }
+            val rarityLabel = when (enemy.rarity) {
+                "LEGENDARY" -> "👑 JEFE LEGENDARIO"
+                "CHAMPION" -> "👑 CAMPEÓN"
+                "ELITE" -> "⭐ ÉLITE"
+                else -> "MONSTRUO"
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                val enemyColor = when (enemy.rarity) {
-                    "LEGENDARY" -> MedievalGold
-                    "CHAMPION" -> Color(0xFFFF9800)
-                    "ELITE" -> Color(0xFF0288D1)
-                    else -> Color.White
-                }
-                val rarityLabel = when (enemy.rarity) {
-                    "LEGENDARY" -> "👑 JEFE LEGENDARIO"
-                    "CHAMPION" -> "👑 CAMPEÓN"
-                    "ELITE" -> "⭐ ÉLITE"
-                    else -> "MONSTRUO"
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
+                // Left Column: Row 1 = Enemy Name, Row 2 = Rarity Badge + Level
+                Column(
+                    modifier = Modifier.weight(1f, fill = false),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = enemy.name,
+                        color = enemyColor,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text = enemy.name,
-                            color = enemyColor,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
                         Box(
                             modifier = Modifier
-                                .background(enemyColor.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
-                                .border(0.5.dp, enemyColor, RoundedCornerShape(4.dp))
+                                .background(enemyColor.copy(alpha = 0.2f), RoundedCornerShape(3.dp))
+                                .border(0.5.dp, enemyColor, RoundedCornerShape(3.dp))
                                 .padding(horizontal = 4.dp, vertical = 1.dp)
                         ) {
-                            Text(rarityLabel, color = enemyColor, fontSize = 8.sp, fontWeight = FontWeight.ExtraBold)
+                            Text(
+                                text = rarityLabel,
+                                color = enemyColor,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Nivel ${enemy.level}",
+                            color = Color.White.copy(alpha = 0.7f),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Medium,
+                            maxLines = 1
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(8.dp))
 
-                // Enemy HP Bar Compact
-                Column(horizontalAlignment = Alignment.End, modifier = Modifier.width(110.dp)) {
+                // Right Column: Enemy HP Bar
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    modifier = Modifier.width(100.dp)
+                ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("HP ", color = MedievalCrimson, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-                        Text("${enemy.currentHp}/${enemy.maxHp}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text("HP ", color = MedievalCrimson, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        Text("${enemy.currentHp}/${enemy.maxHp}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(10.dp)
-                            .clip(RoundedCornerShape(5.dp))
+                            .height(6.dp)
+                            .clip(RoundedCornerShape(3.dp))
                             .background(Color.Black)
                     ) {
                         val enemyHpPercent = if (enemy.maxHp > 0) enemy.currentHp.toFloat() / enemy.maxHp else 0f
@@ -2917,7 +2953,9 @@ fun CombatScreen(viewModel: GameViewModel) {
                                 else -> MedievalCrimson
                             },
                             fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
 
                         Spacer(modifier = Modifier.height(6.dp))
