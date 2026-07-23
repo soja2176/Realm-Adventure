@@ -19,7 +19,31 @@ data class Item(
     val description: String = "",
     val itemLevel: Int = 1,
     val imageResName: String = ""
-)
+) {
+    fun getStatDescription(): String {
+        val list = mutableListOf<String>()
+        if (strBonus > 0) list.add("STR +$strBonus")
+        if (dexBonus > 0) list.add("DEX +$dexBonus")
+        if (intBonus > 0) list.add("INT +$intBonus")
+        if (conBonus > 0) list.add("CON +$conBonus")
+        if (dmgBonus > 0) list.add("Daño +$dmgBonus")
+        if (defBonus > 0) list.add("Def +$defBonus")
+        if (hpRegen > 0) list.add("Reg.HP +$hpRegen")
+        return if (list.isEmpty()) description.ifEmpty { "Equipo Místico" } else list.joinToString(" • ")
+    }
+}
+
+fun getItemSellValue(item: Item): Int {
+    val baseMultiplier = when (item.rarity.uppercase()) {
+        "UNIVERSAL" -> 500
+        "ARCANO" -> 350
+        "LEGENDARIO", "LEGENDARY" -> 220
+        "ÉPICO", "EPIC" -> 120
+        "RARO", "RARE" -> 60
+        else -> 20
+    }
+    return maxOf(10, baseMultiplier + (item.itemLevel * 15))
+}
 
 data class Talent(
     val id: String,

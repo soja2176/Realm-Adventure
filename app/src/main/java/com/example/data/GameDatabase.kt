@@ -48,6 +48,7 @@ data class GameProgress(
     val skillsJson: String = "[]",
     val completedQuestsJson: String = "[]",
     val mapPointsExploredJson: String = "[]",
+    val mapPointsClearedJson: String = "[]",
     val highestUnlockedDungeon: Int = 1,
     val completedDungeonsJson: String = "[]",
     val currentX: Int = 0,
@@ -87,7 +88,7 @@ interface GameProgressDao {
     suspend fun clearGameProgress()
 }
 
-@Database(entities = [GameProgress::class], version = 4, exportSchema = false)
+@Database(entities = [GameProgress::class], version = 5, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun gameProgressDao(): GameProgressDao
 }

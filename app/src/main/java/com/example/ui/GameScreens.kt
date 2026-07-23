@@ -987,13 +987,304 @@ fun CharacterCreatorScreen(viewModel: GameViewModel) {
         }
     }
 }
-      // --- WORLD MAP SCREEN (PROCEDURAL GENERATOR VIEW) ---
+// --- WORLD MAP SCREEN (PROCEDURAL GENERATOR VIEW) ---
+@Composable
+fun CastleDialog(castleState: CastleState, viewModel: GameViewModel) {
+    if (!castleState.active) return
+
+    AlertDialog(
+        onDismissRequest = { viewModel.closeCastleDialog() },
+        confirmButton = {},
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("🏰", fontSize = 24.sp)
+                Spacer(modifier = Modifier.width(8.dp))
+                Column {
+                    Text(text = castleState.castleName, color = MedievalGold, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                    Text(text = castleState.kingdomName, color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                }
+            }
+        },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = castleState.description,
+                    color = Color.White.copy(alpha = 0.85f),
+                    fontSize = 12.sp,
+                    lineHeight = 16.sp
+                )
+
+                Divider(color = MedievalGold.copy(alpha = 0.3f))
+
+                Button(
+                    onClick = { viewModel.claimCastleBlessing() },
+                    enabled = !castleState.blessingClaimed,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MedievalXpGreen,
+                        disabledContainerColor = Color.Gray.copy(alpha = 0.3f)
+                    ),
+                    modifier = Modifier.fillMaxWidth().testTag("castle_blessing_btn")
+                ) {
+                    Text(
+                        text = if (castleState.blessingClaimed) "✨ Bendición Real Reclamada" else "✨ Solicitar Bendición Real (+100% HP/MP + 150 Oro)",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+
+                Button(
+                    onClick = { viewModel.challengeCastleBoss() },
+                    colors = ButtonDefaults.buttonColors(containerColor = MedievalCrimson),
+                    modifier = Modifier.fillMaxWidth().testTag("castle_challenge_btn")
+                ) {
+                    Text(
+                        text = "⚔️ Desafiar al Campeón del Reino",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 11.sp
+                    )
+                }
+
+                OutlinedButton(
+                    onClick = { viewModel.closeCastleDialog() },
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().testTag("castle_close_btn")
+                ) {
+                    Text("Salir del Castillo", color = MedievalGold, fontSize = 11.sp)
+                }
+            }
+        },
+        containerColor = MedievalCardBg,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
+fun SpecialMerchantDialog(merchantState: SpecialMerchantState, viewModel: GameViewModel, playerGold: Int) {
+    if (!merchantState.active) return
+
+    AlertDialog(
+        onDismissRequest = { viewModel.closeSpecialMerchantDialog() },
+        confirmButton = {},
+        title = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(id = R.drawable.wandering_merchant_1784845746333),
+                            contentDescription = "Mercader Ambulante",
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .border(2.dp, MedievalGold, RoundedCornerShape(10.dp)),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(text = merchantState.merchantName, color = MedievalGold, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+                            Text(text = "Mercader Viajante de ${merchantState.kingdomName}", color = Color.White.copy(alpha = 0.8f), fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.8f)),
+                        border = BorderStroke(1.dp, MedievalGold)
+                    ) {
+                        Row(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.MonetizationOn, "Oro", tint = MedievalGold, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("$playerGold", color = MedievalGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+            }
+        },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                        .border(0.8.dp, MedievalGold.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
+                        .padding(10.dp)
+                ) {
+                    Text(
+                        text = "«${merchantState.dialogue}»",
+                        color = Color.White.copy(alpha = 0.9f),
+                        fontSize = 11.sp,
+                        fontStyle = FontStyle.Italic,
+                        lineHeight = 14.sp
+                    )
+                }
+
+                Divider(color = MedievalGold.copy(alpha = 0.3f))
+
+                if (merchantState.items.isEmpty()) {
+                    Text(
+                        text = "¡El mercader ha agotado todo su inventario por hoy!",
+                        color = Color.Gray,
+                        fontSize = 12.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 280.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(merchantState.items) { itemSpec ->
+                            val canAfford = playerGold >= itemSpec.discountPrice
+                            val rarityColor = getRarityColor(itemSpec.item.rarity)
+
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.6f)),
+                                border = BorderStroke(1.5.dp, rarityColor.copy(alpha = 0.7f)),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Item AI Image Thumbnail
+                                    Box(
+                                        modifier = Modifier
+                                            .size(56.dp)
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(Color.Black)
+                                            .border(1.5.dp, rarityColor, RoundedCornerShape(8.dp)),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Image(
+                                            painter = painterResource(id = getItemImageRes(itemSpec.item.imageResName, itemSpec.item.type)),
+                                            contentDescription = itemSpec.item.name,
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = ContentScale.Crop
+                                        )
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.TopStart)
+                                                .background(Color.Black.copy(alpha = 0.85f), RoundedCornerShape(bottomEnd = 4.dp))
+                                                .padding(horizontal = 3.dp, vertical = 1.dp)
+                                        ) {
+                                            Text("Niv.${itemSpec.item.itemLevel}", color = MedievalGold, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(10.dp))
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = itemSpec.item.name,
+                                                color = rarityColor,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 12.sp,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.weight(1f, fill = false)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(rarityColor.copy(alpha = 0.15f), RoundedCornerShape(4.dp))
+                                                    .border(0.5.dp, rarityColor.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(itemSpec.item.rarity.uppercase(), color = rarityColor, fontSize = 7.sp, fontWeight = FontWeight.ExtraBold)
+                                            }
+                                        }
+
+                                        Text(
+                                            text = itemSpec.item.getStatDescription(),
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = 9.sp,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+
+                                        Spacer(modifier = Modifier.height(2.dp))
+
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(
+                                                text = "${itemSpec.originalPrice}",
+                                                color = Color.Gray,
+                                                fontSize = 10.sp,
+                                                style = androidx.compose.ui.text.TextStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Icon(Icons.Default.MonetizationOn, "Oro", tint = MedievalGold, modifier = Modifier.size(11.dp))
+                                            Text(
+                                                text = " ${itemSpec.discountPrice}",
+                                                color = MedievalGold,
+                                                fontWeight = FontWeight.ExtraBold,
+                                                fontSize = 11.sp
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Box(
+                                                modifier = Modifier
+                                                    .background(MedievalXpGreen.copy(alpha = 0.2f), RoundedCornerShape(4.dp))
+                                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                                            ) {
+                                                Text(
+                                                    text = "-${itemSpec.discountPercent}% OFF",
+                                                    color = MedievalXpGreen,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 8.sp
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(6.dp))
+
+                                    Button(
+                                        onClick = { viewModel.buySpecialMerchantItem(itemSpec) },
+                                        enabled = canAfford,
+                                        colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(32.dp).testTag("buy_merchant_item_${itemSpec.item.id}")
+                                    ) {
+                                        Text("Comprar", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { viewModel.closeSpecialMerchantDialog() },
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth().testTag("close_merchant_btn")
+                ) {
+                    Text("Cerrar Mercado Viajante", color = MedievalGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        },
+        containerColor = MedievalCardBg,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
 @Composable
 fun WorldMapScreen(viewModel: GameViewModel) {
     val progress by viewModel.progressState.collectAsState()
     val proceduralMap by viewModel.proceduralMap.collectAsState()
+    val castleState by viewModel.castleState.collectAsState()
+    val specialMerchantState by viewModel.specialMerchantState.collectAsState()
 
     val p = progress ?: return
+
+    val currentKingdom = KingdomGenerator.getKingdomForCoords(p.currentX, p.currentY)
+
+    CastleDialog(castleState = castleState, viewModel = viewModel)
+    SpecialMerchantDialog(merchantState = specialMerchantState, viewModel = viewModel, playerGold = p.charGold)
 
     // Keep track of the currently selected tile in our medieval UI
     var selectedTile by remember(p.currentX, p.currentY) {
@@ -1036,12 +1327,27 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                         .align(Alignment.BottomStart)
                         .padding(12.dp)
                 ) {
-                    Text(
-                        text = "Tierras del Reino de Eldoria",
-                        color = MedievalGold,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 17.sp
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = currentKingdom.name,
+                            color = MedievalGold,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.6f)),
+                            border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                            shape = RoundedCornerShape(4.dp)
+                        ) {
+                            Text(
+                                text = currentKingdom.subtitle,
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 9.sp,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
                     Text(
                         text = "Posición del Héroe: (X: ${p.currentX}, Y: ${p.currentY})",
                         color = Color.White.copy(alpha = 0.8f),
@@ -1182,6 +1488,8 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                         val borderColor = when {
                             isPlayerHere -> MedievalGold
                             isSelected -> MedievalGold
+                            tile.encounterType == "CASTLE" -> Color(0xFFFFD700)
+                            tile.encounterType == "SPECIAL_MERCHANT" -> Color(0xFF00E676)
                             tile.isObstacle -> Color(0xFF5D4037)
                             tile.isBossLair -> MedievalCrimson
                             tile.isEnemySpawn && !tile.explored -> Color(0xFF673AB7)
@@ -1192,10 +1500,20 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                         val tileImageRes = when {
                             tile.isObstacle -> R.drawable.img_tile_obstacle_1784470907788
                             tile.isBossLair -> R.drawable.img_tile_enemy_1784470940695
-                            tile.encounterType == "CHEST" && !tile.explored -> R.drawable.img_tile_chest_1784470917774
+                            tile.encounterType == "CHEST" || tile.encounterType == "TREASURE" && !tile.explored -> R.drawable.img_tile_chest_1784470917774
                             tile.encounterType == "SHRINE" && !tile.explored -> R.drawable.img_tile_shrine_1784470929381
                             tile.isEnemySpawn && !tile.explored -> R.drawable.img_tile_enemy_1784470940695
                             else -> R.drawable.img_tile_grass_1784470894787
+                        }
+
+                        val tileBadge = when {
+                            tile.encounterType == "CASTLE" -> "🏰"
+                            tile.encounterType == "SPECIAL_MERCHANT" -> "🧙‍♂️"
+                            tile.encounterType == "TREASURE" && !tile.explored -> "💰"
+                            tile.encounterType == "SHRINE" && !tile.explored -> "🔮"
+                            tile.isBossLair -> "👑"
+                            tile.isEnemySpawn && !tile.explored -> "⚔️"
+                            else -> null
                         }
 
                         Card(
@@ -1216,7 +1534,6 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                                 modifier = Modifier.fillMaxSize(),
                                 contentAlignment = Alignment.Center
                             ) {
-                                // Draw the generative tile asset background
                                 Image(
                                     painter = painterResource(id = tileImageRes),
                                     contentDescription = tile.biome,
@@ -1224,12 +1541,22 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                                     modifier = Modifier.fillMaxSize()
                                 )
 
-                                // Overlay a dark layer if it is an empty "Vacío" boundary tile
                                 if (tile.biome == "Vacío") {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .background(Color.Black.copy(alpha = 0.75f))
+                                    )
+                                }
+
+                                if (tileBadge != null && !isPlayerHere) {
+                                    Text(
+                                        text = tileBadge,
+                                        fontSize = 16.sp,
+                                        modifier = Modifier
+                                            .align(Alignment.Center)
+                                            .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                                            .padding(2.dp)
                                     )
                                 }
 
@@ -1241,7 +1568,7 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                                     )
                                     Box(
                                         modifier = Modifier
-                                            .size(32.dp)
+                                            .size(28.dp)
                                             .background(Color.Black.copy(alpha = 0.7f), CircleShape)
                                             .border(1.5.dp, MedievalGold, CircleShape),
                                         contentAlignment = Alignment.Center
@@ -1250,7 +1577,7 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                                             imageVector = Icons.Default.DirectionsWalk,
                                             contentDescription = "Héroe Aquí",
                                             tint = MedievalGold,
-                                            modifier = Modifier.size(20.dp)
+                                            modifier = Modifier.size(18.dp)
                                         )
                                     }
                                 } else {
@@ -1260,17 +1587,16 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                                             contentDescription = "Despejado",
                                             tint = MedievalXpGreen,
                                             modifier = Modifier
-                                                .size(16.dp)
+                                                .size(14.dp)
                                                 .align(Alignment.TopEnd)
                                                 .padding(2.dp)
                                         )
                                     }
                                 }
 
-                                // Coordinates text
                                 Text(
                                     text = "${tile.x},${tile.y}",
-                                    color = Color.White.copy(alpha = 0.5f),
+                                    color = Color.White.copy(alpha = 0.6f),
                                     fontSize = 7.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier
@@ -1285,7 +1611,96 @@ fun WorldMapScreen(viewModel: GameViewModel) {
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(6.dp))
+
+        // DIRECTIONAL D-PAD CONTROLS FOR INFINITE WORLD TRAVERSAL
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 4.dp),
+            shape = RoundedCornerShape(10.dp),
+            border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.35f)),
+            colors = CardDefaults.cardColors(containerColor = MedievalCardBg)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "Controles de Dirección (Navegación Infinita)",
+                    color = MedievalGold,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 11.sp
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // North (Y + 1)
+                    IconButton(
+                        onClick = { viewModel.moveDirection(0, 1) },
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(Color(0xFF263238), CircleShape)
+                            .border(1.dp, MedievalGold, CircleShape)
+                            .testTag("nav_dpad_north")
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Norte", tint = MedievalGold)
+                    }
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        // West (X - 1)
+                        IconButton(
+                            onClick = { viewModel.moveDirection(-1, 0) },
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(Color(0xFF263238), CircleShape)
+                                .border(1.dp, MedievalGold, CircleShape)
+                                .testTag("nav_dpad_west")
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowLeft, contentDescription = "Oeste", tint = MedievalGold)
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                                .border(1.dp, MedievalGold.copy(alpha = 0.5f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Explore, contentDescription = "Brújula", tint = MedievalGold, modifier = Modifier.size(18.dp))
+                        }
+
+                        // East (X + 1)
+                        IconButton(
+                            onClick = { viewModel.moveDirection(1, 0) },
+                            modifier = Modifier
+                                .size(34.dp)
+                                .background(Color(0xFF263238), CircleShape)
+                                .border(1.dp, MedievalGold, CircleShape)
+                                .testTag("nav_dpad_east")
+                        ) {
+                            Icon(Icons.Default.KeyboardArrowRight, contentDescription = "Este", tint = MedievalGold)
+                        }
+                    }
+
+                    // South (Y - 1)
+                    IconButton(
+                        onClick = { viewModel.moveDirection(0, -1) },
+                        modifier = Modifier
+                            .size(34.dp)
+                            .background(Color(0xFF263238), CircleShape)
+                            .border(1.dp, MedievalGold, CircleShape)
+                            .testTag("nav_dpad_south")
+                    ) {
+                        Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Sur", tint = MedievalGold)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(6.dp))
 
         // INTERACTIVE MAP SELECTION PREVIEW CARD
         selectedTile?.let { tile ->
@@ -1322,15 +1737,15 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = tile.biome,
+                                    text = if (tile.specialName.isNotEmpty()) tile.specialName else tile.biome,
                                     color = MedievalGold,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp
                                 )
                             }
                             Text(
-                                text = "Coordenadas: (X: ${tile.x}, Y: ${tile.y})",
-                                color = Color.White.copy(alpha = 0.5f),
+                                text = "Coordenadas: (X: ${tile.x}, Y: ${tile.y}) • ${tile.kingdomName}",
+                                color = Color.White.copy(alpha = 0.6f),
                                 fontSize = 11.sp
                             )
                         }
@@ -1356,50 +1771,35 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                     }
 
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        val description = when (tile.biome) {
-                            "Santuario Inicial" -> "Un antiguo recinto sagrado rodeado de estatuas de piedra donde reinan la paz y la protección divina de Eldoria."
-                            "Pradera" -> "Valles verdes y colinas pacíficas salpicadas de flores silvestres, donde suelen merodear bestias comunes."
-                            "Pantano" -> "Una ciénaga brumosa de fango denso e insectos zumbadores. La humedad conspira con criaturas sombrías."
-                            "Bosque Oscuro" -> "Arboledas antiguas y cerradas donde las raíces atrapan a los incautos y los monstruos acechan entre las copas."
-                            "Montaña" -> "Picos escarpados e intransitables cubiertos de hielo perpetuo y rocas colosales que impiden el paso directo."
-                            "Ruinas Ancestrales" -> "Restos de torreones de piedra y altares profanados que albergan antiguos tesoros y guardianes espectrales."
-                            "Guarida de Jefe" -> "La tétrica cúspide del mal. Un volcán inactivo donde habita el temible Dragón Ancestral de Eldoria."
-                            else -> "Región inexplorada en las fronteras cartografiadas del continente."
+                        val description = when (tile.encounterType) {
+                            "CASTLE" -> "🏰 Bastión y Castillo de ${tile.kingdomName}. Puedes solicitar la Bendición Real o desafiar al Campeón."
+                            "SPECIAL_MERCHANT" -> "🧙‍♂️ Mercader Ambulante del Reino. Vende artefactos raros y únicos con precios con descuento especial."
+                            "TREASURE" -> if (tile.cleared) "📦 Gran Tesoro Real (Reclamado)." else "💰 Gran Tesoro Real. Oculta cantidades de oro abundante y equipo legendario."
+                            "SHRINE" -> if (tile.cleared) "✨ Santuario Místico Agotado (Energías consumidas)." else "🔮 Santuario Ancestral que restaura vida y maná."
+                            "CHEST" -> if (tile.cleared) "📦 Cofre Abierto (Saqueado)." else "🎁 Cofre del Tesoro Oculto."
+                            "BOSS" -> if (tile.cleared) "👑 Guarida de Jefe Derrotado." else "👑 Guarida de Jefe Imperial. Enemigo temible de alto nivel con botín legendario asegurado."
+                            else -> "Terreno de ${tile.biome} habitado por criaturas y bestias de ${tile.kingdomName}."
                         }
                         Text(
                             text = description,
-                            color = Color.White.copy(alpha = 0.7f),
+                            color = Color.White.copy(alpha = 0.75f),
                             fontSize = 11.sp,
                             lineHeight = 15.sp
                         )
 
                         Spacer(modifier = Modifier.height(4.dp))
 
-                        if (tile.isBossLair) {
+                        if (tile.isBossLair && !tile.cleared) {
                             Text(
-                                text = "⚠️ ADVERTENCIA: JEFE CRÍTICO (Recomendado Nivel 10+)",
+                                text = "⚠️ ADVERTENCIA: JEFE IMPERIAL (Nivel ${tile.levelRequirement})",
                                 color = MedievalCrimson,
                                 fontWeight = FontWeight.Bold,
                                 fontSize = 10.sp
                             )
-                        } else if (tile.isEnemySpawn && !tile.explored) {
+                        } else if (tile.isEnemySpawn && !tile.cleared) {
                             Text(
-                                text = "⚔️ Nivel de Amenaza Estimado: Nivel ${tile.levelRequirement}",
+                                text = "⚔️ Nivel de Amenaza: Nivel ${tile.levelRequirement}",
                                 color = MedievalGold,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 10.sp
-                            )
-                        } else if (tile.encounterType == "CHEST" && !tile.explored) {
-                            Text(
-                                text = "🎁 Tesoro detectado en esta casilla inexplorada.",
-                                color = MedievalGold,
-                                fontWeight = FontWeight.Medium,
-                                fontSize = 10.sp
-                            )
-                        } else if (tile.encounterType == "SHRINE" && !tile.explored) {
-                            Text(
-                                text = "✨ Santuario sagrado de regeneración detectado.",
-                                color = MedievalManaBlue,
                                 fontWeight = FontWeight.Medium,
                                 fontSize = 10.sp
                             )
@@ -1409,13 +1809,66 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                     Box(modifier = Modifier.fillMaxWidth()) {
                         when {
                             isPlayerHere -> {
-                                Text(
-                                    text = "Estás parado sobre esta casilla de forma segura.",
-                                    color = Color.White.copy(alpha = 0.5f),
-                                    fontSize = 11.sp,
-                                    fontStyle = FontStyle.Italic,
-                                    modifier = Modifier.align(Alignment.Center)
-                                )
+                                when {
+                                    tile.encounterType == "CASTLE" -> {
+                                        Button(
+                                            onClick = { viewModel.selectTileAndExplore(tile) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFFFD700)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(38.dp)
+                                        ) {
+                                            Text("🏰 INGRESAR AL CASTILLO DE ${tile.kingdomName}", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                        }
+                                    }
+                                    tile.encounterType == "SPECIAL_MERCHANT" -> {
+                                        Button(
+                                            onClick = { viewModel.selectTileAndExplore(tile) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E676)),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(38.dp)
+                                        ) {
+                                            Text("🧙‍♂️ HABLAR CON MERCADER", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                        }
+                                    }
+                                    tile.encounterType == "SHRINE" && !tile.cleared -> {
+                                        Button(
+                                            onClick = { viewModel.selectTileAndExplore(tile) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(38.dp)
+                                        ) {
+                                            Text("🔮 ACTIVAR SANTUARIO ANCESTRAL", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                        }
+                                    }
+                                    (tile.encounterType == "CHEST" || tile.encounterType == "TREASURE") && !tile.cleared -> {
+                                        Button(
+                                            onClick = { viewModel.selectTileAndExplore(tile) },
+                                            colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                                            shape = RoundedCornerShape(8.dp),
+                                            modifier = Modifier.fillMaxWidth().height(38.dp)
+                                        ) {
+                                            Text("💰 ABRIR Y RECLAMAR TESORO", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                        }
+                                    }
+                                    tile.cleared && (tile.encounterType == "SHRINE" || tile.encounterType == "CHEST" || tile.encounterType == "TREASURE") -> {
+                                        Text(
+                                            text = "✨ Lugar explorado. Las riquezas y energías de esta casilla han sido consumidas.",
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            fontSize = 11.sp,
+                                            fontStyle = FontStyle.Italic,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
+                                    else -> {
+                                        Text(
+                                            text = "Estás parado sobre esta casilla de forma segura.",
+                                            color = Color.White.copy(alpha = 0.5f),
+                                            fontSize = 11.sp,
+                                            fontStyle = FontStyle.Italic,
+                                            modifier = Modifier.align(Alignment.Center)
+                                        )
+                                    }
+                                }
                             }
                             tile.isObstacle -> {
                                 Row(
@@ -1425,7 +1878,7 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                                     Icon(Icons.Default.Lock, contentDescription = "Bloqueado", tint = MedievalCrimson, modifier = Modifier.size(14.dp))
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = "Montaña bloqueada. Terreno intransitable.",
+                                        text = "Terreno intransitable.",
                                         color = MedievalCrimson,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Bold
@@ -1434,13 +1887,21 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                             }
                             isAdjacent -> {
                                 val buttonLabel = when {
-                                    tile.isBossLair -> "DESAFIAR JEFE (Nivel ${tile.levelRequirement})"
-                                    tile.isEnemySpawn && !tile.explored -> "ATACAR ENEMIGO (Nivel ${tile.levelRequirement})"
-                                    tile.encounterType == "CHEST" && !tile.explored -> "RECLAMAR COFRE DEL TESORO"
-                                    tile.encounterType == "SHRINE" && !tile.explored -> "ACTIVAR ALTAR SAGRADO"
+                                    tile.encounterType == "CASTLE" -> "INGRESAR AL CASTILLO"
+                                    tile.encounterType == "SPECIAL_MERCHANT" -> "HABLAR CON MERCADER"
+                                    tile.encounterType == "TREASURE" && !tile.cleared -> "RECLAMAR GRAN TESORO REAL"
+                                    tile.encounterType == "CHEST" && !tile.cleared -> "ABRIR COFRE DEL TESORO"
+                                    tile.encounterType == "SHRINE" && !tile.cleared -> "ACTIVAR ALTAR SAGRADO"
+                                    tile.isBossLair && !tile.cleared -> "DESAFIAR JEFE (Nivel ${tile.levelRequirement})"
+                                    tile.isEnemySpawn && !tile.cleared -> "ATACAR ENEMIGO (Nivel ${tile.levelRequirement})"
                                     else -> "VIAJAR Y EXPLORAR"
                                 }
-                                val buttonColor = if (tile.isBossLair || (tile.isEnemySpawn && !tile.explored)) MedievalCrimson else MedievalGold
+                                val buttonColor = when {
+                                    tile.encounterType == "CASTLE" -> Color(0xFFFFD700)
+                                    tile.encounterType == "SPECIAL_MERCHANT" -> Color(0xFF00E676)
+                                    (tile.isBossLair || tile.isEnemySpawn) && !tile.cleared -> MedievalCrimson
+                                    else -> MedievalGold
+                                }
 
                                 Button(
                                     onClick = {
@@ -1456,28 +1917,32 @@ fun WorldMapScreen(viewModel: GameViewModel) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Text(
                                             text = buttonLabel,
-                                            color = if (buttonColor == MedievalGold) Color.Black else Color.White,
+                                            color = if (buttonColor == MedievalGold || buttonColor == Color(0xFFFFD700) || buttonColor == Color(0xFF00E676)) Color.Black else Color.White,
                                             fontWeight = FontWeight.Bold,
                                             fontSize = 11.sp
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Icon(
-                                            imageVector = Icons.Default.ArrowForward,
-                                            contentDescription = "Viajar",
-                                            tint = if (buttonColor == MedievalGold) Color.Black else Color.White,
-                                            modifier = Modifier.size(14.dp)
                                         )
                                     }
                                 }
                             }
                             else -> {
-                                Text(
-                                    text = "Demasiado lejos para viajar directamente (debes avanzar casilla por casilla).",
-                                    color = Color.White.copy(alpha = 0.5f),
-                                    fontSize = 11.sp,
-                                    fontStyle = FontStyle.Italic,
-                                    modifier = Modifier.align(Alignment.Center)
-                                )
+                                Button(
+                                    onClick = {
+                                        viewModel.selectTileAndExplore(tile)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF37474F)),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(36.dp)
+                                        .testTag("travel_far_btn")
+                                ) {
+                                    Text(
+                                        text = "VIAJAR HACIA ESTA CASILLA",
+                                        color = Color.White,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -1518,61 +1983,86 @@ fun ShopScreen(viewModel: GameViewModel) {
     ) {
         // Decorative Medieval Market Header
         item {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(110.dp),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(1.5.dp, MedievalGold)
             ) {
-                Text(
-                    text = "Mercado Real de Eldoria",
-                    color = MedievalGold,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp
-                )
-                Text(
-                    text = "Intercambia tu oro por armas forjadas o vende tus tesoros.",
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 11.sp,
-                    textAlign = TextAlign.Center
-                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(id = R.drawable.merchant_stall_banner_1784845825754),
+                        contentDescription = "Mercado Real",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Black.copy(alpha = 0.4f), Color.Black.copy(alpha = 0.85f))
+                                )
+                            )
+                    )
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(12.dp)
+                    ) {
+                        Text(
+                            text = "Mercado Real & Mercaderes Viajantes",
+                            color = MedievalGold,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp
+                        )
+                        Text(
+                            text = "Intercambia tu oro por armas legendarias o vende tus tesoros de mazmorra.",
+                            color = Color.White.copy(alpha = 0.85f),
+                            fontSize = 11.sp
+                        )
+                    }
+                }
             }
         }
 
-        // Grommar the Merchant Card
+        // Wandering Merchant Card
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-                border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.35f)),
+                border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
                 shape = RoundedCornerShape(12.dp)
             ) {
                 Row(
-                    modifier = Modifier.padding(10.dp),
+                    modifier = Modifier.padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Image(
-                        painter = painterResource(id = R.drawable.img_shop_merchant_1784605357079),
-                        contentDescription = "Grommar, el Herrero de la Corona",
+                        painter = painterResource(id = R.drawable.wandering_merchant_1784845746333),
+                        contentDescription = "Grommar el Mercader Viajante",
                         modifier = Modifier
-                            .size(60.dp)
-                            .clip(RoundedCornerShape(8.dp))
-                            .border(1.5.dp, MedievalGold, RoundedCornerShape(8.dp)),
+                            .size(72.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(2.dp, MedievalGold, RoundedCornerShape(10.dp)),
                         contentScale = ContentScale.Crop
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
-                            text = "Grommar, el Herrero de la Corona",
+                            text = "Grommar, Mercader & Viajante de la Corona",
                             color = MedievalGold,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 14.sp
                         )
-                        Spacer(modifier = Modifier.height(2.dp))
+                        Spacer(modifier = Modifier.height(3.dp))
                         Text(
-                            text = "«¡Saludos! Forjo el mejor acero de Eldoria y compro reliquias de las mazmorras.»",
-                            color = Color.White.copy(alpha = 0.85f),
+                            text = "«¡Saludos viajero! Recorro los reinos ofreciendo reliquias místicas, pociones sagradas y comprando botines de guerra.»",
+                            color = Color.White.copy(alpha = 0.9f),
                             fontSize = 10.sp,
                             fontStyle = FontStyle.Italic,
-                            lineHeight = 13.sp
+                            lineHeight = 14.sp
                         )
                     }
                 }
@@ -3277,111 +3767,135 @@ fun CharacterScreen(viewModel: GameViewModel) {
         verticalArrangement = Arrangement.spacedBy(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        playerStats?.let { stats ->
-            item {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-                    border = BorderStroke(1.5.dp, MedievalXpGreen)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Analytics, "Métricas", tint = MedievalXpGreen, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Métricas de PlayerStats",
-                                color = MedievalXpGreen,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 16.sp
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("HP:", color = Color.White)
-                            Text("${stats.hp} / ${stats.maxHp}", color = MedievalCrimson, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("MP:", color = Color.White)
-                            Text("${stats.mp} / ${stats.maxMp}", color = Color(0xFF29B6F6), fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Fuerza (Strength):", color = Color.White)
-                            Text("${stats.strength}", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text("Agilidad (Agility):", color = Color.White)
-                            Text("${stats.agility}", color = Color.White, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-        }
-
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
                 border = BorderStroke(2.dp, MedievalGold)
             ) {
-                Row(
-                    modifier = Modifier.padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Image(
-                        painter = painterResource(id = getCharacterPortrait(p.charRace, p.charClass)),
-                        contentDescription = "Portrait",
-                        modifier = Modifier
-                            .size(100.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .border(2.dp, MedievalGold, RoundedCornerShape(12.dp)),
-                        contentScale = ContentScale.Crop
-                    )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Image(
+                            painter = painterResource(id = getCharacterPortrait(p.charRace, p.charClass)),
+                            contentDescription = "Portrait",
+                            modifier = Modifier
+                                .size(130.dp)
+                                .clip(RoundedCornerShape(12.dp))
+                                .border(2.5.dp, MedievalGold, RoundedCornerShape(12.dp)),
+                            contentScale = ContentScale.Crop
+                        )
 
-                    Spacer(modifier = Modifier.width(16.dp))
+                        Spacer(modifier = Modifier.width(14.dp))
 
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(p.charName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
+                            Text("${p.charRace} ${p.charClass}", color = MedievalGold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Nivel ${p.charLevel}", color = MedievalCrimson, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
+
+                            Spacer(modifier = Modifier.height(10.dp))
+
+                            // HP Bar
+                            val hpRatio = if (p.maxHp > 0) (p.currentHp.toFloat() / p.maxHp).coerceIn(0f, 1f) else 1f
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("HP", color = MedievalCrimson, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("${p.currentHp} / ${p.maxHp}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(12.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.Black)
+                                        .border(0.8.dp, MedievalCrimson.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth(hpRatio)
+                                            .background(MedievalCrimson)
+                                    )
+                                }
+                            }
+
+                            Spacer(modifier = Modifier.height(6.dp))
+
+                            // MP Bar
+                            val mpRatio = if (p.maxMp > 0) (p.currentMp.toFloat() / p.maxMp).coerceIn(0f, 1f) else 1f
+                            Column {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text("MP", color = Color(0xFF29B6F6), fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("${p.currentMp} / ${p.maxMp}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(12.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.Black)
+                                        .border(0.8.dp, Color(0xFF0288D1).copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .fillMaxWidth(mpRatio)
+                                            .background(Color(0xFF0288D1))
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    // EXP Bar (Unified & Full-Width for high visibility and legibility)
+                    val nextLvlExp = p.charLevel * 100
+                    val expRatio = if (nextLvlExp > 0) (p.charExp.toFloat() / nextLvlExp).coerceIn(0f, 1f) else 0f
+                    val expPercent = (expRatio * 100).toInt()
                     Column {
-                        Text(p.charName, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold)
-                        Text("${p.charRace} ${p.charClass}", color = MedievalGold, fontSize = 14.sp)
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text("Nivel ${p.charLevel}", color = MedievalCrimson, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-
-                        val nextLvlExp = p.charLevel * 100
-                        val expPercent = p.charExp.toFloat() / nextLvlExp
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("EXPERIENCIA Y PROGRESO", color = MedievalXpGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("${p.charExp} / $nextLvlExp ($expPercent%)", color = MedievalXpGreen, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
                         Spacer(modifier = Modifier.height(4.dp))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(12.dp)
-                                .clip(RoundedCornerShape(6.dp))
+                                .height(18.dp)
+                                .clip(RoundedCornerShape(9.dp))
                                 .background(Color.Black)
+                                .border(1.dp, MedievalXpGreen.copy(alpha = 0.6f), RoundedCornerShape(9.dp))
                         ) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxHeight()
-                                    .fillMaxWidth(expPercent)
-                                    .background(MedievalXpGreen)
+                                    .fillMaxWidth(expRatio)
+                                    .background(
+                                        Brush.horizontalGradient(
+                                            colors = listOf(Color(0xFF2E7D32), MedievalXpGreen)
+                                        )
+                                    )
                             )
                             Text(
                                 text = "EXP: ${p.charExp} / $nextLvlExp",
                                 color = Color.White,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.ExtraBold,
                                 modifier = Modifier.align(Alignment.Center)
                             )
                         }
@@ -3391,28 +3905,58 @@ fun CharacterScreen(viewModel: GameViewModel) {
         }
 
         item {
-            Button(
+            Card(
                 onClick = { viewModel.changeScreen(GameScreen.TALENTS) },
-                colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.5.dp, Color(0xFFFFF59D)),
+                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                shape = RoundedCornerShape(12.dp),
+                border = BorderStroke(2.dp, MedievalGold),
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(50.dp)
+                    .height(64.dp)
                     .testTag("open_talents_tree_button")
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Icon(Icons.Default.Schema, contentDescription = "Talentos", tint = Color.Black, modifier = Modifier.size(22.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "🌲 ÁRBOL DE TALENTOS" + if (p.talentPointsAvailable > 0) " (${p.talentPointsAvailable} PTS DISPONIBLES)" else "",
-                        color = Color.Black,
-                        fontWeight = FontWeight.ExtraBold,
-                        fontSize = 15.sp
+                Box(modifier = Modifier.fillMaxSize()) {
+                    Image(
+                        painter = painterResource(id = R.drawable.talent_tree_banner_1784843563984),
+                        contentDescription = "Fondo Árbol de Talentos",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
                     )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        Color.Black.copy(alpha = 0.8f),
+                                        Color.Black.copy(alpha = 0.5f),
+                                        Color.Black.copy(alpha = 0.8f)
+                                    )
+                                )
+                            )
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Schema,
+                            contentDescription = "Talentos",
+                            tint = MedievalGold,
+                            modifier = Modifier.size(26.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = "ÁRBOL DE TALENTOS" + if (p.talentPointsAvailable > 0) " (${p.talentPointsAvailable} PTS DISPONIBLES)" else "",
+                            color = MedievalGold,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 16.sp,
+                            letterSpacing = 0.5.sp
+                        )
+                    }
                 }
             }
         }

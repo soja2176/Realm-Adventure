@@ -55,17 +55,46 @@ data class CombatState(
     val activeAnimation: String? = null // "PLAYER_ATTACK", "PLAYER_HEAL", "PLAYER_MAGIC", "ENEMY_ATTACK", "ENEMY_SKILL", "PLAYER_POTION"
 )
 
+data class SpecialMerchantItem(
+    val item: Item,
+    val originalPrice: Int,
+    val discountPrice: Int,
+    val discountPercent: Int
+)
+
+data class SpecialMerchantState(
+    val active: Boolean = false,
+    val merchantName: String = "",
+    val kingdomName: String = "",
+    val dialogue: String = "",
+    val items: List<SpecialMerchantItem> = emptyList()
+)
+
+data class CastleState(
+    val active: Boolean = false,
+    val castleName: String = "",
+    val kingdomName: String = "",
+    val kingdomColor: String = "#4CAF50",
+    val description: String = "",
+    val blessingClaimed: Boolean = false,
+    val tile: MapTile? = null
+)
+
 data class MapTile(
     val x: Int,
     val y: Int,
-    val biome: String, // "Pradera", "Pantano", "Bosque Oscuro", "Montaña", "Ruinas Ancestrales", "Guarida de Jefe"
+    val biome: String,
     val explored: Boolean = false,
+    val cleared: Boolean = false,
     val hasEncounter: Boolean = true,
-    val encounterType: String = "MONSTER", // "MONSTER", "CHEST", "SHRINE", "BOSS"
+    val encounterType: String = "MONSTER", // "MONSTER", "CHEST", "SHRINE", "BOSS", "CASTLE", "SPECIAL_MERCHANT", "TREASURE"
     val levelRequirement: Int = 1,
     val isBossLair: Boolean = false,
     val isObstacle: Boolean = false,
-    val isEnemySpawn: Boolean = false
+    val isEnemySpawn: Boolean = false,
+    val kingdomName: String = "Reino de Eldoria",
+    val kingdomColor: String = "#4CAF50",
+    val specialName: String = ""
 )
 
 class GameViewModel(private val repository: GameProgressRepository) : ViewModel() {
@@ -129,6 +158,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     // Map tiles procedurally loaded around current coordinate
     private val _proceduralMap = MutableStateFlow<List<MapTile>>(emptyList())
     val proceduralMap: StateFlow<List<MapTile>> = _proceduralMap.asStateFlow()
+
+    private val _specialMerchantState = MutableStateFlow(SpecialMerchantState())
+    val specialMerchantState: StateFlow<SpecialMerchantState> = _specialMerchantState.asStateFlow()
+
+    private val _castleState = MutableStateFlow(CastleState())
+    val castleState: StateFlow<CastleState> = _castleState.asStateFlow()
 
     // Active screen notices/notifications
     private val _notification = MutableStateFlow<String?>(null)
@@ -293,7 +328,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 if (progress != null && progress.hasActiveChar) {
                     if (isFirstLoad) {
                         _screenState.value = GameScreen.WORLD_MAP
-                        generateMapAround(progress.currentX, progress.currentY, progress.mapPointsExploredJson)
+                        generateMapAround(progress.currentX, progress.currentY, progress.mapPointsExploredJson, progress.mapPointsClearedJson)
                         isFirstLoad = false
                     }
                 } else {
@@ -747,50 +782,68 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         return true
     }
 
-    fun generateMapAround(cx: Int, cy: Int, exploredJson: String) {
+    fun generateMapAround(cx: Int, cy: Int, exploredJson: String, clearedJson: String = "[]") {
         val exploredSet = GameJsonParser.listFromJson<String>(exploredJson).toSet()
+        val clearedSet = GameJsonParser.listFromJson<String>(clearedJson).toSet()
         val tiles = mutableListOf<MapTile>()
 
-        // Generate a 5x5 viewing grid around player (cx, cy)
+        // Generate a 5x5 viewing grid around player (cx, cy) for infinite viewport rendering
         for (dx in -2..2) {
             for (dy in -2..2) {
                 val x = cx + dx
                 val y = cy + dy
                 val coordKey = "$x,$y"
                 val isExplored = exploredSet.contains(coordKey)
+                val isCleared = clearedSet.contains(coordKey)
 
-                // Procedural generation logic based on coordinates seed
+                val kingdom = KingdomGenerator.getKingdomForCoords(x, y)
+
+                // Deterministic seed for infinite procedural generation at coordinate (x,y)
                 val seed = (x * 73856093) xor (y * 19349663)
                 val random = Random(seed)
 
-                val biomes = listOf("Pradera", "Pantano", "Bosque Oscuro", "Montaña", "Ruinas Ancestrales")
                 val biome = if (x == 0 && y == 0) "Santuario Inicial"
-                else if (abs(x) == 4 && abs(y) == 4 || (x == 3 && y == -3)) "Guarida de Jefe"
-                else biomes[abs(seed % biomes.size)]
+                else kingdom.biomes[abs(seed % kingdom.biomes.size)]
 
-                val levelReq = abs(x) + abs(y)
+                val levelReq = maxOf(1, abs(x) + abs(y))
 
-                val encounterType = if (biome == "Guarida de Jefe") "BOSS"
-                else {
+                var specialName = ""
+                val encounterType = if (x == 0 && y == 0) {
+                    specialName = "Santuario Inicial"
+                    "SHRINE"
+                } else if ((abs(x) % 12 == 0 && abs(y) % 12 == 0 && (x != 0 || y != 0)) || (x == 7 && y == -7) || (x == -10 && y == 10)) {
+                    specialName = kingdom.castleNames[abs(seed) % kingdom.castleNames.size]
+                    "CASTLE"
+                } else {
                     val r = random.nextInt(100)
-                    val baseType = when {
-                        r < 65 -> "MONSTER"
-                        r < 85 -> "CHEST"
-                        else -> "SHRINE"
-                    }
-                    if (baseType == "CHEST" || baseType == "SHRINE") {
-                        if (isValidRewardTile(x, y)) {
-                            baseType
-                        } else {
-                            "MONSTER" // Fall back to MONSTER to balance risk
+                    when {
+                        r < 8 -> {
+                            specialName = kingdom.merchantNames[abs(seed) % kingdom.merchantNames.size]
+                            "SPECIAL_MERCHANT"
                         }
-                    } else {
-                        "MONSTER"
+                        r < 16 -> {
+                            specialName = "Gran Tesoro de " + kingdom.name.replace("Reino de ", "")
+                            "TREASURE"
+                        }
+                        r < 24 -> {
+                            specialName = "Altar de " + kingdom.name.replace("Reino de ", "")
+                            "SHRINE"
+                        }
+                        r < 28 -> {
+                            specialName = kingdom.bossNames[abs(seed) % kingdom.bossNames.size]
+                            "BOSS"
+                        }
+                        else -> "MONSTER"
                     }
                 }
 
-                val isObs = (biome == "Montaña") && (abs(x) + abs(y) > 1)
-                val isEnemy = (encounterType == "MONSTER" || encounterType == "BOSS") && !isExplored && (x != 0 || y != 0)
+                val isObs = (biome.contains("Montaña") || biome.contains("Picos") || biome.contains("Cráter")) && (abs(x) + abs(y) > 1) && (random.nextInt(100) < 30)
+                val isEnemy = (encounterType == "MONSTER" || encounterType == "BOSS") && !isCleared && (x != 0 || y != 0)
+
+                val tileHasEncounter = when (encounterType) {
+                    "CASTLE", "SPECIAL_MERCHANT" -> true
+                    else -> !isCleared && (x != 0 || y != 0)
+                }
 
                 tiles.add(
                     MapTile(
@@ -798,12 +851,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         y = y,
                         biome = biome,
                         explored = isExplored,
-                        hasEncounter = !isExplored && (x != 0 || y != 0),
+                        cleared = isCleared,
+                        hasEncounter = tileHasEncounter,
                         encounterType = encounterType,
-                        levelRequirement = if (levelReq == 0) 1 else levelReq,
-                        isBossLair = biome == "Guarida de Jefe",
+                        levelRequirement = levelReq,
+                        isBossLair = encounterType == "BOSS" && !isCleared,
                         isObstacle = isObs,
-                        isEnemySpawn = isEnemy
+                        isEnemySpawn = isEnemy,
+                        kingdomName = kingdom.name,
+                        kingdomColor = kingdom.colorHex,
+                        specialName = specialName
                     )
                 )
             }
@@ -865,7 +922,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val distance = abs(progress.currentX - tile.x) + abs(progress.currentY - tile.y)
-        if (distance == 0) return
+        if (distance == 0) {
+            // Player is ALREADY standing on this tile -> trigger interaction if applicable
+            if (!tile.cleared || tile.encounterType == "CASTLE" || tile.encounterType == "SPECIAL_MERCHANT") {
+                triggerEncounter(tile)
+            } else {
+                showNotification("Este lugar ya ha sido explorado y sus energías reclamadas.")
+            }
+            return
+        }
 
         isExploring = true
         viewModelScope.launch {
@@ -892,21 +957,23 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     val originX = currentProgress.currentX
                     val originY = currentProgress.currentY
                     val exploredList = GameJsonParser.listFromJson<String>(currentProgress.mapPointsExploredJson).toMutableList()
+                    val clearedList = GameJsonParser.listFromJson<String>(currentProgress.mapPointsClearedJson).toSet()
                     val tileKey = "${stepTile.x},${stepTile.y}"
                     val wasAlreadyExplored = exploredList.contains(tileKey)
+                    val wasAlreadyCleared = clearedList.contains(tileKey)
 
-                    val isMonsterEncounter = (stepTile.encounterType == "MONSTER" || stepTile.encounterType == "BOSS") && !wasAlreadyExplored
+                    val isMonsterEncounter = (stepTile.encounterType == "MONSTER" || stepTile.encounterType == "BOSS") && !wasAlreadyCleared
 
                     if (isMonsterEncounter) {
                         triggerEncounter(stepTile)
 
-                        // Pause map movement until combat concludes
-                        while (_combatState.value.active) {
+                        // Pause map movement until combat outcome is decided (victory is true or false)
+                        while (_combatState.value.active && _combatState.value.victory == null) {
                             kotlinx.coroutines.delay(100)
                         }
 
-                        val combatVictory = _combatState.value.victory
-                        if (combatVictory == true) {
+                        val combatVictory = _combatState.value.victory == true
+                        if (combatVictory) {
                             if (!exploredList.contains(tileKey)) {
                                 exploredList.add(tileKey)
                             }
@@ -917,9 +984,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                                 mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
                             )
                             repository.saveProgress(updatedProgress)
-                            generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList))
+                            generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList), postProgress.mapPointsClearedJson)
+
+                            // Wait until user exits combat screen
+                            while (_combatState.value.active) {
+                                kotlinx.coroutines.delay(100)
+                            }
                         } else {
-                            // Player was defeated or fled: return to previous tile, leave monster tile unexplored
+                            // Player was defeated or fled: return to previous tile
                             val postProgress = _progressState.value ?: currentProgress
                             val returnedProgress = postProgress.copy(
                                 currentX = originX,
@@ -927,8 +999,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                                 mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
                             )
                             repository.saveProgress(returnedProgress)
-                            generateMapAround(originX, originY, GameJsonParser.listToJson(exploredList))
+                            generateMapAround(originX, originY, GameJsonParser.listToJson(exploredList), postProgress.mapPointsClearedJson)
                             showNotification("Te retiras al cuadro anterior. El enemigo sigue custodiando la casilla.")
+
+                            while (_combatState.value.active) {
+                                kotlinx.coroutines.delay(100)
+                            }
                             break
                         }
                     } else {
@@ -951,10 +1027,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         )
 
                         repository.saveProgress(updatedProgress)
-                        generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList))
+                        generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList), currentProgress.mapPointsClearedJson)
 
-                        if (!wasAlreadyExplored) {
-                            triggerEncounter(stepTile)
+                        val isDestination = stepTile.x == tile.x && stepTile.y == tile.y
+                        if (isDestination || (!wasAlreadyCleared && (stepTile.encounterType == "SHRINE" || stepTile.encounterType == "CHEST" || stepTile.encounterType == "TREASURE"))) {
+                            if (!wasAlreadyCleared || stepTile.encounterType == "CASTLE" || stepTile.encounterType == "SPECIAL_MERCHANT") {
+                                triggerEncounter(stepTile)
+                            } else {
+                                showNotification("Has viajado a: ${stepTile.biome} ($tileKey).")
+                            }
                         } else {
                             showNotification("Has viajado a: ${stepTile.biome} ($tileKey).")
                         }
@@ -979,26 +1060,40 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     private fun triggerEncounter(tile: MapTile) {
         val progress = _progressState.value ?: return
         val random = Random.Default
+        val tileKey = "${tile.x},${tile.y}"
+        val clearedList = GameJsonParser.listFromJson<String>(progress.mapPointsClearedJson).toMutableList()
 
         when (tile.encounterType) {
             "SHRINE" -> {
                 viewModelScope.launch {
+                    if (clearedList.contains(tileKey)) {
+                        showNotification("Este Santuario ya ha sido activado y sus energías están agotadas.")
+                        return@launch
+                    }
                     val healHp = (progress.maxHp * 0.4).toInt()
                     val healMp = (progress.maxMp * 0.4).toInt()
                     val newHp = minOf(progress.maxHp, progress.currentHp + healHp)
                     val newMp = minOf(progress.maxMp, progress.currentMp + healMp)
 
+                    clearedList.add(tileKey)
+
                     val updated = progress.copy(
                         currentHp = newHp,
                         currentMp = newMp,
-                        charGold = progress.charGold + 25
+                        charGold = progress.charGold + 25,
+                        mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
                     )
                     repository.saveProgress(updated)
-                    showNotification("¡Encontraste un Santuario Ancestral! Sanas +$healHp HP, +$healMp MP y obtienes 25 de oro sagrado.")
+                    generateMapAround(progress.currentX, progress.currentY, updated.mapPointsExploredJson, updated.mapPointsClearedJson)
+                    showNotification("¡Activaste un Santuario Ancestral! Sanas +$healHp HP, +$healMp MP y obtienes 25 de oro. El altar se ha agotado.")
                 }
             }
             "CHEST" -> {
                 viewModelScope.launch {
+                    if (clearedList.contains(tileKey)) {
+                        showNotification("Este cofre ya fue abierto y saqueado.")
+                        return@launch
+                    }
                     val goldGained = random.nextInt(30, 80) + (tile.levelRequirement * 10)
                     val dropWeaponChance = random.nextInt(100)
                     val lootItem = if (dropWeaponChance < 45) {
@@ -1012,22 +1107,188 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         notificationMsg += " Y un objeto: ${lootItem.name} (${lootItem.rarity})."
                     }
 
+                    clearedList.add(tileKey)
+
                     val updated = progress.copy(
                         charGold = progress.charGold + goldGained,
-                        inventoryJson = GameJsonParser.listToJson(invList)
+                        inventoryJson = GameJsonParser.listToJson(invList),
+                        mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
                     )
                     val (finalProgress, equippedNames) = autoEquipProgress(updated)
                     repository.saveProgress(finalProgress)
+                    generateMapAround(progress.currentX, progress.currentY, finalProgress.mapPointsExploredJson, finalProgress.mapPointsClearedJson)
                     if (equippedNames.isNotEmpty()) {
                         notificationMsg += " (Auto-Equipado: ${equippedNames.joinToString(", ")})"
                     }
                     showNotification(notificationMsg)
                 }
             }
+            "TREASURE" -> {
+                viewModelScope.launch {
+                    if (clearedList.contains(tileKey)) {
+                        showNotification("Este Gran Tesoro Real ya ha sido reclamado.")
+                        return@launch
+                    }
+                    val kingdom = KingdomGenerator.getKingdomForCoords(tile.x, tile.y)
+                    val goldGained = random.nextInt(120, 350) + (tile.levelRequirement * 20)
+                    val lootItem = generateProceduralItem(tile.levelRequirement + 1, isBoss = random.nextInt(100) < 40)
+                    val kingdomTag = kingdom.name.replace("Reino de ", "")
+                    val royalItem = lootItem.copy(name = "${lootItem.name} Real de $kingdomTag")
+
+                    val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+                    invList.add(royalItem)
+
+                    clearedList.add(tileKey)
+
+                    var notificationMsg = "¡Abriste un Gran Tesoro Real de $kingdomTag! Encontraste $goldGained de oro y la reliquia: ${royalItem.name} (${royalItem.rarity})."
+
+                    val updated = progress.copy(
+                        charGold = progress.charGold + goldGained,
+                        inventoryJson = GameJsonParser.listToJson(invList),
+                        mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
+                    )
+                    val (finalProgress, equippedNames) = autoEquipProgress(updated)
+                    repository.saveProgress(finalProgress)
+                    generateMapAround(progress.currentX, progress.currentY, finalProgress.mapPointsExploredJson, finalProgress.mapPointsClearedJson)
+                    if (equippedNames.isNotEmpty()) {
+                        notificationMsg += " (Auto-Equipado: ${equippedNames.joinToString(", ")})"
+                    }
+                    showNotification(notificationMsg)
+                }
+            }
+            "CASTLE" -> {
+                viewModelScope.launch {
+                    val kingdom = KingdomGenerator.getKingdomForCoords(tile.x, tile.y)
+                    val castleName = if (tile.specialName.isNotEmpty()) tile.specialName else kingdom.castleNames.first()
+                    val isBlessingClaimed = clearedList.contains(tileKey)
+                    _castleState.value = CastleState(
+                        active = true,
+                        castleName = castleName,
+                        kingdomName = kingdom.name,
+                        kingdomColor = kingdom.colorHex,
+                        description = "Bastión supremo de ${kingdom.name}. Los nobles y altos comandantes rigen el reino desde esta fortaleza. Puedes solicitar la Bendición Real o desafiar al Campeón de la Corona.",
+                        blessingClaimed = isBlessingClaimed,
+                        tile = tile
+                    )
+                    showNotification("¡Has llegado a $castleName en ${kingdom.name}!")
+                }
+            }
+            "SPECIAL_MERCHANT" -> {
+                viewModelScope.launch {
+                    val kingdom = KingdomGenerator.getKingdomForCoords(tile.x, tile.y)
+                    val merchantName = if (tile.specialName.isNotEmpty()) tile.specialName else kingdom.merchantNames.random()
+                    val levelReq = maxOf(1, tile.levelRequirement)
+
+                    val items = mutableListOf<SpecialMerchantItem>()
+                    val kingdomTag = kingdom.name.replace("Reino de ", "")
+                    for (i in 1..4) {
+                        val isLegendary = i == 1 && random.nextInt(100) < 60
+                        val item = generateProceduralItem(levelReq + 2, isBoss = isLegendary)
+                        val kingdomItem = item.copy(
+                            name = "${item.name} de $kingdomTag",
+                            rarity = if (isLegendary) "LEGENDARY" else if (i <= 2) "EPIC" else "RARE"
+                        )
+                        val baseVal = getItemSellValue(kingdomItem) * 3
+                        val discount = random.nextInt(35, 65)
+                        val discountedPrice = maxOf(15, (baseVal * (100 - discount) / 100))
+                        items.add(SpecialMerchantItem(kingdomItem, baseVal, discountedPrice, discount))
+                    }
+
+                    _specialMerchantState.value = SpecialMerchantState(
+                        active = true,
+                        merchantName = merchantName,
+                        kingdomName = kingdom.name,
+                        dialogue = "¡Saludos, noble guerrero! Traigo artefactos raros rescatados en las profundidades de ${kingdom.name}. ¡Hoy todo con descuento especial de la corona!",
+                        items = items
+                    )
+                    showNotification("¡Encontraste a $merchantName con ofertas de equipo exclusivo!")
+                }
+            }
             "MONSTER", "BOSS" -> {
                 startCombat(tile)
             }
         }
+    }
+
+    fun claimCastleBlessing() {
+        val castle = _castleState.value
+        val progress = _progressState.value ?: return
+        val tile = castle.tile
+        if (!castle.active || castle.blessingClaimed || tile == null) return
+
+        viewModelScope.launch {
+            val tileKey = "${tile.x},${tile.y}"
+            val clearedList = GameJsonParser.listFromJson<String>(progress.mapPointsClearedJson).toMutableList()
+            if (!clearedList.contains(tileKey)) {
+                clearedList.add(tileKey)
+            }
+
+            val goldBonus = 150
+            val updatedProgress = progress.copy(
+                currentHp = progress.maxHp,
+                currentMp = progress.maxMp,
+                charGold = progress.charGold + goldBonus,
+                mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
+            )
+            repository.saveProgress(updatedProgress)
+            _castleState.value = castle.copy(blessingClaimed = true)
+            showNotification("¡Restauras todo tu HP/MP y recibes $goldBonus de oro de la Bendición Real de ${castle.kingdomName}!")
+        }
+    }
+
+    fun challengeCastleBoss() {
+        val castle = _castleState.value
+        val tile = castle.tile ?: return
+        closeCastleDialog()
+        startCombat(tile.copy(encounterType = "BOSS", specialName = "Campeón Real de ${castle.kingdomName}"))
+    }
+
+    fun closeCastleDialog() {
+        _castleState.value = CastleState()
+    }
+
+    fun buySpecialMerchantItem(specialItem: SpecialMerchantItem) {
+        val progress = _progressState.value ?: return
+        if (progress.charGold < specialItem.discountPrice) {
+            showNotification("No tienes suficiente oro para comprar ${specialItem.item.name}.")
+            return
+        }
+
+        viewModelScope.launch {
+            val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+            invList.add(specialItem.item)
+
+            val updated = progress.copy(
+                charGold = progress.charGold - specialItem.discountPrice,
+                inventoryJson = GameJsonParser.listToJson(invList)
+            )
+            val (finalProgress, equippedNames) = autoEquipProgress(updated)
+            repository.saveProgress(finalProgress)
+
+            val currentMerchant = _specialMerchantState.value
+            val updatedItems = currentMerchant.items.filter { it.item.id != specialItem.item.id }
+            _specialMerchantState.value = currentMerchant.copy(items = updatedItems)
+
+            var msg = "Compraste ${specialItem.item.name} por ${specialItem.discountPrice} oro (${specialItem.discountPercent}% OFF)."
+            if (equippedNames.isNotEmpty()) {
+                msg += " (Auto-Equipado: ${equippedNames.joinToString(", ")})"
+            }
+            showNotification(msg)
+        }
+    }
+
+    fun closeSpecialMerchantDialog() {
+        _specialMerchantState.value = SpecialMerchantState()
+    }
+
+    fun moveDirection(dx: Int, dy: Int) {
+        val p = _progressState.value ?: return
+        val targetX = p.currentX + dx
+        val targetY = p.currentY + dy
+        val currentTiles = _proceduralMap.value
+        val targetTile = currentTiles.find { it.x == targetX && it.y == targetY }
+            ?: MapTile(x = targetX, y = targetY, biome = "Exploración", levelRequirement = maxOf(1, abs(targetX) + abs(targetY)))
+        selectTileAndExplore(targetTile)
     }
 
     // --- COMBAT ENGINE ---
@@ -1053,16 +1314,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             else -> 1.0
         }
 
+        val kingdom = KingdomGenerator.getKingdomForCoords(tile.x, tile.y)
         val baseName = if (isBoss) {
-            listOf("Ignis, el Señor del Volcán", "Malakor, el Corruptor", "Gorthok, el Destructor de Almas").random()
+            if (tile.specialName.isNotEmpty()) tile.specialName else kingdom.bossNames.random()
         } else {
-            when (tile.biome) {
-                "Pantano" -> listOf("Sanguijuela de Lodo", "Gólem de Fango", "Lobo de Ciénaga").random()
-                "Bosque Oscuro" -> listOf("Araña Tejedora", "Bandido de Eldoria", "Sombra Ancestral").random()
-                "Montaña" -> listOf("Trol de Piedra", "Gargantúa de las Nieves", "Cría de Grifo").random()
-                "Ruinas Ancestrales" -> listOf("Gárgola Revivida", "Cazador de Tumbas", "Espectro del Rey").random()
-                else -> listOf("Espantapájaros Maldito", "Duende de Bosque", "Ogro Salvaje").random()
-            }
+            kingdom.monsters.random()
         }
 
         val name = when (rarity) {
@@ -1772,7 +2028,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 }
                 _combatState.value = currentCombat.copy(
                     active = false,
-                    victory = null
+                    victory = false
                 )
                 showNotification("¡Lograste huir exitosamente!")
                 _screenState.value = GameScreen.WORLD_MAP
