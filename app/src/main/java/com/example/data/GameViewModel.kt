@@ -373,6 +373,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         _notification.value = null
     }
 
+    private val _showClassAdvancementCutscene = MutableStateFlow<String?>(null)
+    val showClassAdvancementCutscene = _showClassAdvancementCutscene.asStateFlow()
+
+    fun dismissClassAdvancementCutscene() {
+        _showClassAdvancementCutscene.value = null
+    }
+
     // Shop System State
     private val _shopItems = MutableStateFlow<List<Item>>(emptyList())
     val shopItems = _shopItems.asStateFlow()
@@ -805,7 +812,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val biome = if (x == 0 && y == 0) "Santuario Inicial"
                 else kingdom.biomes[abs(seed % kingdom.biomes.size)]
 
-                val levelReq = maxOf(1, abs(x) + abs(y))
+                val levelReq = maxOf(1, 1 + (abs(x) + abs(y)) / 3)
 
                 var specialName = ""
                 val encounterType = if (x == 0 && y == 0) {
@@ -1287,7 +1294,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val targetY = p.currentY + dy
         val currentTiles = _proceduralMap.value
         val targetTile = currentTiles.find { it.x == targetX && it.y == targetY }
-            ?: MapTile(x = targetX, y = targetY, biome = "Exploración", levelRequirement = maxOf(1, abs(targetX) + abs(targetY)))
+            ?: MapTile(x = targetX, y = targetY, biome = "Exploración", levelRequirement = maxOf(1, 1 + (abs(targetX) + abs(targetY)) / 3))
         selectTileAndExplore(targetTile)
     }
 
@@ -1328,9 +1335,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val levelScale = Math.pow(1.2, monsterLevel.toDouble())
-        val hp = if (isBoss) (180 * baseMultiplier * tierMultiplier * levelScale).toInt() else (70 * baseMultiplier * tierMultiplier * levelScale).toInt()
-        val attack = if (isBoss) (15 * baseMultiplier * 1.5 * levelScale).toInt() else (8 * baseMultiplier * tierMultiplier * levelScale).toInt()
-        val defense = if (isBoss) (10 * baseMultiplier * 1.4 * levelScale).toInt() else (4 * baseMultiplier * tierMultiplier * levelScale).toInt()
+        val hp = if (isBoss) (180 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt() else (70 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
+        val attack = if (isBoss) (15 * baseMultiplier * 1.5 * levelScale * 1.5).toInt() else (8 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
+        val defense = if (isBoss) (10 * baseMultiplier * 1.4 * levelScale * 1.5).toInt() else (4 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
 
         val enemy = Combatant(
             name = name,
@@ -1644,72 +1651,109 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val dodgeChance = 3 + (progress.statDex * 0.3) + (getTalentRank("t_7") * 4)
             val dodged = Random.nextInt(100) < dodgeChance
 
-            val isSkillUsed = Random.nextInt(100) < 35
+            val skillTriggerChance = when {
+                enemy.isBoss || enemy.rarity == "UNIVERSAL" || enemy.rarity == "LEGENDARY" -> 85
+                enemy.rarity == "CHAMPION" || enemy.rarity == "ELITE" -> 65
+                else -> 40
+            }
+
+            val isSkillUsed = Random.nextInt(100) < skillTriggerChance
             var finalDmg = 0
             var feedbackText = ""
             var logMsg = ""
-            var skillTypeUsed = "" // "SLASH", "DRAIN", "THORNS", "DRAIN_MP"
+            var mpDrained = 0
 
-            if (isSkillUsed && !dodged) {
-                val skillRoll = Random.nextInt(4)
-                when (skillRoll) {
-                    0 -> { // Slash
-                        skillTypeUsed = "SLASH"
-                        val skillDmg = (baseDmg * 1.5).toInt()
-                        finalDmg = maxOf(2, skillDmg - (playerDefense / 2))
+            if (isSkillUsed) {
+                val availableSkills = mutableListOf<String>()
+                availableSkills.add("ARMOR_PIERCE")
+                availableSkills.add("TRUE_STRIKE")
+                availableSkills.add("POISON")
+                availableSkills.add("FREEZE")
+                availableSkills.add("BLEED")
+                if (enemy.isBoss || enemy.rarity == "CHAMPION" || enemy.rarity == "ELITE" || enemy.rarity == "LEGENDARY" || enemy.rarity == "UNIVERSAL") {
+                    availableSkills.add("BOSS_FURY")
+                    availableSkills.add("REGEN_SHIELD")
+                }
+
+                val skillChosen = availableSkills.random()
+                when (skillChosen) {
+                    "ARMOR_PIERCE" -> {
+                        val rawDmg = (baseDmg * 1.6).toInt()
+                        finalDmg = maxOf(5, rawDmg)
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-
-                        logMsg = "${enemy.name} usa [Corte Sanguinolento] e inflige $finalDmg de daño físico crítico!"
-                        feedbackText = "-$finalDmg HP 💥"
+                        logMsg = "${enemy.name} lanza [Perforación de Armadura] 🗡️ ¡Ignores tu defensa e inflige $finalDmg de daño directo!"
+                        feedbackText = "-$finalDmg HP 🛡️❌"
                     }
-                    1 -> { // Drain
-                        skillTypeUsed = "DRAIN"
-                        finalDmg = maxOf(1, baseDmg - (playerDefense / 2))
+                    "TRUE_STRIKE" -> {
+                        val rawDmg = (baseDmg * 1.8).toInt()
+                        finalDmg = maxOf(4, rawDmg - (playerDefense / 2))
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-
-                        val drainHeal = (finalDmg * 0.50).toInt()
-                        enemy.currentHp = minOf(enemy.maxHp, enemy.currentHp + drainHeal)
-
-                        logMsg = "${enemy.name} usa [Drenaje de Vida] e inflige $finalDmg de daño y se drena +$drainHeal de salud!"
+                        logMsg = "${enemy.name} ejecuta [Golpe Certero Implacable] 👁️ ¡Ataque inesquivable! Te asesta $finalDmg de daño certero."
+                        feedbackText = "-$finalDmg HP 🎯"
+                    }
+                    "POISON" -> {
+                        val rawDmg = (baseDmg * 1.4).toInt()
+                        finalDmg = maxOf(3, rawDmg - (playerDefense / 3))
+                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                        mpDrained = 15
+                        logMsg = "${enemy.name} escupe [Veneno Corrosivo] 🧪 e inflige $finalDmg de daño tóxico y drena 15 MP."
+                        feedbackText = "-$finalDmg HP 🧪"
+                    }
+                    "FREEZE" -> {
+                        val rawDmg = (baseDmg * 1.5).toInt()
+                        finalDmg = maxOf(3, rawDmg - (playerDefense / 2))
+                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                        mpDrained = 25
+                        logMsg = "${enemy.name} conjura [Congelación Arcana] ❄️ hiela tus venas por $finalDmg de daño y -25 MP."
+                        feedbackText = "-$finalDmg HP ❄️"
+                    }
+                    "BLEED" -> {
+                        val extraBleed = (progress.maxHp * 0.05).toInt()
+                        val rawDmg = (baseDmg * 2.0).toInt() + extraBleed
+                        finalDmg = maxOf(8, rawDmg - (playerDefense / 2))
+                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                        logMsg = "${enemy.name} asesta un tajo de [Hemorragia Mortal] 🩸 infligiendo $finalDmg de daño profundo!"
                         feedbackText = "-$finalDmg HP 🩸"
                     }
-                    2 -> { // Thorns
-                        skillTypeUsed = "THORNS"
-                        finalDmg = maxOf(1, baseDmg - (playerDefense / 2))
+                    "BOSS_FURY" -> {
+                        val rawDmg = (baseDmg * 2.8).toInt()
+                        finalDmg = maxOf(15, rawDmg)
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-
-                        logMsg = "${enemy.name} activa [Piel de Espinas], golpeando por $finalDmg y reforzando su coraza."
-                        feedbackText = "-$finalDmg HP 🛡️"
+                        logMsg = "🔥 ${enemy.name} desata su [IRA ABSOLUTA DE JEFE] ¡Un impacto catastrófico que causa $finalDmg de daño brutal!"
+                        feedbackText = "-$finalDmg HP ⚡🔥"
                     }
-                    else -> { // Drain MP
-                        skillTypeUsed = "DRAIN_MP"
+                    "REGEN_SHIELD" -> {
+                        val healVal = (enemy.maxHp * 0.15).toInt()
+                        enemy.currentHp = minOf(enemy.maxHp, enemy.currentHp + healVal)
+                        val rawDmg = (baseDmg * 1.5).toInt()
+                        finalDmg = maxOf(2, rawDmg - (playerDefense / 2))
+                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                        logMsg = "🖤 ${enemy.name} invoca [Escudo de Sangre], regenerando +$healVal HP y golpeando por $finalDmg de daño!"
+                        feedbackText = "-$finalDmg HP 🛡️🖤"
+                    }
+                    else -> {
                         finalDmg = maxOf(1, baseDmg - (playerDefense / 2))
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-
-                        logMsg = "${enemy.name} lanza [Maldición de Maná] e inflige $finalDmg de daño y te drena 12 de Maná."
-                        feedbackText = "-$finalDmg HP 🧪"
+                        feedbackText = "-$finalDmg HP"
+                        logMsg = "${enemy.name} te ataca e inflige $finalDmg puntos de daño físico."
                     }
                 }
             } else {
-                finalDmg = maxOf(1, baseDmg - (playerDefense / 2))
-                if (getTalentRank("t_6") > 0) {
-                    finalDmg = (finalDmg * 0.85).toInt()
-                }
-
                 if (dodged) {
                     finalDmg = 0
                     feedbackText = "¡ESQUIVADO!"
                     logMsg = "¡Esquivas con agilidad el ataque de ${enemy.name}!"
                 } else {
+                    finalDmg = maxOf(1, baseDmg - (playerDefense / 2))
+                    if (getTalentRank("t_6") > 0) {
+                        finalDmg = (finalDmg * 0.85).toInt()
+                    }
                     feedbackText = "-$finalDmg HP"
                     logMsg = "${enemy.name} te ataca e inflige $finalDmg puntos de daño físico."
                 }
             }
 
-            var newPlayerMp = currentCombat.playerCurrentMp
-            if (skillTypeUsed == "DRAIN_MP" && !dodged) {
-                newPlayerMp = maxOf(0, newPlayerMp - 12)
-            }
+            var newPlayerMp = maxOf(0, currentCombat.playerCurrentMp - mpDrained)
 
             val newHp = maxOf(0, currentCombat.playerCurrentHp - finalDmg)
 
@@ -2658,6 +2702,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             )
             repository.saveProgress(updated)
             SoundManager.playVictory()
+            _showClassAdvancementCutscene.value = progress.charClass
             showNotification("✨ ¡AVANCE DE CLASE COMPLETADO! ¡Ahora eres $advName! Estadísticas duplicadas y habilidad X5 desbloqueada.")
         }
     }
@@ -2940,9 +2985,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val levelScale = Math.pow(1.2, (dungeon.levelReq + stage).toDouble())
-        val enemyHp = if (isFinalBoss) (320 * baseMultiplier * levelScale).toInt() else (100 * baseMultiplier * levelScale).toInt()
-        val enemyAtk = if (isFinalBoss) (26 * baseMultiplier * levelScale).toInt() else (13 * baseMultiplier * levelScale).toInt()
-        val enemyDef = if (isFinalBoss) (20 * baseMultiplier * levelScale).toInt() else (9 * baseMultiplier * levelScale).toInt()
+        val enemyHp = if (isFinalBoss) (320 * baseMultiplier * levelScale * 1.5).toInt() else (100 * baseMultiplier * levelScale * 1.5).toInt()
+        val enemyAtk = if (isFinalBoss) (26 * baseMultiplier * levelScale * 1.5).toInt() else (13 * baseMultiplier * levelScale * 1.5).toInt()
+        val enemyDef = if (isFinalBoss) (20 * baseMultiplier * levelScale * 1.5).toInt() else (9 * baseMultiplier * levelScale * 1.5).toInt()
 
         val enemy = Combatant(
             name = enemyName,

@@ -42,6 +42,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.R
 import com.example.data.*
 import kotlin.math.abs
@@ -150,10 +152,173 @@ fun getClassPortrait(cls: String): Int {
 }
 
 @Composable
+fun ClassAdvancementCutsceneModal(
+    cls: String,
+    onDismiss: () -> Unit
+) {
+    val cutsceneRes = when (cls.trim()) {
+        "Guerrero" -> R.drawable.cutscene_warrior_1784895909697
+        "Mago" -> R.drawable.cutscene_mage_1784895923135
+        "Pícaro" -> R.drawable.cutscene_rogue_1784895933260
+        else -> R.drawable.cutscene_cleric_1784895944730
+    }
+
+    val title = when (cls.trim()) {
+        "Guerrero" -> "✨ SEÑOR DE LA GUERRA ALADO ✨"
+        "Mago" -> "✨ ARCHIMAGO CÓSMICO ✨"
+        "Pícaro" -> "✨ SOMBRA CELESTE ✨"
+        else -> "✨ SERAFÍN SAGRADO ✨"
+    }
+
+    val storyText = when (cls.trim()) {
+        "Guerrero" -> "¡El fuego sagrado de la guerra enciende tus alas doradas! Alcanzas la cima del combate marcial: tus atributos se fortalecen al doble (x2) y tus alas cortan los cielos desencadenando furia atronadora."
+        "Mago" -> "¡El éter estelar del cosmos se adhiere a tus alas astrales! La sabiduría ancestral duplica tu poder mágico (x2) e invocas tempestades de fuego divino que devoran ejércitos enteros."
+        "Pícaro" -> "¡Las sombras de la noche infinita forjan tus alas de misterio! Te desplazas como un relámpago entre penumbras, duplicando tus atributos (x2) y envenenando el alma de tus enemigos."
+        else -> "¡La luz sagrada de los dioses te otorga alas de ángel celestial! Duplicas toda tu vitalidad y fe (x2), proyectando rayos de justicia serafín que curan aliados y destruyen la oscuridad."
+    }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "pulse")
+    val alphaAnim by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Reverse),
+        label = "alpha"
+    )
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.95f))
+                .padding(16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth(0.95f)
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(Color(0xFF1E1300), Color(0xFF0F0B1A), Color(0xFF000000))
+                        )
+                    )
+                    .border(3.dp, MedievalGold.copy(alpha = alphaAnim), RoundedCornerShape(20.dp))
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MedievalGold, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "🎬 CINEMÁTICA DE EVOLUCIÓN ÉPICA",
+                        color = MedievalGold,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = MedievalGold, modifier = Modifier.size(24.dp))
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(210.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .border(2.dp, MedievalGold, RoundedCornerShape(16.dp))
+                ) {
+                    Image(
+                        painter = painterResource(id = cutsceneRes),
+                        contentDescription = "Cinemática Alada",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.8f))
+                                )
+                            )
+                    )
+                    Text(
+                        text = title,
+                        color = MedievalGold,
+                        fontWeight = FontWeight.Black,
+                        fontSize = 18.sp,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = 12.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.6f)),
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Text(
+                            text = storyText,
+                            color = Color.White.copy(alpha = 0.95f),
+                            fontSize = 13.sp,
+                            lineHeight = 18.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                        HorizontalDivider(color = MedievalGold.copy(alpha = 0.3f))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Star, contentDescription = null, tint = MedievalGold, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Estadísticas de Héroe Duplicadas (STR, DEX, INT, CON x2)", color = MedievalXpGreen, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Bolt, contentDescription = null, tint = MedievalGold, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Habilidad Definitiva unlocked: ¡x5 Daño de Ataque!", color = MedievalGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Button(
+                    onClick = {
+                        SoundManager.playButtonClick()
+                        onDismiss()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("⚔️ ¡ASCENDER Y CONTINUAR!", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 fun EldoriaMainContainer(viewModel: GameViewModel) {
     val progress by viewModel.progressState.collectAsState()
     val screen by viewModel.screenState.collectAsState()
     val notification by viewModel.notification.collectAsState()
+    val classCutscene by viewModel.showClassAdvancementCutscene.collectAsState()
 
     val p = progress
 
@@ -246,6 +411,14 @@ fun EldoriaMainContainer(viewModel: GameViewModel) {
                 GameScreen.INVENTORY -> InventoryScreen(viewModel)
                 GameScreen.SHOP -> ShopScreen(viewModel)
                 GameScreen.HELP_SCREEN -> HelpGuideScreen(onBack = { viewModel.changeScreen(GameScreen.WORLD_MAP) })
+            }
+
+            // Class Advancement Cutscene Overlay
+            classCutscene?.let { cls ->
+                ClassAdvancementCutsceneModal(
+                    cls = cls,
+                    onDismiss = { viewModel.dismissClassAdvancementCutscene() }
+                )
             }
 
             // Centralized Notification Banner overlay
