@@ -5741,14 +5741,101 @@ data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val 
 fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {
     val cleanName = name.lowercase()
     return when {
+        // Specific bosses
         cleanName.contains("hobgoblin") -> R.drawable.img_boss_hobgoblin_1784674116743
         cleanName.contains("vampiro") -> R.drawable.img_boss_high_vampire_1784674139269
-        cleanName.contains("igdrasil") || cleanName.contains("máquinas") -> R.drawable.img_boss_yggdrasil_machine_1784674150126
-        cleanName.contains("oscuro") || cleanName.contains("dragón") -> R.drawable.img_boss_dark_dragon_1784674128719
+        cleanName.contains("igdrasil") || cleanName.contains("máquinas") || cleanName.contains("yggdrasil") -> R.drawable.img_boss_yggdrasil_machine_1784674150126
+        cleanName.contains("dragon oscuro") || cleanName.contains("dragón oscuro") || cleanName.contains("calamidad") -> R.drawable.img_boss_dark_dragon_1784674128719
+        
+        // Dragons, Wyrms & Wyverns
+        cleanName.contains("dragón") || cleanName.contains("dragon") || cleanName.contains("wyrm") || 
+        cleanName.contains("wyvern") || cleanName.contains("drake") || cleanName.contains("drakoniano") || cleanName.contains("hidra") -> R.drawable.enemy_dragon_1784850948333
+
+        // Goblins
+        cleanName.contains("goblin") || cleanName.contains("duende") -> R.drawable.enemy_goblin_1784850794614
+
+        // Wolves, Canines & Beasts
+        cleanName.contains("lobo") || cleanName.contains("fenrir") || cleanName.contains("warg") || 
+        cleanName.contains("chacal") || cleanName.contains("licántropo") || cleanName.contains("perro") || cleanName.contains("alfa") -> R.drawable.enemy_wolf_1784850801847
+
+        // Ghosts, Spectres & Astral Entities
+        cleanName.contains("espectro") || cleanName.contains("alma") || cleanName.contains("sombra") || 
+        cleanName.contains("poltergeist") || cleanName.contains("orbe") || cleanName.contains("lamento") || cleanName.contains("fantas") -> R.drawable.enemy_spectre_1784850809472
+
+        // Treants & Nature Creatures
+        cleanName.contains("treant") || cleanName.contains("árbol") || cleanName.contains("planta") || cleanName.contains("bosque") -> R.drawable.enemy_treant_1784850817186
+
+        // Bandits, Rogues & Human Mercenaries
+        cleanName.contains("bandido") || cleanName.contains("ladrón") || cleanName.contains("ladron") || cleanName.contains("asesino") || 
+        cleanName.contains("mercenario") || cleanName.contains("matón") || cleanName.contains("capitán") || cleanName.contains("pirata") || 
+        cleanName.contains("infiltrador") || cleanName.contains("verdugo") || cleanName.contains("ballestero") || cleanName.contains("envenenador") -> R.drawable.enemy_bandit_1784850826788
+
+        // Elementals & Fire Creatures
+        cleanName.contains("elemental") || cleanName.contains("fuego") || cleanName.contains("magma") || 
+        cleanName.contains("llama") || cleanName.contains("azufre") || cleanName.contains("ceniza") || cleanName.contains("pyros") || 
+        cleanName.contains("ignis") || cleanName.contains("fatuo") -> R.drawable.enemy_elemental_1784850835033
+
+        // Cultists
+        cleanName.contains("cultista") -> R.drawable.enemy_cultist_1784850844974
+
+        // Yetis, Ice & Snow Creatures
+        cleanName.contains("yeti") || cleanName.contains("glacial") || cleanName.contains("escarcha") || 
+        cleanName.contains("ventisquero") || cleanName.contains("glacius") || cleanName.contains("freya") || cleanName.contains("tundra") -> R.drawable.enemy_yeti_1784850855217
+
+        // Undead, Zombies, Skeletons & Ghouls
+        cleanName.contains("zombi") || cleanName.contains("ghoul") || cleanName.contains("necrófago") || 
+        cleanName.contains("peste") || cleanName.contains("esqueleto") || cleanName.contains("muerte") || 
+        cleanName.contains("no-muerto") || cleanName.contains("hueso") -> R.drawable.enemy_zombie_1784850868957
+
+        // Witches, Sorceresses & Mages
+        cleanName.contains("bruja") || cleanName.contains("mago") || cleanName.contains("ilusionista") || 
+        cleanName.contains("hechicero") || cleanName.contains("arcan") || cleanName.contains("chamán") || cleanName.contains("chaman") -> R.drawable.enemy_witch_1784850877826
+
+        // Liches & Necromancers
+        cleanName.contains("lich") || cleanName.contains("necromancer") || cleanName.contains("necromante") || cleanName.contains("filacteria") -> R.drawable.enemy_lich_1784850885522
+
+        // Anubis, Pharaohs & Solar Egyptian Guardians
+        cleanName.contains("anubis") || cleanName.contains("esfinge") || cleanName.contains("solaria") || 
+        cleanName.contains("ra-horakhty") || cleanName.contains("sacerdote solar") -> R.drawable.enemy_anubis_1784850895657
+
+        // Mummies
+        cleanName.contains("momia") -> R.drawable.enemy_mummy_1784850903429
+
+        // Archangels & Celestial Beings
+        cleanName.contains("archángel") || cleanName.contains("arcángel") || cleanName.contains("seraphiel") || 
+        cleanName.contains("celestial") || cleanName.contains("astral") || cleanName.contains("sentinela") || 
+        cleanName.contains("aetherion") || cleanName.contains("firmamento") -> R.drawable.enemy_archangel_1784850912318
+
+        // Orcs & Ogres
+        cleanName.contains("orco") || cleanName.contains("ogro") || cleanName.contains("berserker") || 
+        cleanName.contains("demoledor") || cleanName.contains("gladiador") || cleanName.contains("warlord") -> R.drawable.enemy_orc_1784850920168
+
+        // Naga, Tritons & Sea Ocean Monsters
+        cleanName.contains("naga") || cleanName.contains("sireno") || cleanName.contains("tritón") || 
+        cleanName.contains("neptuno") || cleanName.contains("océano") || cleanName.contains("oceano") || 
+        cleanName.contains("coral") || cleanName.contains("mareas") || cleanName.contains("leviatán") || cleanName.contains("fosas") -> R.drawable.enemy_naga_1784850928739
+
+        // Automatons, Robots & Machines
+        cleanName.contains("autómata") || cleanName.contains("automata") || cleanName.contains("engranaje") || 
+        cleanName.contains("célula") || cleanName.contains("dron") || cleanName.contains("láser") || cleanName.contains("titanio") || 
+        cleanName.contains("coloso") || cleanName.contains("plasma") || cleanName.contains("ejecutor") || cleanName.contains("sintétic") -> R.drawable.enemy_automaton_1784850938702
+
+        // Basilisks, Snakes & Serpents
+        cleanName.contains("basilisco") || cleanName.contains("cobra") || cleanName.contains("víbora") || 
+        cleanName.contains("vibora") || cleanName.contains("gorgona") || cleanName.contains("cascabel") || 
+        cleanName.contains("anaconda") || cleanName.contains("serpiente") || cleanName.contains("salamandra") || cleanName.contains("viperino") -> R.drawable.enemy_basilisk_1784850958621
+
+        // Scorpions & Desert Monsters
+        cleanName.contains("escorpión") || cleanName.contains("escorpion") || cleanName.contains("manta") -> R.drawable.enemy_scorpion_1784850968611
+
+        // Spiders
+        cleanName.contains("araña") || cleanName.contains("tarántula") -> R.drawable.img_enemy_spider_1784386956688
+
+        // Golems & Mud Slimes
+        cleanName.contains("golem") || cleanName.contains("gólem") || cleanName.contains("fango") || cleanName.contains("lodo") || cleanName.contains("ciénaga") -> R.drawable.img_enemy_mud_golem_1784386930907
+
+        // Boss fallback vs Normal fallback
         isBoss -> R.drawable.img_enemy_boss_1784386985144
-        cleanName.contains("sombra") || cleanName.contains("espectro") || cleanName.contains("gárgola") || cleanName.contains("cazador") || cleanName.contains("espectra") -> R.drawable.img_enemy_spectre_1784386971041
-        cleanName.contains("araña") || cleanName.contains("bandido") || cleanName.contains("grifo") -> R.drawable.img_enemy_spider_1784386956688
-        cleanName.contains("golem") || cleanName.contains("fango") || cleanName.contains("lodo") || cleanName.contains("ciénaga") || cleanName.contains("sanguijuela") -> R.drawable.img_enemy_mud_golem_1784386930907
         else -> R.drawable.img_enemy_ogre_1784386944311
     }
 }
@@ -5910,19 +5997,7 @@ fun DungeonScreen(viewModel: GameViewModel) {
                             }
                         }
 
-                        val imageRes = when (dungeon.bossImageResName) {
-                            "img_boss_hobgoblin_1784674116743" -> R.drawable.img_boss_hobgoblin_1784674116743
-                            "img_boss_high_vampire_1784674139269" -> R.drawable.img_boss_high_vampire_1784674139269
-                            "img_boss_yggdrasil_machine_1784674150126" -> R.drawable.img_boss_yggdrasil_machine_1784674150126
-                            "img_boss_dark_dragon_1784674128719" -> R.drawable.img_boss_dark_dragon_1784674128719
-                            "img_enemy_ogre_1784386944311" -> R.drawable.img_enemy_ogre_1784386944311
-                            "img_portrait_humano_picaro_1784507327963" -> R.drawable.img_portrait_humano_picaro_1784507327963
-                            "img_enemy_boss_1784386985144" -> R.drawable.img_enemy_boss_1784386985144
-                            "img_enemy_mud_golem_1784386930907" -> R.drawable.img_enemy_mud_golem_1784386930907
-                            "img_enemy_spectre_1784386971041" -> R.drawable.img_enemy_spectre_1784386971041
-                            "img_enemy_spider_1784386956688" -> R.drawable.img_enemy_spider_1784386956688
-                            else -> R.drawable.img_boss_hobgoblin_1784674116743
-                        }
+                        val imageRes = getEnemyPortraitRes(dungeon.finalBossName, true)
 
                         Box(
                             modifier = Modifier

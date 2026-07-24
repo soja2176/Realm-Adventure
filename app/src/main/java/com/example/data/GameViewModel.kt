@@ -2045,16 +2045,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     // --- PROCEDURAL ITEMS DROP ENGINE ---
     fun getAllEquippedItems(progress: GameProgress): List<Item> {
         val items = mutableListOf<Item>()
-        GameJsonParser.fromJson<Item>(progress.equippedHelmetJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedWingsJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedShieldJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedArmorJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedGlovesJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedBootsJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedRingJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedEarringJson)?.let { items.add(it) }
-        GameJsonParser.fromJson<Item>(progress.equippedRelicJson)?.let { items.add(it) }
+        GameJsonParser.fromJson<Item>(progress.equippedHelmetJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedWingsJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedShieldJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedArmorJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedGlovesJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedBootsJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedRingJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedEarringJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedRelicJson)?.let { items.add(it.withScaledStats()) }
         return items
     }
 
@@ -2111,15 +2111,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             else -> listOf("Reliquia", "Orbe", "Tótem").random() + " $prefix"
         }
 
-        val multiplier = when (rarity) {
-            "UNIVERSAL" -> 6
-            "ARCANO" -> 5
-            "LEGENDARIO", "LEGENDARY" -> 4
-            "ÉPICO", "EPIC" -> 3
-            "RARO", "RARE" -> 2
-            else -> 1
-        }
-        val budget = level * multiplier + Random.nextInt(2, 6)
+        val levelBase = maxOf(1, level)
+        val multiplier = getRarityMultiplier(rarity)
+        val baseStat = levelBase * multiplier
 
         var s = 0
         var d = 0
@@ -2129,25 +2123,69 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         var def = 0
         var hpReg = 0
 
-        val statsToRoll = listOf("STR", "DEX", "INT", "CON")
-        for (step in 1..budget) {
-            val picked = statsToRoll.random()
-            when (picked) {
-                "STR" -> s += 1
-                "DEX" -> d += 1
-                "INT" -> i += 1
-                "CON" -> c += 1
-            }
+        // Base combat stats scaling strictly according to item level * rarity multiplier
+        if (type == "WEAPON") dmg = baseStat + r.nextInt(1, maxOf(3, baseStat / 4 + 1))
+        if (type in listOf("ARMOR", "HELMET", "GLOVES", "BOOTS", "SHIELD")) def = baseStat + r.nextInt(1, maxOf(3, baseStat / 4 + 1))
+        if (type in listOf("WINGS", "RELIC")) {
+            dmg = baseStat + r.nextInt(1, 3)
+            def = (baseStat * 0.8).toInt() + r.nextInt(1, 3)
+        }
+        if (type in listOf("RING", "EARRING") || rarity in listOf("ÉPICO", "EPIC", "LEGENDARIO", "LEGENDARY", "ARCANO", "UNIVERSAL")) {
+            hpReg = (baseStat * 0.4).toInt() + r.nextInt(1, 4)
         }
 
-        if (type == "WEAPON") dmg = level * multiplier + r.nextInt(5, 10)
-        if (type == "ARMOR" || type == "HELMET" || type == "GLOVES" || type == "BOOTS") def = level * multiplier + r.nextInt(3, 8)
-        if (type == "SHIELD") def = level * multiplier + r.nextInt(2, 6)
-        if (type == "WINGS" || type == "RELIC") dmg = level * multiplier + r.nextInt(3, 7)
+        val primaryBonus = baseStat + r.nextInt(0, maxOf(2, baseStat / 5 + 1))
+        val secondaryBonus = (baseStat * 0.5).toInt() + r.nextInt(0, 2)
 
-        if (type == "RING" || type == "EARRING" || rarity == "ÉPICO" || rarity == "EPIC" || rarity == "LEGENDARIO" || rarity == "LEGENDARY" || rarity == "ARCANO" || rarity == "UNIVERSAL") {
-            if (r.nextInt(100) < 55) {
-                hpReg = level * multiplier / 2 + r.nextInt(1, 4)
+        val primaryStatType = when {
+            name.contains("Báculo") || name.contains("Túnica") || name.contains("Orbe") -> "INT"
+            name.contains("Daga") || name.contains("Botas") || name.contains("Guantes") -> "DEX"
+            name.contains("Casco") || name.contains("Pechera") || name.contains("Escudo") || name.contains("Baluarte") -> "CON"
+            else -> "STR"
+        }
+
+        when (rarity) {
+            "UNIVERSAL" -> {
+                s = (baseStat * 1.25).toInt()
+                d = (baseStat * 1.25).toInt()
+                i = (baseStat * 1.25).toInt()
+                c = (baseStat * 1.25).toInt()
+            }
+            "ARCANO" -> {
+                s = (baseStat * 1.1).toInt()
+                d = (baseStat * 1.1).toInt()
+                i = (baseStat * 1.1).toInt()
+                c = (baseStat * 1.1).toInt()
+            }
+            "LEGENDARIO", "LEGENDARY" -> {
+                s = primaryBonus
+                d = primaryBonus
+                i = primaryBonus
+                c = primaryBonus
+            }
+            "ÉPICO", "EPIC" -> {
+                when (primaryStatType) {
+                    "STR" -> { s = primaryBonus; c = primaryBonus; d = primaryBonus; i = secondaryBonus }
+                    "DEX" -> { d = primaryBonus; s = primaryBonus; c = primaryBonus; i = secondaryBonus }
+                    "INT" -> { i = primaryBonus; c = primaryBonus; d = primaryBonus; s = secondaryBonus }
+                    else -> { c = primaryBonus; s = primaryBonus; i = primaryBonus; d = secondaryBonus }
+                }
+            }
+            "RARO", "RARE" -> {
+                when (primaryStatType) {
+                    "STR" -> { s = primaryBonus; c = primaryBonus; d = secondaryBonus; i = 0 }
+                    "DEX" -> { d = primaryBonus; s = primaryBonus; c = secondaryBonus; i = 0 }
+                    "INT" -> { i = primaryBonus; c = primaryBonus; s = secondaryBonus; d = 0 }
+                    else -> { c = primaryBonus; s = primaryBonus; i = secondaryBonus; d = 0 }
+                }
+            }
+            else -> { // COMÚN
+                when (primaryStatType) {
+                    "STR" -> { s = primaryBonus; c = secondaryBonus }
+                    "DEX" -> { d = primaryBonus; s = secondaryBonus }
+                    "INT" -> { i = primaryBonus; c = secondaryBonus }
+                    else -> { c = primaryBonus; s = secondaryBonus }
+                }
             }
         }
 
@@ -2200,7 +2238,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             description = desc,
             itemLevel = level,
             imageResName = imageResName
-        )
+        ).withScaledStats()
     }
 
     // --- CHARACTER INVENTORY & EQUIP MANAGEMENT ---

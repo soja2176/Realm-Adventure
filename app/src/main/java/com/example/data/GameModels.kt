@@ -21,16 +21,87 @@ data class Item(
     val imageResName: String = ""
 ) {
     fun getStatDescription(): String {
+        val scaled = this.withScaledStats()
         val list = mutableListOf<String>()
-        if (strBonus > 0) list.add("STR +$strBonus")
-        if (dexBonus > 0) list.add("DEX +$dexBonus")
-        if (intBonus > 0) list.add("INT +$intBonus")
-        if (conBonus > 0) list.add("CON +$conBonus")
-        if (dmgBonus > 0) list.add("Daño +$dmgBonus")
-        if (defBonus > 0) list.add("Def +$defBonus")
-        if (hpRegen > 0) list.add("Reg.HP +$hpRegen")
+        if (scaled.strBonus > 0) list.add("STR +${scaled.strBonus}")
+        if (scaled.dexBonus > 0) list.add("DEX +${scaled.dexBonus}")
+        if (scaled.intBonus > 0) list.add("INT +${scaled.intBonus}")
+        if (scaled.conBonus > 0) list.add("CON +${scaled.conBonus}")
+        if (scaled.dmgBonus > 0) list.add("Daño +${scaled.dmgBonus}")
+        if (scaled.defBonus > 0) list.add("Def +${scaled.defBonus}")
+        if (scaled.hpRegen > 0) list.add("Reg.HP +${scaled.hpRegen}")
         return if (list.isEmpty()) description.ifEmpty { "Equipo Místico" } else list.joinToString(" • ")
     }
+}
+
+fun getRarityMultiplier(rarity: String): Int {
+    return when (rarity.uppercase()) {
+        "UNIVERSAL" -> 6
+        "ARCANO" -> 5
+        "LEGENDARIO", "LEGENDARY" -> 4
+        "ÉPICO", "EPIC" -> 3
+        "RARO", "RARE" -> 2
+        else -> 1
+    }
+}
+
+fun Item.withScaledStats(): Item {
+    if (this.type.uppercase() == "POTION" || this.type.uppercase() == "EMPTY") return this
+
+    val levelBase = maxOf(1, this.itemLevel)
+    val multiplier = getRarityMultiplier(this.rarity)
+    val minStatAllowed = levelBase * multiplier
+
+    var newDmg = this.dmgBonus
+    var newDef = this.defBonus
+    var newStr = this.strBonus
+    var newDex = this.dexBonus
+    var newInt = this.intBonus
+    var newCon = this.conBonus
+    var newHpRegen = this.hpRegen
+
+    when (this.type.uppercase()) {
+        "WEAPON" -> {
+            newDmg = maxOf(newDmg, minStatAllowed)
+        }
+        "ARMOR", "HELMET", "SHIELD", "GLOVES", "BOOTS" -> {
+            newDef = maxOf(newDef, minStatAllowed)
+        }
+        "WINGS", "RELIC" -> {
+            newDmg = maxOf(newDmg, minStatAllowed)
+            newDef = maxOf(newDef, (minStatAllowed * 0.8).toInt())
+        }
+        "RING", "EARRING" -> {
+            if (newHpRegen > 0) {
+                newHpRegen = maxOf(newHpRegen, (minStatAllowed * 0.4).toInt())
+            }
+        }
+    }
+
+    if (newStr > 0) newStr = maxOf(newStr, minStatAllowed)
+    if (newDex > 0) newDex = maxOf(newDex, minStatAllowed)
+    if (newInt > 0) newInt = maxOf(newInt, minStatAllowed)
+    if (newCon > 0) newCon = maxOf(newCon, minStatAllowed)
+
+    if (newStr == 0 && newDex == 0 && newInt == 0 && newCon == 0) {
+        val nameLower = this.name.lowercase()
+        when {
+            nameLower.contains("daga") || nameLower.contains("botas") || nameLower.contains("guantes") -> newDex = minStatAllowed
+            nameLower.contains("báculo") || nameLower.contains("túnica") || nameLower.contains("orbe") -> newInt = minStatAllowed
+            nameLower.contains("casco") || nameLower.contains("pechera") || nameLower.contains("escudo") -> newCon = minStatAllowed
+            else -> newStr = minStatAllowed
+        }
+    }
+
+    return this.copy(
+        strBonus = newStr,
+        dexBonus = newDex,
+        intBonus = newInt,
+        conBonus = newCon,
+        dmgBonus = newDmg,
+        defBonus = newDef,
+        hpRegen = newHpRegen
+    )
 }
 
 fun getItemSellValue(item: Item): Int {
