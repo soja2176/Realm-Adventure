@@ -52,7 +52,9 @@ data class GameProgress(
     val highestUnlockedDungeon: Int = 1,
     val completedDungeonsJson: String = "[]",
     val currentX: Int = 0,
-    val currentY: Int = 0
+    val currentY: Int = 0,
+    val hasAdvancedClass: Boolean = false,
+    val advancedClassName: String = ""
 ) {
     @get:Ignore
     val hasActiveChar: Boolean get() = isActiveChar && charName.isNotBlank()

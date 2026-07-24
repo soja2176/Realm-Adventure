@@ -105,7 +105,16 @@ fun getItemImageRes(imageResName: String, itemType: String): Int {
     }
 }
 
-fun getCharacterPortrait(race: String, cls: String): Int {
+fun getCharacterPortrait(race: String, cls: String, hasAdvancedClass: Boolean = false): Int {
+    if (hasAdvancedClass) {
+        val c = cls.trim()
+        return when (c) {
+            "Guerrero" -> R.drawable.img_hero_advanced_guerrero_1784856127764
+            "Mago" -> R.drawable.img_hero_advanced_mago_1784856138389
+            "Pícaro" -> R.drawable.img_hero_advanced_picaro_1784856148296
+            else -> R.drawable.img_hero_advanced_clerigo_1784856159204
+        }
+    }
     val r = race.trim()
     val c = cls.trim()
     return when (r) {
@@ -3779,7 +3788,7 @@ fun CharacterScreen(viewModel: GameViewModel) {
                         verticalAlignment = Alignment.Top
                     ) {
                         Image(
-                            painter = painterResource(id = getCharacterPortrait(p.charRace, p.charClass)),
+                            painter = painterResource(id = getCharacterPortrait(p.charRace, p.charClass, p.hasAdvancedClass)),
                             contentDescription = "Portrait",
                             modifier = Modifier
                                 .size(130.dp)
@@ -3792,7 +3801,12 @@ fun CharacterScreen(viewModel: GameViewModel) {
 
                         Column(modifier = Modifier.weight(1f)) {
                             Text(p.charName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold)
-                            Text("${p.charRace} ${p.charClass}", color = MedievalGold, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                if (p.hasAdvancedClass) "✨ ${p.advancedClassName}" else "${p.charRace} ${p.charClass}",
+                                color = MedievalGold,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Bold
+                            )
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("Nivel ${p.charLevel}", color = MedievalCrimson, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)
 
@@ -3806,7 +3820,7 @@ fun CharacterScreen(viewModel: GameViewModel) {
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text("HP", color = MedievalCrimson, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Text("${p.currentHp} / ${p.maxHp}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("${formatGameNumber(p.currentHp)} / ${formatGameNumber(p.maxHp)}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Box(
@@ -3836,7 +3850,7 @@ fun CharacterScreen(viewModel: GameViewModel) {
                                     horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
                                     Text("MP", color = Color(0xFF29B6F6), fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                                    Text("${p.currentMp} / ${p.maxMp}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    Text("${formatGameNumber(p.currentMp)} / ${formatGameNumber(p.maxMp)}", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                                 }
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Box(
@@ -3892,12 +3906,71 @@ fun CharacterScreen(viewModel: GameViewModel) {
                                     )
                             )
                             Text(
-                                text = "EXP: ${p.charExp} / $nextLvlExp",
+                                text = "EXP: ${formatGameNumber(p.charExp)} / ${formatGameNumber(nextLvlExp)}",
                                 color = Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold,
                                 modifier = Modifier.align(Alignment.Center)
                             )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (p.charLevel >= 20 || p.hasAdvancedClass) {
+            item {
+                Card(
+                    onClick = { if (!p.hasAdvancedClass) viewModel.advanceClass() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("class_advancement_card"),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (p.hasAdvancedClass) MedievalCardBg else MedievalGold.copy(alpha = 0.22f)
+                    ),
+                    border = BorderStroke(2.dp, MedievalGold)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Image(
+                            painter = painterResource(id = getCharacterPortrait(p.charRace, p.charClass, true)),
+                            contentDescription = "Avatar Alado",
+                            modifier = Modifier
+                                .size(64.dp)
+                                .clip(CircleShape)
+                                .border(2.dp, MedievalGold, CircleShape),
+                            contentScale = ContentScale.Crop
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (p.hasAdvancedClass) "✨ CLASE AVANZADA ÉPICA ACTIVADA" else "✨ ¡AVANCE DE CLASE DISPONIBLE!",
+                                color = MedievalGold,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                if (p.hasAdvancedClass)
+                                    "Forma Alada Divina: ${p.advancedClassName}. Stats x2 y Habilidad Definitiva X5 Activa."
+                                else
+                                    "Evoluciona tu héroe al Nivel 20+: ¡Alas Épicas, Estadísticas Duplicadas x2 y Habilidad X5!",
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 11.sp
+                            )
+                        }
+                        if (!p.hasAdvancedClass) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Button(
+                                onClick = { viewModel.advanceClass() },
+                                colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                            ) {
+                                Text("Evolucionar", color = Color.Black, fontWeight = FontWeight.ExtraBold, fontSize = 11.sp)
+                            }
                         }
                     }
                 }
@@ -4392,16 +4465,29 @@ fun TalentsScreen(viewModel: GameViewModel) {
                     Text("Conecta runas mágicas y canaliza tu poder", color = Color.White.copy(alpha = 0.6f), fontSize = 11.sp)
                 }
 
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MedievalManaBlue)
-                ) {
-                    Text(
-                        "Puntos: ${p.talentPointsAvailable}",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Button(
+                        onClick = { viewModel.autoAllocateTalentPoints() },
+                        enabled = p.talentPointsAvailable > 0,
+                        colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                        modifier = Modifier.testTag("auto_assign_talents_button")
+                    ) {
+                        Text("⚡ Auto-Asignar", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MedievalManaBlue)
+                    ) {
+                        Text(
+                            "Puntos: ${formatGameNumber(p.talentPointsAvailable)}",
+                            color = Color.White,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
                 }
             }
         }
@@ -4698,9 +4784,9 @@ fun TalentsScreen(viewModel: GameViewModel) {
             if (activeSelectedTalent != null) {
                 val talent = activeSelectedTalent
                 val hasPrereq = talent.prerequisiteId == null ||
-                                (talentList.find { it.id == talent.prerequisiteId }?.currentRank ?: 0) >= 3
-                val isMax = talent.currentRank >= talent.maxRank
-                val canUpgrade = hasPrereq && !isMax && p.talentPointsAvailable > 0
+                                (talentList.find { it.id == talent.prerequisiteId }?.currentRank ?: 0) >= 1
+                val isMax = false
+                val canUpgrade = hasPrereq && p.talentPointsAvailable > 0
 
                 val categoryName = when (talent.category) {
                     "COMBAT" -> "Fuerza y Acero"
@@ -4744,8 +4830,8 @@ fun TalentsScreen(viewModel: GameViewModel) {
                         }
 
                         Text(
-                            text = if (isMax) "RANGO MÁXIMO" else "Rango ${talent.currentRank}/${talent.maxRank}",
-                            color = if (isMax) MedievalGold else Color.White.copy(alpha = 0.6f),
+                            text = "Nivel ${talent.currentRank}",
+                            color = MedievalGold,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -4773,9 +4859,9 @@ fun TalentsScreen(viewModel: GameViewModel) {
                             if (talent.prerequisiteId != null) {
                                 val prereq = talentList.find { it.id == talent.prerequisiteId }
                                 if (prereq != null) {
-                                    val met = prereq.currentRank >= 3
+                                    val met = prereq.currentRank >= 1
                                     Text(
-                                        text = "✔ Requiere: ${prereq.name} (Rango 3)",
+                                        text = "✔ Requiere: ${prereq.name} (Rango ≥ 1)",
                                         color = if (met) MedievalXpGreen else MedievalCrimson,
                                         fontSize = 11.sp,
                                         fontWeight = FontWeight.Medium

@@ -104,16 +104,30 @@ fun Item.withScaledStats(): Item {
     )
 }
 
-fun getItemSellValue(item: Item): Int {
-    val baseMultiplier = when (item.rarity.uppercase()) {
-        "UNIVERSAL" -> 500
-        "ARCANO" -> 350
-        "LEGENDARIO", "LEGENDARY" -> 220
-        "ÉPICO", "EPIC" -> 120
-        "RARO", "RARE" -> 60
-        else -> 20
+fun formatGameNumber(number: Long): String {
+    if (number < 1000) return number.toString()
+    if (number < 1_000_000) {
+        val kValue = number / 1000.0
+        return if (kValue % 1.0 == 0.0) "${kValue.toInt()}K" else String.format("%.1fK", kValue)
     }
-    return maxOf(10, baseMultiplier + (item.itemLevel * 15))
+    val mValue = number / 1_000_000.0
+    return if (mValue % 1.0 == 0.0) "${mValue.toInt()}M" else String.format("%.1fM", mValue)
+}
+
+fun formatGameNumber(number: Int): String = formatGameNumber(number.toLong())
+
+fun getItemSellValue(item: Item, playerLevel: Int = 1): Int {
+    val lvl = maxOf(1, item.itemLevel)
+    val pLvl = maxOf(1, playerLevel)
+    val rarityMult = getRarityMultiplier(item.rarity)
+    return (100 * lvl * pLvl * rarityMult) / 2
+}
+
+fun getItemBuyPrice(item: Item, playerLevel: Int = 1): Int {
+    val lvl = maxOf(1, item.itemLevel)
+    val pLvl = maxOf(1, playerLevel)
+    val rarityMult = getRarityMultiplier(item.rarity)
+    return 100 * lvl * pLvl * rarityMult
 }
 
 data class Talent(

@@ -1327,9 +1327,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             else -> baseName
         }
 
-        val hp = if (isBoss) (180 * baseMultiplier * tierMultiplier * 3.0).toInt() else (70 * baseMultiplier * tierMultiplier * 3.0).toInt()
-        val attack = if (isBoss) (15 * baseMultiplier * 1.5 * 3.0).toInt() else (8 * baseMultiplier * tierMultiplier * 3.0).toInt()
-        val defense = if (isBoss) (10 * baseMultiplier * 1.4 * 3.0).toInt() else (4 * baseMultiplier * tierMultiplier * 3.0).toInt()
+        val levelScale = Math.pow(1.2, monsterLevel.toDouble())
+        val hp = if (isBoss) (180 * baseMultiplier * tierMultiplier * levelScale).toInt() else (70 * baseMultiplier * tierMultiplier * levelScale).toInt()
+        val attack = if (isBoss) (15 * baseMultiplier * 1.5 * levelScale).toInt() else (8 * baseMultiplier * tierMultiplier * levelScale).toInt()
+        val defense = if (isBoss) (10 * baseMultiplier * 1.4 * levelScale).toInt() else (4 * baseMultiplier * tierMultiplier * levelScale).toInt()
 
         val enemy = Combatant(
             name = name,
@@ -1776,8 +1777,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val enemy = currentCombat.enemy ?: return
 
         // Drop rates calibration
-        val baseGoldReward = enemy.level * Random.nextInt(20, 35) + (if (enemy.isBoss) 200 else 0)
-        val baseExpReward = enemy.level * 40 + (if (enemy.isBoss) 200 else 0)
+        val pLvl = maxOf(1, progress.charLevel)
+        val baseGoldReward = 100 * pLvl * enemy.level + (if (enemy.isBoss) 500 * pLvl else 0)
+        val baseExpReward = 100 * pLvl * enemy.level + (if (enemy.isBoss) 500 * pLvl else 0)
 
         // Tier multipliers for rewards
         val rewardMultiplier = when (enemy.rarity) {
@@ -1927,7 +1929,17 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 currentMp = if (didLevelUp) pMaxMp else currentCombat.playerCurrentMp,
                 statPointsAvailable = progress.statPointsAvailable + addedStatPoints,
                 talentPointsAvailable = progress.talentPointsAvailable + addedTalentPoints,
-                inventoryJson = GameJsonParser.listToJson(invList)
+                inventoryJson = GameJsonParser.listToJson(invList),
+                highestUnlockedDungeon = if (dungeonRun.inDungeonRun && dungeonRun.currentStage == 10) {
+                    maxOf(progress.highestUnlockedDungeon, dungeonRun.dungeonId + 1)
+                } else progress.highestUnlockedDungeon,
+                completedDungeonsJson = if (dungeonRun.inDungeonRun && dungeonRun.currentStage == 10) {
+                    val completedList = GameJsonParser.listFromJson<Int>(progress.completedDungeonsJson).toMutableList()
+                    if (!completedList.contains(dungeonRun.dungeonId)) {
+                        completedList.add(dungeonRun.dungeonId)
+                    }
+                    GameJsonParser.listToJson(completedList)
+                } else progress.completedDungeonsJson
             )
 
             val (finalProgress, equippedNames) = autoEquipProgress(updatedProgress)
@@ -2526,16 +2538,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         if (index == -1) return
 
         val talent = talentList[index]
-        if (talent.currentRank >= talent.maxRank) {
-            showNotification("Este talento ya está al máximo rango.")
-            return
-        }
 
-        // Prerequisite check
+        // Prerequisite check: prerequisite must have at least 1 point assigned
         if (talent.prerequisiteId != null) {
             val prereq = talentList.find { it.id == talent.prerequisiteId }
-            if (prereq == null || prereq.currentRank < prereq.maxRank) {
-                showNotification("Requiere tener el talento '${prereq?.name ?: ""}' al máximo nivel primero.")
+            if (prereq == null || prereq.currentRank < 1) {
+                showNotification("Requiere tener puntos en el talento previo '${prereq?.name ?: ""}'.")
                 return
             }
         }
@@ -2550,7 +2558,107 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 talentsJson = GameJsonParser.listToJson(talentList)
             )
             repository.saveProgress(updatedProgress)
-            showNotification("¡Asignaste un punto al talento: ${talent.name}!")
+            showNotification("¡Asignaste un punto al talento: ${talent.name}! (Niv.${updatedTalent.currentRank})")
+        }
+    }
+
+    fun autoAllocateTalentPoints() {
+        val progress = _progressState.value ?: return
+        if (progress.talentPointsAvailable <= 0) {
+            showNotification("No tienes puntos de talento disponibles para auto-asignar.")
+            return
+        }
+
+        var available = progress.talentPointsAvailable
+        val talentList = GameJsonParser.listFromJson<Talent>(progress.talentsJson).toMutableList()
+        var allocatedCount = 0
+
+        while (available > 0) {
+            val eligibleIndices = talentList.indices.filter { idx ->
+                val t = talentList[idx]
+                t.prerequisiteId == null || talentList.any { it.id == t.prerequisiteId && it.currentRank >= 1 }
+            }
+
+            if (eligibleIndices.isEmpty()) break
+
+            val targetIdx = eligibleIndices.minByOrNull { idx ->
+                val t = talentList[idx]
+                t.row * 100 + t.currentRank
+            } ?: break
+
+            val t = talentList[targetIdx]
+            talentList[targetIdx] = t.copy(currentRank = t.currentRank + 1)
+            available -= 1
+            allocatedCount += 1
+        }
+
+        if (allocatedCount > 0) {
+            viewModelScope.launch {
+                val updatedProgress = progress.copy(
+                    talentPointsAvailable = available,
+                    talentPointsSpent = progress.talentPointsSpent + allocatedCount,
+                    talentsJson = GameJsonParser.listToJson(talentList)
+                )
+                repository.saveProgress(updatedProgress)
+                showNotification("⚡ ¡Se auto-asignaron $allocatedCount puntos de talento!")
+            }
+        }
+    }
+
+    fun advanceClass() {
+        val progress = _progressState.value ?: return
+        if (progress.charLevel < 20) {
+            showNotification("Requiere Nivel 20 de héroe para avanzar de clase.")
+            return
+        }
+        if (progress.hasAdvancedClass) {
+            showNotification("¡Ya has alcanzado la Clase Avanzada Épica!")
+            return
+        }
+
+        val advName = when (progress.charClass) {
+            "Guerrero" -> "Señor de la Guerra Alado"
+            "Mago" -> "Archimago Cósmico"
+            "Pícaro" -> "Sombra Celeste"
+            else -> "Serafín Sagrado"
+        }
+
+        val ultimateSkill = when (progress.charClass) {
+            "Guerrero" -> Skill("sk_adv_warrior", "Furia de Guerra Alada", "Lanza un embate devastador con alas en llamas. Hace x5 de daño y causa Hemorragia masiva.", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, isUltimate = true)
+            "Mago" -> Skill("sk_adv_mage", "Cataclismo Cósmico", "Desata una tormenta de éter estelar con alas celestiales. Hace x5 de daño y causa Congelación profunda.", manaCost = 40, minLevel = 20, damageMultiplier = 5.0, isUltimate = true)
+            "Pícaro" -> Skill("sk_adv_rogue", "Danza de Sombras Celestes", "Se desplaza a velocidad de la luz asestando cortes mortales. Hace x5 de daño y aplica Veneno Mortal.", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, isUltimate = true)
+            else -> Skill("sk_adv_cleric", "Sentencia Serafín", "Invoca un rayo divino con alas angélicas. Hace x5 de daño, otorga Daño Sagrado y sana al héroe.", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, healingMultiplier = 1.0, isUltimate = true)
+        }
+
+        val currentSkills = GameJsonParser.listFromJson<Skill>(progress.skillsJson).toMutableList()
+        if (!currentSkills.any { it.id == ultimateSkill.id }) {
+            currentSkills.add(ultimateSkill)
+        }
+
+        val newStr = progress.statStr * 2
+        val newDex = progress.statDex * 2
+        val newInt = progress.statInt * 2
+        val newCon = progress.statCon * 2
+        val newMaxHp = progress.maxHp * 2
+        val newMaxMp = progress.maxMp * 2
+
+        viewModelScope.launch {
+            val updated = progress.copy(
+                hasAdvancedClass = true,
+                advancedClassName = advName,
+                statStr = newStr,
+                statDex = newDex,
+                statInt = newInt,
+                statCon = newCon,
+                maxHp = newMaxHp,
+                currentHp = newMaxHp,
+                maxMp = newMaxMp,
+                currentMp = newMaxMp,
+                skillsJson = GameJsonParser.listToJson(currentSkills)
+            )
+            repository.saveProgress(updated)
+            SoundManager.playVictory()
+            showNotification("✨ ¡AVANCE DE CLASE COMPLETADO! ¡Ahora eres $advName! Estadísticas duplicadas y habilidad X5 desbloqueada.")
         }
     }
 
@@ -2831,9 +2939,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             "⚔️ ${dungeon.subBosses.getOrElse(stage - 1) { "Subjefe de ${dungeon.species}" }}"
         }
 
-        val enemyHp = if (isFinalBoss) (320 * baseMultiplier * 3.0).toInt() else (100 * baseMultiplier * 3.0).toInt()
-        val enemyAtk = if (isFinalBoss) (26 * baseMultiplier * 3.0).toInt() else (13 * baseMultiplier * 3.0).toInt()
-        val enemyDef = if (isFinalBoss) (20 * baseMultiplier * 3.0).toInt() else (9 * baseMultiplier * 3.0).toInt()
+        val levelScale = Math.pow(1.2, (dungeon.levelReq + stage).toDouble())
+        val enemyHp = if (isFinalBoss) (320 * baseMultiplier * levelScale).toInt() else (100 * baseMultiplier * levelScale).toInt()
+        val enemyAtk = if (isFinalBoss) (26 * baseMultiplier * levelScale).toInt() else (13 * baseMultiplier * levelScale).toInt()
+        val enemyDef = if (isFinalBoss) (20 * baseMultiplier * levelScale).toInt() else (9 * baseMultiplier * levelScale).toInt()
 
         val enemy = Combatant(
             name = enemyName,
