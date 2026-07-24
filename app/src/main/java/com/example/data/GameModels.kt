@@ -214,6 +214,27 @@ object GameJsonParser {
             emptyList()
         }
     }
+
+    inline fun <reified K, reified V> mapToJson(map: Map<K, V>): String {
+        return try {
+            val type = Types.newParameterizedType(Map::class.java, K::class.java, V::class.java)
+            val adapter = moshi.adapter<Map<K, V>>(type)
+            adapter.toJson(map)
+        } catch (e: Exception) {
+            "{}"
+        }
+    }
+
+    inline fun <reified K, reified V> mapFromJson(json: String): Map<K, V> {
+        if (json.isEmpty() || json == "{}") return emptyMap()
+        return try {
+            val type = Types.newParameterizedType(Map::class.java, K::class.java, V::class.java)
+            val adapter = moshi.adapter<Map<K, V>>(type)
+            adapter.fromJson(json) ?: emptyMap()
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
 }
 
 data class PlayerStats(

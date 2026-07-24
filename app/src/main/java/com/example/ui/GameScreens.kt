@@ -75,6 +75,12 @@ fun getRarityColor(rarity: String): Color {
 
 fun getItemImageRes(imageResName: String, itemType: String): Int {
     return when (imageResName) {
+        "img_mat_cuero" -> R.drawable.img_mat_cuero_1784901594849
+        "img_mat_hierro" -> R.drawable.img_mat_hierro_1784901606157
+        "img_mat_oro" -> R.drawable.img_mat_oro_1784901617574
+        "img_mat_platino" -> R.drawable.img_mat_platino_1784901629448
+        "img_mat_dragondskin" -> R.drawable.img_mat_dragondskin_1784901640557
+        "img_mat_diamond_inf" -> R.drawable.img_mat_diamond_inf_1784901652591
         "img_item_sword_1784593548868" -> R.drawable.img_item_sword_1784593548868
         "img_item_staff_1784593558118" -> R.drawable.img_item_staff_1784593558118
         "img_item_dagger_1784593567531" -> R.drawable.img_item_dagger_1784593567531
@@ -107,9 +113,39 @@ fun getItemImageRes(imageResName: String, itemType: String): Int {
     }
 }
 
-fun getCharacterPortrait(race: String, cls: String, hasAdvancedClass: Boolean = false): Int {
+fun getCharacterPortrait(race: String, cls: String, hasAdvancedClass: Boolean = false, charLevel: Int = 1): Int {
+    val c = cls.trim()
+    val r = race.trim()
+
+    // 3-Stage Evolution Portraits (Lvl 20, Lvl 50, Lvl 100)
+    when {
+        charLevel >= 100 -> {
+            return when (c) {
+                "Guerrero" -> R.drawable.img_evo_guerrero_3_1784901472272
+                "Mago" -> R.drawable.img_evo_mago_3_1784901503996
+                "Pícaro" -> R.drawable.img_evo_picaro_3_1784901545572
+                else -> R.drawable.img_evo_clerigo_3_1784901581001
+            }
+        }
+        charLevel >= 50 -> {
+            return when (c) {
+                "Guerrero" -> R.drawable.img_evo_guerrero_2_1784901460545
+                "Mago" -> R.drawable.img_evo_mago_2_1784901492327
+                "Pícaro" -> R.drawable.img_evo_picaro_2_1784901529027
+                else -> R.drawable.img_evo_clerigo_2_1784901568583
+            }
+        }
+        charLevel >= 20 -> {
+            return when (c) {
+                "Guerrero" -> R.drawable.img_evo_guerrero_1_1784901448962
+                "Mago" -> R.drawable.img_evo_mago_1_1784901481413
+                "Pícaro" -> R.drawable.img_evo_picaro_1_1784901516704
+                else -> R.drawable.img_evo_clerigo_1_1784901558922
+            }
+        }
+    }
+
     if (hasAdvancedClass) {
-        val c = cls.trim()
         return when (c) {
             "Guerrero" -> R.drawable.img_hero_advanced_guerrero_1784856127764
             "Mago" -> R.drawable.img_hero_advanced_mago_1784856138389
@@ -117,8 +153,7 @@ fun getCharacterPortrait(race: String, cls: String, hasAdvancedClass: Boolean = 
             else -> R.drawable.img_hero_advanced_clerigo_1784856159204
         }
     }
-    val r = race.trim()
-    val c = cls.trim()
+
     return when (r) {
         "Humano" -> when (c) {
             "Guerrero" -> R.drawable.img_portrait_humano_guerrero_1784507309143
@@ -3514,10 +3549,30 @@ fun CombatScreen(viewModel: GameViewModel) {
                         Spacer(modifier = Modifier.height(8.dp))
 
                         val passiveTag = when (p.charRace) {
-                            "Humano" -> if (p.charLevel >= 5) "🏆 +8% TurnHeal" else "👑 +10% Oro"
-                            "Elfo" -> if (p.charLevel >= 5) "🌌 -20% MP Cost" else "👁️ +10% MaxMP"
-                            "Enano" -> if (p.charLevel >= 5) "🛡️ 10% Reflect" else "⛰️ +10% MaxHP"
-                            "Orco" -> if (p.charLevel >= 5) "🩸 12% Lifesteal" else "⚔️ +10% Daño"
+                            "Humano" -> when {
+                                p.charLevel >= 100 -> "✨ +60% Oro"
+                                p.charLevel >= 50 -> "⚡ +35% Oro"
+                                p.charLevel >= 20 -> "🏆 +20% Oro"
+                                else -> "👑 +10% Oro"
+                            }
+                            "Elfo" -> when {
+                                p.charLevel >= 100 -> "✨ -50% MP"
+                                p.charLevel >= 50 -> "⚡ -35% MP"
+                                p.charLevel >= 20 -> "🌌 -20% MP"
+                                else -> "👁️ +10% MaxMP"
+                            }
+                            "Enano" -> when {
+                                p.charLevel >= 100 -> "✨ 35% Reflect"
+                                p.charLevel >= 50 -> "⚡ 20% Reflect"
+                                p.charLevel >= 20 -> "🛡️ 10% Reflect"
+                                else -> "⛰️ +10% MaxHP"
+                            }
+                            "Orco" -> when {
+                                p.charLevel >= 100 -> "✨ 35% Lifesteal"
+                                p.charLevel >= 50 -> "⚡ 20% Lifesteal"
+                                p.charLevel >= 20 -> "🩸 12% Lifesteal"
+                                else -> "⚔️ +10% Daño"
+                            }
                             else -> ""
                         }
 
@@ -3938,6 +3993,11 @@ fun CharacterScreen(viewModel: GameViewModel) {
     val p = progress ?: return
     val playerStats by viewModel.playerStats.collectAsState()
     val allCharacters by viewModel.allCharactersState.collectAsState()
+    val backupStatus by viewModel.backupStatus.collectAsState()
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshBackupStatus()
+    }
 
     val unspentStats = viewModel.getUnspentStatPoints(p)
     var showCharSelectionDialog by remember { mutableStateOf(false) }
@@ -4048,7 +4108,7 @@ fun CharacterScreen(viewModel: GameViewModel) {
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // EXP Bar (Unified & Full-Width for high visibility and legibility)
-                    val nextLvlExp = p.charLevel * 100
+                    val nextLvlExp = p.charLevel * 300
                     val expRatio = if (nextLvlExp > 0) (p.charExp.toFloat() / nextLvlExp).coerceIn(0f, 1f) else 0f
                     val expPercent = (expRatio * 100).toInt()
                     Column {
@@ -4208,20 +4268,22 @@ fun CharacterScreen(viewModel: GameViewModel) {
         }
 
         item {
-            val evolvedRace = viewModel.getEvolvedRaceName(p.charRace, p.charLevel)
+            val fullEvolvedTitle = viewModel.getFullEvolvedTitle(p.charRace, p.charClass, p.charLevel)
             val passiveDesc = viewModel.getRacePassiveDescription(p.charRace, p.charLevel)
-            val evolvedIcon = when (p.charRace) {
-                "Humano" -> "🏆"
-                "Elfo" -> "🌌"
-                "Enano" -> "🛡️"
-                "Orco" -> "🩸"
-                else -> "⭐"
-            }
+            val isEvolved = p.charLevel >= 20
+            val evoPortraitRes = getCharacterPortrait(p.charRace, p.charClass, p.hasAdvancedClass, p.charLevel)
             
+            val (nextLevelTarget, levelStageName) = when {
+                p.charLevel >= 100 -> Pair(100, "3ª EVOLUCIÓN SUPREMA")
+                p.charLevel >= 50 -> Pair(100, "2ª EVOLUCIÓN (Siguiente a Nivel 100)")
+                p.charLevel >= 20 -> Pair(50, "1ª EVOLUCIÓN (Siguiente a Nivel 50)")
+                else -> Pair(20, "FASE BÁSICA (Siguiente a Nivel 20)")
+            }
+
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-                border = BorderStroke(1.5.dp, if (p.charLevel >= 5) MedievalGold else Color.Gray)
+                border = BorderStroke(1.5.dp, if (isEvolved) MedievalGold else Color.Gray)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(
@@ -4230,20 +4292,20 @@ fun CharacterScreen(viewModel: GameViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            "Evolución Racial",
-                            color = if (p.charLevel >= 5) MedievalGold else Color.White,
+                            "Evolución de Clase y Raza",
+                            color = if (isEvolved) MedievalGold else Color.White,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp
                         )
                         Card(
                             colors = CardDefaults.cardColors(
-                                containerColor = if (p.charLevel >= 5) MedievalGold else Color(0xFF424242)
+                                containerColor = if (isEvolved) MedievalGold else Color(0xFF424242)
                             ),
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
-                                text = if (p.charLevel >= 5) "EVOLUCIONADO" else "FASE BÁSICA",
-                                color = if (p.charLevel >= 5) Color.Black else Color.White,
+                                text = levelStageName.uppercase(),
+                                color = if (isEvolved) Color.Black else Color.White,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
@@ -4251,29 +4313,62 @@ fun CharacterScreen(viewModel: GameViewModel) {
                         }
                     }
                     
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Hero Evolution Visual Artwork Preview
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(72.dp)
+                                .clip(RoundedCornerShape(8.dp))
+                                .border(1.5.dp, MedievalGold, RoundedCornerShape(8.dp))
+                                .background(Color.Black)
+                        ) {
+                            Image(
+                                painter = painterResource(id = evoPortraitRes),
+                                contentDescription = "Evolución de Héroe",
+                                modifier = Modifier.fillMaxSize(),
+                                contentScale = ContentScale.Crop
+                            )
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = fullEvolvedTitle,
+                                color = MedievalGold,
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 14.sp
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Evoluciona a Nivel 20 (1ª), Nivel 50 (2ª) y Nivel 100 (3ª Suprema).",
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                    
                     Spacer(modifier = Modifier.height(10.dp))
                     
                     Text(
-                        text = "Raza actual: $evolvedIcon $evolvedRace",
-                        color = if (p.charLevel >= 5) MedievalGold else Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 15.sp
-                    )
-                    
-                    Spacer(modifier = Modifier.height(6.dp))
-                    
-                    Text(
                         text = passiveDesc,
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = Color.White.copy(alpha = 0.9f),
                         fontSize = 12.sp,
                         lineHeight = 17.sp
                     )
                     
-                    if (p.charLevel < 5) {
-                        Spacer(modifier = Modifier.height(14.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
+                    
+                    if (p.charLevel < 100) {
+                        val currentProgressInTier = p.charLevel.coerceAtMost(nextLevelTarget)
+                        val progressPercent = (currentProgressInTier.toFloat() / nextLevelTarget.toFloat()).coerceIn(0f, 1f)
+                        
                         Text(
-                            text = "Progreso de Evolución (Nivel ${p.charLevel} / 5)",
-                            color = Color.White.copy(alpha = 0.5f),
+                            text = "Progreso de Evolución (Nivel ${p.charLevel} / $nextLevelTarget)",
+                            color = Color.White.copy(alpha = 0.6f),
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -4286,7 +4381,6 @@ fun CharacterScreen(viewModel: GameViewModel) {
                                     .clip(RoundedCornerShape(5.dp))
                                     .background(Color.Black)
                             ) {
-                                val progressPercent = p.charLevel.toFloat() / 5f
                                 Box(
                                     modifier = Modifier
                                         .fillMaxHeight()
@@ -4296,17 +4390,16 @@ fun CharacterScreen(viewModel: GameViewModel) {
                             }
                             Spacer(modifier = Modifier.width(8.dp))
                             Text(
-                                text = "${(p.charLevel * 100) / 5}%",
+                                text = "${(progressPercent * 100).toInt()}%",
                                 color = MedievalGold,
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
                     } else {
-                        Spacer(modifier = Modifier.height(12.dp))
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = MedievalGold.copy(alpha = 0.08f)),
-                            border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.25f)),
+                            colors = CardDefaults.cardColors(containerColor = MedievalGold.copy(alpha = 0.12f)),
+                            border = BorderStroke(1.dp, MedievalGold),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Row(
@@ -4315,14 +4408,15 @@ fun CharacterScreen(viewModel: GameViewModel) {
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "✨",
-                                    fontSize = 20.sp
+                                    text = "👑",
+                                    fontSize = 22.sp
                                 )
                                 Text(
-                                    text = "¡Felicidades! Has alcanzado la forma racial definitiva. Tus habilidades pasivas ahora operan a su máximo potencial.",
+                                    text = "¡Felicidades! Has alcanzado la 3ª Evolución Suprema. Tu héroe posee la máxima forma legendaria conocida.",
                                     color = MedievalGold,
                                     fontSize = 11.sp,
-                                    lineHeight = 14.sp
+                                    lineHeight = 15.sp,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
@@ -4476,6 +4570,94 @@ fun CharacterScreen(viewModel: GameViewModel) {
                         Icon(Icons.Default.People, "Mis Personajes", tint = MedievalGold)
                         Spacer(modifier = Modifier.width(8.dp))
                         Text("MIS PERSONAJES / CAMBIAR HÉROE (${allCharacters.size})", color = MedievalGold, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
+            }
+        }
+
+        // Backup & Save Data Recovery Section
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                border = BorderStroke(1.5.dp, MedievalGold.copy(alpha = 0.8f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(Icons.Default.Backup, contentDescription = "Backup", tint = MedievalGold, modifier = Modifier.size(22.dp))
+                        Text(
+                            "Copia de Seguridad y Restauración",
+                            color = MedievalGold,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "El juego guarda copias de seguridad automáticas en una carpeta separada de datos. Si reinstalas o actualizas el juego, puedes restaurar tu personaje instantáneamente.",
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (backupStatus.isNotBlank()) {
+                        Text(
+                            text = "📌 $backupStatus",
+                            color = MedievalGold.copy(alpha = 0.9f),
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Spacer(modifier = Modifier.height(10.dp))
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                SoundManager.playButtonClick()
+                                viewModel.exportManualBackup()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .testTag("export_backup_btn")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Save, "Guardar Backup", tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("GUARDAR COPIA", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                SoundManager.playButtonClick()
+                                viewModel.restoreManualBackup()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(40.dp)
+                                .testTag("restore_backup_btn")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Restore, "Restaurar Backup", tint = Color.White, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("RESTAURAR", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                            }
+                        }
                     }
                 }
             }
@@ -6000,11 +6182,23 @@ data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val 
 fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {
     val cleanName = name.lowercase()
     return when {
-        // Specific bosses
+        // Specific bosses & Vampires
+        cleanName.contains("vampiro") -> if (isBoss || cleanName.contains("gran") || cleanName.contains("lord")) R.drawable.img_boss_high_vampire_1784674139269 else R.drawable.enemy_vampire_1784903236424
         cleanName.contains("hobgoblin") -> R.drawable.img_boss_hobgoblin_1784674116743
-        cleanName.contains("vampiro") -> R.drawable.img_boss_high_vampire_1784674139269
         cleanName.contains("igdrasil") || cleanName.contains("máquinas") || cleanName.contains("yggdrasil") -> R.drawable.img_boss_yggdrasil_machine_1784674150126
         cleanName.contains("dragon oscuro") || cleanName.contains("dragón oscuro") || cleanName.contains("calamidad") -> R.drawable.img_boss_dark_dragon_1784674128719
+
+        // Demons & Fiends
+        cleanName.contains("demonio") || cleanName.contains("demon") || cleanName.contains("fiend") || 
+        cleanName.contains("diablo") || cleanName.contains("infernal") || cleanName.contains("azazel") || 
+        cleanName.contains("lucifer") || cleanName.contains("vacío") || cleanName.contains("vacio") -> R.drawable.enemy_demon_1784903246195
+
+        // Minotaurs
+        cleanName.contains("minotauro") || cleanName.contains("minotaur") || cleanName.contains("tauro") -> R.drawable.enemy_minotaur_1784903256639
+
+        // Kraken & Sea Monsters
+        cleanName.contains("kraken") || cleanName.contains("tentáculo") || cleanName.contains("tentaculo") || 
+        cleanName.contains("leviatán") || cleanName.contains("leviatan") -> R.drawable.enemy_kraken_1784903268006
         
         // Dragons, Wyrms & Wyverns
         cleanName.contains("dragón") || cleanName.contains("dragon") || cleanName.contains("wyrm") || 
@@ -6015,14 +6209,16 @@ fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {
 
         // Wolves, Canines & Beasts
         cleanName.contains("lobo") || cleanName.contains("fenrir") || cleanName.contains("warg") || 
-        cleanName.contains("chacal") || cleanName.contains("licántropo") || cleanName.contains("perro") || cleanName.contains("alfa") -> R.drawable.enemy_wolf_1784850801847
+        cleanName.contains("chacal") || cleanName.contains("licántropo") || cleanName.contains("licantropo") || 
+        cleanName.contains("perro") || cleanName.contains("oso") || cleanName.contains("alfa") -> R.drawable.enemy_wolf_1784850801847
 
         // Ghosts, Spectres & Astral Entities
         cleanName.contains("espectro") || cleanName.contains("alma") || cleanName.contains("sombra") || 
         cleanName.contains("poltergeist") || cleanName.contains("orbe") || cleanName.contains("lamento") || cleanName.contains("fantas") -> R.drawable.enemy_spectre_1784850809472
 
         // Treants & Nature Creatures
-        cleanName.contains("treant") || cleanName.contains("árbol") || cleanName.contains("planta") || cleanName.contains("bosque") -> R.drawable.enemy_treant_1784850817186
+        cleanName.contains("treant") || cleanName.contains("árbol") || cleanName.contains("arbol") || 
+        cleanName.contains("planta") || cleanName.contains("bosque") || cleanName.contains("flor") -> R.drawable.enemy_treant_1784850817186
 
         // Bandits, Rogues & Human Mercenaries
         cleanName.contains("bandido") || cleanName.contains("ladrón") || cleanName.contains("ladron") || cleanName.contains("asesino") || 
@@ -6032,17 +6228,17 @@ fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {
         // Elementals & Fire Creatures
         cleanName.contains("elemental") || cleanName.contains("fuego") || cleanName.contains("magma") || 
         cleanName.contains("llama") || cleanName.contains("azufre") || cleanName.contains("ceniza") || cleanName.contains("pyros") || 
-        cleanName.contains("ignis") || cleanName.contains("fatuo") -> R.drawable.enemy_elemental_1784850835033
+        cleanName.contains("ignis") || cleanName.contains("fatuo") || cleanName.contains("forja") -> R.drawable.enemy_elemental_1784850835033
 
-        // Cultists
-        cleanName.contains("cultista") -> R.drawable.enemy_cultist_1784850844974
+        // Cultists & Acolytes
+        cleanName.contains("cultista") || cleanName.contains("acolito") || cleanName.contains("acólito") -> R.drawable.enemy_cultist_1784850844974
 
         // Yetis, Ice & Snow Creatures
         cleanName.contains("yeti") || cleanName.contains("glacial") || cleanName.contains("escarcha") || 
         cleanName.contains("ventisquero") || cleanName.contains("glacius") || cleanName.contains("freya") || cleanName.contains("tundra") -> R.drawable.enemy_yeti_1784850855217
 
         // Undead, Zombies, Skeletons & Ghouls
-        cleanName.contains("zombi") || cleanName.contains("ghoul") || cleanName.contains("necrófago") || 
+        cleanName.contains("zombi") || cleanName.contains("zombie") || cleanName.contains("ghoul") || cleanName.contains("necrófago") || 
         cleanName.contains("peste") || cleanName.contains("esqueleto") || cleanName.contains("muerte") || 
         cleanName.contains("no-muerto") || cleanName.contains("hueso") -> R.drawable.enemy_zombie_1784850868957
 
@@ -6055,24 +6251,24 @@ fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {
 
         // Anubis, Pharaohs & Solar Egyptian Guardians
         cleanName.contains("anubis") || cleanName.contains("esfinge") || cleanName.contains("solaria") || 
-        cleanName.contains("ra-horakhty") || cleanName.contains("sacerdote solar") -> R.drawable.enemy_anubis_1784850895657
+        cleanName.contains("ra-horakhty") || cleanName.contains("sacerdote solar") || cleanName.contains("osiris") || cleanName.contains("faraón") -> R.drawable.enemy_anubis_1784850895657
 
         // Mummies
-        cleanName.contains("momia") -> R.drawable.enemy_mummy_1784850903429
+        cleanName.contains("momia") || cleanName.contains("mummy") -> R.drawable.enemy_mummy_1784850903429
 
         // Archangels & Celestial Beings
         cleanName.contains("archángel") || cleanName.contains("arcángel") || cleanName.contains("seraphiel") || 
         cleanName.contains("celestial") || cleanName.contains("astral") || cleanName.contains("sentinela") || 
-        cleanName.contains("aetherion") || cleanName.contains("firmamento") -> R.drawable.enemy_archangel_1784850912318
+        cleanName.contains("aetherion") || cleanName.contains("firmamento") || cleanName.contains("quimera") -> R.drawable.enemy_archangel_1784850912318
 
-        // Orcs & Ogres
+        // Orcs, Ogres & Trolls
         cleanName.contains("orco") || cleanName.contains("ogro") || cleanName.contains("berserker") || 
-        cleanName.contains("demoledor") || cleanName.contains("gladiador") || cleanName.contains("warlord") -> R.drawable.enemy_orc_1784850920168
+        cleanName.contains("demoledor") || cleanName.contains("gladiador") || cleanName.contains("warlord") || cleanName.contains("troll") -> R.drawable.enemy_orc_1784850920168
 
         // Naga, Tritons & Sea Ocean Monsters
         cleanName.contains("naga") || cleanName.contains("sireno") || cleanName.contains("tritón") || 
         cleanName.contains("neptuno") || cleanName.contains("océano") || cleanName.contains("oceano") || 
-        cleanName.contains("coral") || cleanName.contains("mareas") || cleanName.contains("leviatán") || cleanName.contains("fosas") -> R.drawable.enemy_naga_1784850928739
+        cleanName.contains("coral") || cleanName.contains("mareas") -> R.drawable.enemy_naga_1784850928739
 
         // Automatons, Robots & Machines
         cleanName.contains("autómata") || cleanName.contains("automata") || cleanName.contains("engranaje") || 
@@ -6088,7 +6284,7 @@ fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {
         cleanName.contains("escorpión") || cleanName.contains("escorpion") || cleanName.contains("manta") -> R.drawable.enemy_scorpion_1784850968611
 
         // Spiders
-        cleanName.contains("araña") || cleanName.contains("tarántula") -> R.drawable.img_enemy_spider_1784386956688
+        cleanName.contains("araña") || cleanName.contains("arana") || cleanName.contains("tarántula") -> R.drawable.img_enemy_spider_1784386956688
 
         // Golems & Mud Slimes
         cleanName.contains("golem") || cleanName.contains("gólem") || cleanName.contains("fango") || cleanName.contains("lodo") || cleanName.contains("ciénaga") -> R.drawable.img_enemy_mud_golem_1784386930907
@@ -6193,19 +6389,17 @@ fun DungeonScreen(viewModel: GameViewModel) {
             }
 
             items(com.example.data.DUNGEONS_LIST) { dungeon ->
-                val isUnlocked = dungeon.id <= p.highestUnlockedDungeon
-                val hasLevelReq = p.charLevel >= dungeon.levelReq
-                val isAvailable = isUnlocked && hasLevelReq
+                val isUnlocked = true
+                val hasLevelReq = true
+                val isAvailable = true
 
                 val completedList = com.example.data.GameJsonParser.listFromJson<Int>(p.completedDungeonsJson)
                 val isCompleted = completedList.contains(dungeon.id)
 
                 val cardBorderBrush = if (isCompleted) {
                     Brush.verticalGradient(listOf(Color(0xFF4CAF50), Color(0xFF1B5E20)))
-                } else if (isAvailable) {
-                    Brush.verticalGradient(listOf(Color(0xFFFFD700), Color(0xFFB8860B)))
                 } else {
-                    Brush.verticalGradient(listOf(Color(0xFF555555), Color(0xFF222222)))
+                    Brush.verticalGradient(listOf(Color(0xFFFFD700), Color(0xFFB8860B)))
                 }
 
                 Box(
@@ -6229,7 +6423,7 @@ fun DungeonScreen(viewModel: GameViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
                                     text = "CALABOZO ${dungeon.id}: ${dungeon.species.uppercase()}",
-                                    color = if (isAvailable) MedievalGold else Color.Gray,
+                                    color = MedievalGold,
                                     fontSize = 14.sp,
                                     fontWeight = FontWeight.ExtraBold
                                 )
@@ -6243,13 +6437,13 @@ fun DungeonScreen(viewModel: GameViewModel) {
                             Box(
                                 modifier = Modifier
                                     .clip(RoundedCornerShape(6.dp))
-                                    .background(if (hasLevelReq) Color(0xFF1B3B22) else Color(0xFF4A1212))
-                                    .border(1.dp, if (hasLevelReq) Color(0xFF4CAF50) else Color(0xFFE53935), RoundedCornerShape(6.dp))
+                                    .background(Color(0xFF2E2413))
+                                    .border(1.dp, MedievalGold, RoundedCornerShape(6.dp))
                                     .padding(horizontal = 8.dp, vertical = 4.dp)
                             ) {
                                 Text(
-                                    text = "Nivel ${dungeon.levelReq}+",
-                                    color = if (hasLevelReq) Color(0xFFA5D6A7) else Color(0xFFFFCDD2),
+                                    text = "Nivel Enemigos: ${dungeon.levelReq}",
+                                    color = Color(0xFFFFE082),
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold
                                 )
@@ -6270,7 +6464,7 @@ fun DungeonScreen(viewModel: GameViewModel) {
                                 contentDescription = dungeon.finalBossName,
                                 modifier = Modifier.matchParentSize(),
                                 contentScale = ContentScale.Crop,
-                                alpha = if (isAvailable) 0.9f else 0.4f
+                                alpha = 0.9f
                             )
                             Box(
                                 modifier = Modifier
@@ -6343,44 +6537,69 @@ fun DungeonScreen(viewModel: GameViewModel) {
                             fontSize = 10.sp
                         )
 
-                        if (!isUnlocked) {
-                            Button(
-                                onClick = {},
-                                enabled = false,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(disabledContainerColor = Color(0xFF222222))
-                            ) {
-                                Text("🔒 BLOQUEADO (Completa Calabozo ${dungeon.id - 1})", color = Color.Gray, fontSize = 11.sp)
-                            }
-                        } else if (!hasLevelReq) {
-                            Button(
-                                onClick = {},
-                                enabled = false,
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.buttonColors(disabledContainerColor = Color(0xFF331515))
-                            ) {
-                                Text("🔒 REQUIERE NIVEL ${dungeon.levelReq}", color = Color(0xFFEF9A9A), fontSize = 11.sp)
-                            }
-                        } else {
-                            Button(
-                                onClick = {
-                                    SoundManager.playButtonClick()
-                                    viewModel.startDungeonRun(dungeon.id)
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = if (isCompleted) Color(0xFF2E7D32) else MedievalGold
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("start_dungeon_${dungeon.id}_button")
-                            ) {
-                                Text(
-                                    text = if (isCompleted) "✨ DESAFIAR DE NUEVO (Calabozo Conquistado)" else "⚔️ ENTRAR AL CALABOZO (Etapa 1/10)",
-                                    color = if (isCompleted) Color.White else Color.Black,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 11.sp
-                                )
+                        val checkpointsMap = com.example.data.GameJsonParser.mapFromJson<String, Int>(p.dungeonCheckpointsJson)
+                        val savedStage = checkpointsMap[dungeon.id.toString()] ?: 1
+
+                            if (savedStage > 1) {
+                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Button(
+                                        onClick = {
+                                            SoundManager.playButtonClick()
+                                            viewModel.startDungeonRun(dungeon.id, startFromStage = savedStage)
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("resume_dungeon_${dungeon.id}_button")
+                                    ) {
+                                        Text(
+                                            text = "⚔️ CONTINUAR DESDE ETAPA $savedStage/10 (CHECKPOINT)",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            fontSize = 11.sp
+                                        )
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = {
+                                            SoundManager.playButtonClick()
+                                            viewModel.startDungeonRun(dungeon.id, startFromStage = 1)
+                                        },
+                                        border = BorderStroke(1.dp, Color.Gray),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("restart_dungeon_${dungeon.id}_button")
+                                    ) {
+                                        Text(
+                                            text = "🔄 REINICIAR DESDE ETAPA 1",
+                                            color = Color.LightGray,
+                                            fontSize = 10.sp
+                                        )
+                                    }
+                                }
+                            } else {
+                                Button(
+                                    onClick = {
+                                        SoundManager.playButtonClick()
+                                        viewModel.startDungeonRun(dungeon.id, startFromStage = 1)
+                                    },
+                                    colors = ButtonDefaults.buttonColors(
+                                        containerColor = if (isCompleted) Color(0xFF2E7D32) else MedievalGold
+                                    ),
+                                    shape = RoundedCornerShape(8.dp),
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .testTag("start_dungeon_${dungeon.id}_button")
+                                ) {
+                                    Text(
+                                        text = if (isCompleted) "✨ DESAFIAR DE NUEVO (Calabozo Conquistado)" else "⚔️ ENTRAR AL CALABOZO (Etapa 1/10)",
+                                        color = if (isCompleted) Color.White else Color.Black,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 11.sp
+                                    )
+                                }
                             }
                         }
                     }
@@ -6388,5 +6607,4 @@ fun DungeonScreen(viewModel: GameViewModel) {
             }
         }
     }
-}
 

@@ -380,6 +380,38 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         _showClassAdvancementCutscene.value = null
     }
 
+    private val _backupStatus = MutableStateFlow<String>("")
+    val backupStatus = _backupStatus.asStateFlow()
+
+    fun refreshBackupStatus() {
+        _backupStatus.value = repository.getBackupStatusText()
+    }
+
+    fun exportManualBackup() {
+        viewModelScope.launch {
+            val success = repository.exportManualBackup()
+            refreshBackupStatus()
+            if (success) {
+                showNotification("💾 ¡Copia de seguridad guardada con éxito en almacenamiento seguro!")
+            } else {
+                showNotification("⚠️ No se pudo crear el backup. Asegúrate de tener una partida activa.")
+            }
+        }
+    }
+
+    fun restoreManualBackup() {
+        viewModelScope.launch {
+            val restored = repository.restoreManualBackup()
+            refreshBackupStatus()
+            if (restored != null && restored.hasActiveChar) {
+                showNotification("✨ ¡Personaje '${restored.charName}' restaurado con éxito desde el backup!")
+                _screenState.value = GameScreen.WORLD_MAP
+            } else {
+                showNotification("⚠️ No se encontró ninguna copia de seguridad válida para restaurar.")
+            }
+        }
+    }
+
     // Shop System State
     private val _shopItems = MutableStateFlow<List<Item>>(emptyList())
     val shopItems = _shopItems.asStateFlow()
@@ -640,7 +672,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         viewModelScope.launch {
             repository.deactivateAll()
 
-            val maxHp = _creatorCon.value * 12
+            val maxHp = (_creatorCon.value * 25) + 20
             val maxMp = _creatorInt.value * 6
 
             // Starter items based on class
@@ -1315,9 +1347,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val tierMultiplier = when (rarity) {
-            "LEGENDARY" -> 2.5
-            "CHAMPION" -> 1.8
-            "ELITE" -> 1.4
+            "UNIVERSAL" -> 81.0
+            "LEGENDARY" -> 27.0
+            "CHAMPION" -> 9.0
+            "ELITE" -> 3.0
             else -> 1.0
         }
 
@@ -1336,8 +1369,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
         val levelScale = Math.pow(1.2, monsterLevel.toDouble())
         val hp = if (isBoss) (180 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt() else (70 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
-        val attack = if (isBoss) (15 * baseMultiplier * 1.5 * levelScale * 1.5).toInt() else (8 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
-        val defense = if (isBoss) (10 * baseMultiplier * 1.4 * levelScale * 1.5).toInt() else (4 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
+        val attack = if (isBoss) (15 * baseMultiplier * 1.5 * tierMultiplier * levelScale * 1.5).toInt() else (8 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
+        val defense = if (isBoss) (10 * baseMultiplier * 1.4 * tierMultiplier * levelScale * 1.5).toInt() else (4 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
 
         val enemy = Combatant(
             name = name,
@@ -1395,7 +1428,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             // Racial damage bonus (Orco)
             val raceDmgMult = when {
-                progress.charRace == "Orco" && progress.charLevel >= 5 -> 1.25
+                progress.charRace == "Orco" && progress.charLevel >= 100 -> 1.80
+                progress.charRace == "Orco" && progress.charLevel >= 50 -> 1.45
+                progress.charRace == "Orco" && progress.charLevel >= 20 -> 1.25
                 progress.charRace == "Orco" -> 1.10
                 else -> 1.0
             }
@@ -1408,9 +1443,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             // Critical strike chance
             val baseCrit = 5 + (progress.statDex * 0.4) + (getTalentRank("t_8") * 3)
             val raceCritBonus = when {
-                progress.charRace == "Elfo" && progress.charLevel >= 5 -> 15
+                progress.charRace == "Elfo" && progress.charLevel >= 100 -> 40
+                progress.charRace == "Elfo" && progress.charLevel >= 50 -> 25
+                progress.charRace == "Elfo" && progress.charLevel >= 20 -> 15
                 progress.charRace == "Elfo" -> 5
-                progress.charRace == "Humano" && progress.charLevel >= 5 -> 0 // human level 5+ has turn heal instead
+                progress.charRace == "Humano" && progress.charLevel >= 100 -> 25
+                progress.charRace == "Humano" && progress.charLevel >= 50 -> 15
+                progress.charRace == "Humano" && progress.charLevel >= 20 -> 10
                 progress.charRace == "Humano" -> 5
                 else -> 0
             }
@@ -1431,10 +1470,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val critLabel = if (isCrit) " ¡CRÍTICO!" else ""
             var log = "Atacas a ${enemy.name} e infliges $finalDmg puntos de daño físico.$critLabel"
 
-            // Orc Level 5+ Devastador Berserker healing
+            // Orc Devastador Berserker healing (Lvl 20+)
             var currentPlayerHp = currentCombat.playerCurrentHp
-            if (progress.charRace == "Orco" && progress.charLevel >= 5) {
-                val orcHeal = (finalDmg * 0.12).toInt()
+            if (progress.charRace == "Orco" && progress.charLevel >= 20) {
+                val lifestealPct = when {
+                    progress.charLevel >= 100 -> 0.35
+                    progress.charLevel >= 50 -> 0.20
+                    else -> 0.12
+                }
+                val orcHeal = (finalDmg * lifestealPct).toInt()
                 if (orcHeal > 0) {
                     currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + orcHeal)
                     log += " ¡Tu sed de sangre orca te sana +$orcHeal HP!"
@@ -1495,7 +1539,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             }
             // Mana cost discount talent and Elf passive
             val manaCostDiscount = if (getTalentRank("t_6") > 0) 0.8 else 1.0
-            val raceManaDiscount = if (progress.charRace == "Elfo" && progress.charLevel >= 5) 0.8 else 1.0
+            val raceManaDiscount = when {
+                progress.charRace == "Elfo" && progress.charLevel >= 100 -> 0.50
+                progress.charRace == "Elfo" && progress.charLevel >= 50 -> 0.65
+                progress.charRace == "Elfo" && progress.charLevel >= 20 -> 0.80
+                else -> 1.0
+            }
             val finalManaCost = (skill.manaCost * manaCostDiscount * raceManaDiscount).toInt()
             val newPlayerMp = maxOf(0, currentCombat.playerCurrentMp - finalManaCost)
 
@@ -1520,7 +1569,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 
                 // Orc damage passive
                 val raceDmgMult = when {
-                    progress.charRace == "Orco" && progress.charLevel >= 5 -> 1.25
+                    progress.charRace == "Orco" && progress.charLevel >= 100 -> 1.80
+                    progress.charRace == "Orco" && progress.charLevel >= 50 -> 1.45
+                    progress.charRace == "Orco" && progress.charLevel >= 20 -> 1.25
                     progress.charRace == "Orco" -> 1.10
                     else -> 1.0
                 }
@@ -1644,7 +1695,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             // Dwarf defense bonus
             if (progress.charRace == "Enano") {
-                playerDefense += if (progress.charLevel >= 5) 10 else 5
+                val dwarfDefBonus = when {
+                    progress.charLevel >= 100 -> 80
+                    progress.charLevel >= 50 -> 35
+                    progress.charLevel >= 20 -> 15
+                    else -> 5
+                }
+                playerDefense += dwarfDefBonus
             }
 
             // Dodge check
@@ -1757,23 +1814,33 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             val newHp = maxOf(0, currentCombat.playerCurrentHp - finalDmg)
 
-            // Dwarf Level 5+ Reflect passive
+            // Dwarf Level 20+ Reflect passive
             var enemyHpAfterReflect = enemy.currentHp
             var reflectLog = ""
-            if (progress.charRace == "Enano" && progress.charLevel >= 5 && finalDmg > 0 && !dodged) {
-                val damageReflected = maxOf(1, (finalDmg * 0.10).toInt())
+            if (progress.charRace == "Enano" && progress.charLevel >= 20 && finalDmg > 0 && !dodged) {
+                val reflectPct = when {
+                    progress.charLevel >= 100 -> 0.35
+                    progress.charLevel >= 50 -> 0.20
+                    else -> 0.10
+                }
+                val damageReflected = maxOf(1, (finalDmg * reflectPct).toInt())
                 enemyHpAfterReflect = maxOf(0, enemy.currentHp - damageReflected)
                 enemy.currentHp = enemyHpAfterReflect
                 reflectLog = " ¡Tu Escudo Rúnico devuelve $damageReflected de daño!"
             }
 
-            // Human Level 5+ Turn Heal passive
+            // Human Level 20+ Turn Heal passive
             var afterHealHp = newHp
             var humanHealLog = ""
-            if (progress.charRace == "Humano" && progress.charLevel >= 5 && newHp > 0) {
-                val humanHeal = (progress.maxHp * 0.08).toInt()
+            if (progress.charRace == "Humano" && progress.charLevel >= 20 && newHp > 0) {
+                val healPct = when {
+                    progress.charLevel >= 100 -> 0.25
+                    progress.charLevel >= 50 -> 0.15
+                    else -> 0.08
+                }
+                val humanHeal = (progress.maxHp * healPct).toInt()
                 afterHealHp = minOf(progress.maxHp, newHp + humanHeal)
-                humanHealLog = " ¡Tu don de Campeón Imperial te sana +$humanHeal HP!"
+                humanHealLog = " ¡Tu don Imperial te sana +$humanHeal HP!"
             }
 
             if (reflectLog.isNotEmpty()) logMsg += reflectLog
@@ -1825,11 +1892,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val baseGoldReward = 100 * pLvl * enemy.level + (if (enemy.isBoss) 500 * pLvl else 0)
         val baseExpReward = 100 * pLvl * enemy.level + (if (enemy.isBoss) 500 * pLvl else 0)
 
-        // Tier multipliers for rewards
+        // Tier multipliers for rewards (scales with x3 rarity tiers)
         val rewardMultiplier = when (enemy.rarity) {
-            "LEGENDARY" -> 3.5
-            "CHAMPION" -> 2.2
-            "ELITE" -> 1.5
+            "UNIVERSAL" -> 81.0
+            "LEGENDARY" -> 27.0
+            "CHAMPION" -> 9.0
+            "ELITE" -> 3.0
             else -> 1.0
         }
 
@@ -1842,7 +1910,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         // Custom drop rate calculation and Human racial passive (+10% gold / +15% gold if level 5+)
         val goldTalentMultiplier = 1.0 + (getTalentRank("t_9") * 0.20)
         val raceGoldMultiplier = when {
-            progress.charRace == "Humano" && progress.charLevel >= 5 -> 1.15
+            progress.charRace == "Humano" && progress.charLevel >= 100 -> 1.60
+            progress.charRace == "Humano" && progress.charLevel >= 50 -> 1.35
+            progress.charRace == "Humano" && progress.charLevel >= 20 -> 1.20
             progress.charRace == "Humano" -> 1.10
             else -> 1.0
         }
@@ -1900,28 +1970,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 if (isFinalBoss && dungeon != null) {
                     finalDroppedItem = dungeon.uniqueTreasure
                     invList.add(finalDroppedItem)
-                    
-                    val nextUnlocked = maxOf(progress.highestUnlockedDungeon, dungeonRun.dungeonId + 1)
-                    val completedList = GameJsonParser.listFromJson<Int>(progress.completedDungeonsJson).toMutableList()
-                    if (!completedList.contains(dungeonRun.dungeonId)) {
-                        completedList.add(dungeonRun.dungeonId)
-                    }
-
-                    _dungeonRunState.value = dungeonRun.copy(
-                        persistentHp = currentCombat.playerCurrentHp,
-                        persistentMp = currentCombat.playerCurrentMp,
-                        stageVictoryPending = false,
-                        dungeonCompletedJustNow = true
-                    )
                 } else {
                     if (droppedItem != null) {
                         invList.add(droppedItem)
                     }
-                    _dungeonRunState.value = dungeonRun.copy(
-                        persistentHp = currentCombat.playerCurrentHp,
-                        persistentMp = currentCombat.playerCurrentMp,
-                        stageVictoryPending = true
-                    )
                 }
             } else {
                 if (droppedItem != null) {
@@ -1931,7 +1983,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             var currentExp = progress.charExp + expReward
             var currentLevel = progress.charLevel
-            var nextLevelExp = currentLevel * 100
+            var nextLevelExp = currentLevel * 300
             var didLevelUp = false
             var addedStatPoints = 0
             var addedTalentPoints = 0
@@ -1946,7 +1998,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             while (currentExp >= nextLevelExp) {
                 currentExp -= nextLevelExp
                 currentLevel += 1
-                nextLevelExp = currentLevel * 100
+                nextLevelExp = currentLevel * 300
                 didLevelUp = true
                 addedStatPoints += 5
                 addedTalentPoints += 1
@@ -1955,9 +2007,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 pDex += 1
                 pInt += 1
                 pCon += 1
-                pMaxHp = pCon * 12
+                pMaxHp = (pCon * 25) + (currentLevel * 20)
                 pMaxMp = pInt * 6
             }
+
+            // Remove checkpoint if stage 10 completed
+            val newCheckpointsJson = if (dungeonRun.inDungeonRun && dungeonRun.currentStage == 10) {
+                val map = GameJsonParser.mapFromJson<String, Int>(progress.dungeonCheckpointsJson).toMutableMap()
+                map.remove(dungeonRun.dungeonId.toString())
+                GameJsonParser.mapToJson(map)
+            } else progress.dungeonCheckpointsJson
 
             val updatedProgress = progress.copy(
                 charLevel = currentLevel,
@@ -1974,6 +2033,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 statPointsAvailable = progress.statPointsAvailable + addedStatPoints,
                 talentPointsAvailable = progress.talentPointsAvailable + addedTalentPoints,
                 inventoryJson = GameJsonParser.listToJson(invList),
+                dungeonCheckpointsJson = newCheckpointsJson,
                 highestUnlockedDungeon = if (dungeonRun.inDungeonRun && dungeonRun.currentStage == 10) {
                     maxOf(progress.highestUnlockedDungeon, dungeonRun.dungeonId + 1)
                 } else progress.highestUnlockedDungeon,
@@ -1989,9 +2049,19 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val (finalProgress, equippedNames) = autoEquipProgress(updatedProgress)
             repository.saveProgress(finalProgress)
 
+            if (dungeonRun.inDungeonRun) {
+                val isFinalBoss = dungeonRun.currentStage == 10
+                _dungeonRunState.value = dungeonRun.copy(
+                    persistentHp = if (didLevelUp) finalProgress.maxHp else currentCombat.playerCurrentHp,
+                    persistentMp = if (didLevelUp) finalProgress.maxMp else currentCombat.playerCurrentMp,
+                    stageVictoryPending = !isFinalBoss,
+                    dungeonCompletedJustNow = isFinalBoss
+                )
+            }
+
             var victoryLogs = "¡Has derrotado a ${enemy.name}! Obtienes $expReward EXP y $finalGoldReward monedas de oro."
             if (didLevelUp) {
-                victoryLogs += " ¡¡SUBISTE DE NIVEL!! Ahora eres Nivel $currentLevel. Ganas +$addedStatPoints atributos y +$addedTalentPoints talentos."
+                victoryLogs += " ¡¡SUBISTE AL NIVEL $currentLevel!! Tu salud máxima ahora es de $pMaxHp HP. Ganas +$addedStatPoints atributos y +$addedTalentPoints talentos."
             }
             if (finalDroppedItem != null) {
                 victoryLogs += " Encontraste: ${finalDroppedItem.name} [${finalDroppedItem.rarity}]"
@@ -2002,6 +2072,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             _combatState.value = currentCombat.copy(
                 victory = true,
+                playerCurrentHp = if (didLevelUp) finalProgress.maxHp else currentCombat.playerCurrentHp,
+                playerCurrentMp = if (didLevelUp) finalProgress.maxMp else currentCombat.playerCurrentMp,
                 lootDropped = finalDroppedItem,
                 expGained = expReward,
                 goldGained = finalGoldReward,
@@ -2028,10 +2100,17 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         viewModelScope.launch {
             SoundManager.playDefeat()
 
+            var newCheckpointsJson = progress.dungeonCheckpointsJson
             if (_dungeonRunState.value.inDungeonRun) {
+                val dungeonId = _dungeonRunState.value.dungeonId
                 val stage = _dungeonRunState.value.currentStage
+                
+                val checkpointsMap = GameJsonParser.mapFromJson<String, Int>(progress.dungeonCheckpointsJson).toMutableMap()
+                checkpointsMap[dungeonId.toString()] = stage
+                newCheckpointsJson = GameJsonParser.mapToJson(checkpointsMap)
+
                 _dungeonRunState.value = DungeonRunState(inDungeonRun = false)
-                showNotification("¡Caíste derrotado en la Etapa $stage/10 del Calabozo! Fortalécete e inténtalo de nuevo.")
+                showNotification("¡Caíste derrotado en la Etapa $stage/10 del Calabozo! Se guardó tu avance en la Etapa $stage para que reintentes cuando estés listo.")
             }
 
             // Revive at starting safe room with gold penalty of 15%
@@ -2041,7 +2120,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val updatedProgress = progress.copy(
                 currentHp = progress.maxHp,
                 currentMp = progress.maxMp,
-                charGold = newGold
+                charGold = newGold,
+                dungeonCheckpointsJson = newCheckpointsJson
             )
 
             repository.saveProgress(updatedProgress)
@@ -2791,7 +2871,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     val newCon = progress.statCon + 1
                     progress.copy(
                         statCon = newCon,
-                        maxHp = newCon * 12,
+                        maxHp = (newCon * 25) + (progress.charLevel * 20),
                         statPointsAvailable = progress.statPointsAvailable - 1
                     )
                 }
@@ -2846,7 +2926,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val newDex = currentProgress.statDex + dexAdded
             val newInt = currentProgress.statInt + intAdded
             val newCon = currentProgress.statCon + conAdded
-            val newMaxHp = newCon * 12
+            val newMaxHp = (newCon * 25) + (currentProgress.charLevel * 20)
             val newMaxMp = newInt * 6
 
             val updated = currentProgress.copy(
@@ -2888,62 +2968,121 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     }
 
     fun getEvolvedRaceName(race: String, level: Int): String {
-        if (level < 5) return race
-        return when (race) {
-            "Humano" -> "Campeón Imperial"
-            "Elfo" -> "Guardián Astral"
-            "Enano" -> "Señor de las Runas"
-            "Orco" -> "Devastador Berserker"
-            else -> race
+        return when {
+            level >= 100 -> when (race) {
+                "Humano" -> "Avatar Supremo Imperial"
+                "Elfo" -> "Ser Celestial Eterno"
+                "Enano" -> "Titán de la Montaña Primordial"
+                "Orco" -> "Dios de la Furia Sangrienta"
+                else -> "$race Supremo"
+            }
+            level >= 50 -> when (race) {
+                "Humano" -> "Soberano de la Luz"
+                "Elfo" -> "Archimago de las Estrellas"
+                "Enano" -> "Guardián de Titanio Abisal"
+                "Orco" -> "Caudillo Infernal de la Horda"
+                else -> "$race Ancestral"
+            }
+            level >= 20 -> when (race) {
+                "Humano" -> "Campeón Imperial"
+                "Elfo" -> "Guardián Astral"
+                "Enano" -> "Señor de las Runas"
+                "Orco" -> "Devastador Berserker"
+                else -> race
+            }
+            else -> "$race Novato"
+        }
+    }
+
+    fun getEvolvedClassName(cls: String, level: Int): String {
+        return when {
+            level >= 100 -> when (cls) {
+                "Guerrero" -> "Dios de la Guerra Primigenio"
+                "Mago" -> "Avatar Supremo de la Creación"
+                "Pícaro" -> "Señor Fantasma del Abismo"
+                "Clérigo" -> "Soberano Celestial Inmortal"
+                else -> cls
+            }
+            level >= 50 -> when (cls) {
+                "Guerrero" -> "Señor de la Guerra Titánico"
+                "Mago" -> "Señor del Caos Arcano"
+                "Pícaro" -> "Sombra Silenciosa de la Muerte"
+                "Clérigo" -> "Santo Apóstol Divino"
+                else -> cls
+            }
+            level >= 20 -> when (cls) {
+                "Guerrero" -> "Caballero de Hierro"
+                "Mago" -> "Archimago Elemental"
+                "Pícaro" -> "Asesino de Sombras"
+                "Clérigo" -> "Paladín Sagrado"
+                else -> cls
+            }
+            else -> "$cls Novato"
+        }
+    }
+
+    fun getFullEvolvedTitle(race: String, cls: String, level: Int): String {
+        val raceTitle = getEvolvedRaceName(race, level)
+        val classTitle = getEvolvedClassName(cls, level)
+        return when {
+            level >= 100 -> "✨ 3ª EVOLUCIÓN SUPREMA: $raceTitle ($classTitle)"
+            level >= 50 -> "⚡ 2ª EVOLUCIÓN: $raceTitle ($classTitle)"
+            level >= 20 -> "⚔️ 1ª EVOLUCIÓN: $raceTitle ($classTitle)"
+            else -> "🛡️ FASE BÁSICA: $race $cls"
         }
     }
 
     fun getRacePassiveDescription(race: String, level: Int): String {
-        return if (level < 5) {
-            when (race) {
-                "Humano" -> "Determinación Humana: +10% de oro obtenido en combate y +5% de golpe crítico."
-                "Elfo" -> "Sentidos Élficos: +5% de golpe crítico y +10% de Maná Máximo."
-                "Enano" -> "Piel de Piedra: +10% de Vida Máxima y +5 de defensa."
-                "Orco" -> "Furia Berserker: +10% de daño físico y mágico infligido."
+        return when {
+            level >= 100 -> when (race) {
+                "Humano" -> "Supremacía Imperial (3ª EVOLUCIÓN SUPREMA): +60% de oro obtenido, +25% de golpe crítico, y regeneras un 25% de tu Vida Máxima cada turno en combate."
+                "Elfo" -> "Gracia Celestial Eterna (3ª EVOLUCIÓN SUPREMA): +40% de golpe crítico, +100% de Maná Máximo, y reduce un 50% todos los costos de Maná de tus hechizos."
+                "Enano" -> "Fortaleza Primordial (3ª EVOLUCIÓN SUPREMA): +75% de Vida Máxima, +80 de Defensa fija, y devuelves un 35% del daño recibido directamente al atacante."
+                "Orco" -> "Dios de la Furia Sangrienta (3ª EVOLUCIÓN SUPREMA): +80% de daño total infligido, +30% de golpe crítico, y tus ataques te curan un 35% del daño infligido."
                 else -> ""
             }
-        } else {
-            when (race) {
-                "Humano" -> "Espíritu Triunfante (EVOLUCIONADO): +15% de oro obtenido, y recuperas un 8% de tu Vida Máxima al final de cada turno en combate."
-                "Elfo" -> "Sabiduría Eterna (EVOLUCIONADO): +15% de golpe crítico y reduce todos los costos de Maná de tus habilidades en un 20%."
-                "Enano" -> "Escudo Rúnico (EVOLUCIONADO): +15% de Vida Máxima, +10 de defensa y devuelves un 10% del daño recibido al atacante."
-                "Orco" -> "Furia Incontenible (EVOLUCIONADO): +25% de daño infligido y tus ataques básicos te curan un 12% del daño causado."
+            level >= 50 -> when (race) {
+                "Humano" -> "Soberanía de Luz (2ª EVOLUCIÓN): +35% de oro obtenido, +15% de golpe crítico, y regeneras un 15% de tu Vida Máxima cada turno."
+                "Elfo" -> "Estela Estelar (2ª EVOLUCIÓN): +25% de golpe crítico, +50% de Maná Máximo, y reduce un 35% los costos de Maná."
+                "Enano" -> "Titanio Abisal (2ª EVOLUCIÓN): +40% de Vida Máxima, +35 de Defensa fija, y devuelves un 20% del daño recibido."
+                "Orco" -> "Caudillo de la Horda (2ª EVOLUCIÓN): +45% de daño total infligido, y tus ataques te curan un 20% del daño causado."
+                else -> ""
+            }
+            level >= 20 -> when (race) {
+                "Humano" -> "Espíritu Imperial (1ª EVOLUCIÓN): +20% de oro obtenido, +10% de golpe crítico, y recuperas un 8% de tu Vida Máxima al final de cada turno."
+                "Elfo" -> "Sabiduría Astral (1ª EVOLUCIÓN): +15% de golpe crítico, +25% de Maná Máximo, y reduce los costos de Maná en un 20%."
+                "Enano" -> "Escudo Rúnico (1ª EVOLUCIÓN): +20% de Vida Máxima, +15 de Defensa fija, y devuelves un 10% del daño recibido."
+                "Orco" -> "Devastación Sangrienta (1ª EVOLUCIÓN): +25% de daño total infligido, y tus ataques básicos te curan un 12% del daño causado."
+                else -> ""
+            }
+            else -> when (race) {
+                "Humano" -> "Determinación Humana (FASE BÁSICA): +10% de oro obtenido en combate y +5% de golpe crítico."
+                "Elfo" -> "Sentidos Élficos (FASE BÁSICA): +5% de golpe crítico y +10% de Maná Máximo."
+                "Enano" -> "Piel de Piedra (FASE BÁSICA): +10% de Vida Máxima y +5 de Defensa fija."
+                "Orco" -> "Furia Berserker (FASE BÁSICA): +10% de daño total infligido."
                 else -> ""
             }
         }
     }
 
     // --- DUNGEONS ENGINE ---
-    fun startDungeonRun(dungeonId: Int) {
+    fun startDungeonRun(dungeonId: Int, startFromStage: Int = 1) {
         val progress = _progressState.value ?: return
         val dungeon = DUNGEONS_LIST.find { it.id == dungeonId } ?: return
 
-        if (progress.charLevel < dungeon.levelReq) {
-            showNotification("¡Necesitas Nivel ${dungeon.levelReq} para desafiar el Calabozo de ${dungeon.species}!")
-            return
-        }
-
-        if (dungeonId > progress.highestUnlockedDungeon) {
-            showNotification("¡Debes conquistar el calabozo anterior para desbloquear este!")
-            return
-        }
+        val stageToStart = maxOf(1, minOf(10, startFromStage))
 
         _dungeonRunState.value = DungeonRunState(
             inDungeonRun = true,
             dungeonId = dungeonId,
-            currentStage = 1,
-            persistentHp = progress.currentHp,
-            persistentMp = progress.currentMp,
+            currentStage = stageToStart,
+            persistentHp = progress.maxHp,
+            persistentMp = progress.maxMp,
             stageVictoryPending = false,
             dungeonCompletedJustNow = false
         )
 
-        startDungeonStageCombat(dungeon, 1, progress.currentHp, progress.currentMp)
+        startDungeonStageCombat(dungeon, stageToStart, progress.maxHp, progress.maxMp)
     }
 
     fun advanceDungeonStage() {
@@ -2984,10 +3123,20 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             "⚔️ ${dungeon.subBosses.getOrElse(stage - 1) { "Subjefe de ${dungeon.species}" }}"
         }
 
+        val rarity = if (isFinalBoss) "UNIVERSAL" else if (stage >= 7) "LEGENDARY" else if (stage >= 4) "CHAMPION" else "ELITE"
+        val tierMultiplier = when (rarity) {
+            "UNIVERSAL" -> 81.0
+            "LEGENDARY" -> 27.0
+            "CHAMPION" -> 9.0
+            "ELITE" -> 3.0
+            else -> 1.0
+        }
+
         val levelScale = Math.pow(1.2, (dungeon.levelReq + stage).toDouble())
-        val enemyHp = if (isFinalBoss) (320 * baseMultiplier * levelScale * 1.5).toInt() else (100 * baseMultiplier * levelScale * 1.5).toInt()
-        val enemyAtk = if (isFinalBoss) (26 * baseMultiplier * levelScale * 1.5).toInt() else (13 * baseMultiplier * levelScale * 1.5).toInt()
-        val enemyDef = if (isFinalBoss) (20 * baseMultiplier * levelScale * 1.5).toInt() else (9 * baseMultiplier * levelScale * 1.5).toInt()
+        // Dungeon monsters are 5x stronger in stats as requested
+        val enemyHp = if (isFinalBoss) (120 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt() else (40 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt()
+        val enemyAtk = if (isFinalBoss) (12 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt() else (6 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt()
+        val enemyDef = if (isFinalBoss) (8 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt() else (4 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt()
 
         val enemy = Combatant(
             name = enemyName,
@@ -2999,7 +3148,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             defense = enemyDef,
             level = dungeon.levelReq + stage,
             isBoss = isFinalBoss,
-            rarity = if (isFinalBoss) "UNIVERSAL" else if (stage >= 7) "LEGENDARY" else "ELITE"
+            rarity = rarity
         )
 
         val stageTitle = if (isFinalBoss) "¡¡JEFE FINAL: ${dungeon.finalBossName.uppercase()}!!" else "Subjefe $stage/9 de ${dungeon.species}"
@@ -3050,7 +3199,7 @@ val DUNGEONS_LIST = listOf(
         id = 1,
         name = "Cavernas del Clan Goblin",
         species = "Goblins",
-        levelReq = 1,
+        levelReq = 20,
         finalBossName = "Hobgoblin",
         finalBossTitle = "Gran Warlord Hobgoblin",
         subBosses = listOf(
@@ -3080,7 +3229,7 @@ val DUNGEONS_LIST = listOf(
         id = 2,
         name = "Fortaleza Orqueta de Hierro",
         species = "Orcos",
-        levelReq = 10,
+        levelReq = 40,
         finalBossName = "Rey Orco",
         finalBossTitle = "Soberano Sangriento de la Horda",
         subBosses = listOf(
@@ -3108,7 +3257,7 @@ val DUNGEONS_LIST = listOf(
         id = 3,
         name = "Guarida de las Sombras",
         species = "Ladrones",
-        levelReq = 20,
+        levelReq = 60,
         finalBossName = "Ladrón Asesino",
         finalBossTitle = "Gran Maestro de la Guilda de las Sombras",
         subBosses = listOf(
@@ -3135,7 +3284,7 @@ val DUNGEONS_LIST = listOf(
         id = 4,
         name = "Colinas Ferales de las Bestias",
         species = "Hombres bestia",
-        levelReq = 30,
+        levelReq = 80,
         finalBossName = "Rey Lobo Fenrir",
         finalBossTitle = "Titán Primigenio de las Colinas",
         subBosses = listOf(
@@ -3163,7 +3312,7 @@ val DUNGEONS_LIST = listOf(
         id = 5,
         name = "Fosa Abisal de las Mareas",
         species = "Naga",
-        levelReq = 40,
+        levelReq = 100,
         finalBossName = "Rey del Océano Neptuno",
         finalBossTitle = "Emperador de las Profundidades",
         subBosses = listOf(
@@ -3191,7 +3340,7 @@ val DUNGEONS_LIST = listOf(
         id = 6,
         name = "Cripta Necrótica Sangrienta",
         species = "Muertos vivientes",
-        levelReq = 50,
+        levelReq = 120,
         finalBossName = "Vampiro de alto nivel",
         finalBossTitle = "Conde Sangriento Inmortal",
         subBosses = listOf(
@@ -3219,7 +3368,7 @@ val DUNGEONS_LIST = listOf(
         id = 7,
         name = "Santuario de las Almas Perdidas",
         species = "Espíritus",
-        levelReq = 60,
+        levelReq = 140,
         finalBossName = "Rey Necromancer",
         finalBossTitle = "Soberano Inmaterial del Infierno",
         subBosses = listOf(
@@ -3246,7 +3395,7 @@ val DUNGEONS_LIST = listOf(
         id = 8,
         name = "Templo Viperino Esmeralda",
         species = "Hombres serpiente",
-        levelReq = 70,
+        levelReq = 160,
         finalBossName = "Rey serpiente dragon",
         finalBossTitle = "Titán Viperino Primigenio",
         subBosses = listOf(
@@ -3273,7 +3422,7 @@ val DUNGEONS_LIST = listOf(
         id = 9,
         name = "Laberinto Cibernético Titanium",
         species = "Máquinas",
-        levelReq = 80,
+        levelReq = 180,
         finalBossName = "Igdrasil El cerebro de las máquinas",
         finalBossTitle = "Superinteligencia Sintética Titánica",
         subBosses = listOf(
@@ -3303,7 +3452,7 @@ val DUNGEONS_LIST = listOf(
         id = 10,
         name = "Abismo de la Calamidad",
         species = "Dragones",
-        levelReq = 90,
+        levelReq = 200,
         finalBossName = "Dragon Oscuro",
         finalBossTitle = "Emperador Supremo del Caos Inmemorial",
         subBosses = listOf(

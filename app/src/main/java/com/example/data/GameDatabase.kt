@@ -1,5 +1,6 @@
 package com.example.data
 
+import android.content.Context
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.PrimaryKey
@@ -51,6 +52,7 @@ data class GameProgress(
     val mapPointsClearedJson: String = "[]",
     val highestUnlockedDungeon: Int = 1,
     val completedDungeonsJson: String = "[]",
+    val dungeonCheckpointsJson: String = "{}",
     val currentX: Int = 0,
     val currentY: Int = 0,
     val hasAdvancedClass: Boolean = false,
@@ -95,33 +97,88 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun gameProgressDao(): GameProgressDao
 }
 
-class GameProgressRepository(private val dao: GameProgressDao) {
+class GameProgressRepository(
+    private val dao: GameProgressDao,
+    private val context: Context? = null
+) {
     val progressFlow: Flow<GameProgress?> = dao.getActiveGameProgress()
     val allCharactersFlow: Flow<List<GameProgress>> = dao.getAllGameProgress()
 
     suspend fun getProgress(): GameProgress? {
-        return dao.getActiveGameProgressSync()
+        val current = try {
+            dao.getActiveGameProgressSync()
+        } catch (e: Exception) {
+            null
+        }
+
+        if ((current == null || !current.hasActiveChar) && context != null) {
+            val backup = GameBackupManager.loadBackup(context)
+            if (backup != null && backup.hasActiveChar) {
+                try {
+                    dao.deactivateAllCharacters()
+                    val newId = dao.saveGameProgress(backup.copy(isActiveChar = true))
+                    return dao.getGameProgressById(newId.toInt()) ?: backup
+                } catch (e: Exception) {
+                    return backup
+                }
+            }
+        }
+        return current
     }
 
     suspend fun saveProgress(progress: GameProgress): Long {
-        return dao.saveGameProgress(progress)
+        val id = try {
+            dao.saveGameProgress(progress)
+        } catch (e: Exception) {
+            -1L
+        }
+        context?.let { ctx ->
+            if (progress.hasActiveChar) {
+                GameBackupManager.saveBackup(ctx, progress)
+            }
+        }
+        return id
+    }
+
+    suspend fun exportManualBackup(): Boolean {
+        if (context == null) return false
+        val current = getProgress() ?: return false
+        return GameBackupManager.saveBackup(context, current)
+    }
+
+    suspend fun restoreManualBackup(): GameProgress? {
+        if (context == null) return null
+        val backup = GameBackupManager.loadBackup(context) ?: return null
+        try {
+            dao.deactivateAllCharacters()
+            val newId = dao.saveGameProgress(backup.copy(id = 0, isActiveChar = true))
+            return dao.getGameProgressById(newId.toInt()) ?: backup
+        } catch (e: Exception) {
+            return backup
+        }
+    }
+
+    fun getBackupStatusText(): String {
+        return context?.let { GameBackupManager.getBackupInfo(it) } ?: "Copia de seguridad deshabilitada"
     }
 
     suspend fun deactivateAll() {
-        dao.deactivateAllCharacters()
+        try { dao.deactivateAllCharacters() } catch (_: Exception) {}
     }
 
     suspend fun setActive(id: Int) {
-        dao.deactivateAllCharacters()
-        dao.setActiveCharacter(id)
+        try {
+            dao.deactivateAllCharacters()
+            dao.setActiveCharacter(id)
+        } catch (_: Exception) {}
     }
 
     suspend fun deleteCharacter(id: Int) {
-        dao.deleteCharacterById(id)
+        try { dao.deleteCharacterById(id) } catch (_: Exception) {}
     }
 
     suspend fun deleteProgress() {
-        dao.clearGameProgress()
+        try { dao.clearGameProgress() } catch (_: Exception) {}
     }
 }
 

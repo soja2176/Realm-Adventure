@@ -23,12 +23,13 @@ class MainActivity : ComponentActivity() {
       AppDatabase::class.java,
       "eldoria_rpg.db"
     )
+    .fallbackToDestructiveMigrationOnDowngrade()
     .fallbackToDestructiveMigration()
     .build()
   }
 
   private val repository by lazy {
-    GameProgressRepository(database.gameProgressDao())
+    GameProgressRepository(database.gameProgressDao(), applicationContext)
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
