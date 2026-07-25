@@ -7,6 +7,9 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -96,6 +99,18 @@ fun getItemImageRes(imageResName: String, itemType: String): Int {
         "img_item_boots_1784658239207" -> R.drawable.img_item_boots_1784658239207
         "img_item_earring_1784658263366" -> R.drawable.img_item_earring_1784658263366
         "img_item_relic_1784658251007" -> R.drawable.img_item_relic_1784658251007
+        "img_pet_fenix_cosmico" -> R.drawable.img_pet_fenix_cosmico_1785007631115
+        "img_pet_dragon_sombras" -> R.drawable.img_pet_dragon_sombras_1785007642225
+        "img_pet_lobo_celestial" -> R.drawable.img_pet_lobo_celestial_1785007652368
+        "img_pet_gato_estelar" -> R.drawable.img_pet_gato_estelar_1785007661828
+        "img_pet_titan_cristal" -> R.drawable.img_pet_titan_cristal_1785007671322
+        "img_pet_grifo_dorado" -> R.drawable.img_pet_grifo_dorado_1785007680820
+        "img_pet_serpiente_astral" -> R.drawable.img_pet_serpiente_astral_1785007692823
+        "img_pet_behemoth_vacio" -> R.drawable.img_pet_behemoth_vacio_1785007703732
+        "img_food_bestial" -> R.drawable.img_food_bestial_1785008135868
+        "img_food_mistica" -> R.drawable.img_food_mistica_1785008148513
+        "img_food_dragon" -> R.drawable.img_food_dragon_1785008159001
+        "img_food_celestial" -> R.drawable.img_food_celestial_1785008169473
         else -> {
             when (itemType.uppercase()) {
                 "HELMET" -> R.drawable.img_item_helmet_1784658214656
@@ -2187,6 +2202,8 @@ fun ShopScreen(viewModel: GameViewModel) {
     var selectedTypeFilter by remember { mutableStateOf("Todos") }
     var selectedLevelFilter by remember { mutableStateOf("Todos") }
     var showMassSellConfirmation by remember { mutableStateOf(false) }
+    var buyingItemType by remember { mutableStateOf<String?>(null) }
+    var quantityText by remember { mutableStateOf("1") }
 
     val filteredInventory = remember(rawInventory, searchQuery, selectedRarityFilter, selectedTypeFilter, selectedLevelFilter) {
         filterInventory(rawInventory, selectedRarityFilter, selectedTypeFilter, selectedLevelFilter, searchQuery)
@@ -2298,7 +2315,10 @@ fun ShopScreen(viewModel: GameViewModel) {
             ) {
                 // Buy Potion Button
                 Button(
-                    onClick = { viewModel.buyPotion() },
+                    onClick = {
+                        quantityText = "1"
+                        buyingItemType = "POTION"
+                    },
                     colors = ButtonDefaults.buttonColors(containerColor = MedievalCardBg),
                     border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
                     shape = RoundedCornerShape(8.dp),
@@ -2347,55 +2367,112 @@ fun ShopScreen(viewModel: GameViewModel) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
-                border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.6f)),
-                shape = RoundedCornerShape(12.dp)
+                border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.5f)),
+                shape = RoundedCornerShape(10.dp)
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column(modifier = Modifier.padding(10.dp)) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween,
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Pets, "Comida de Mascota", tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Pets, "Comida de Mascota", tint = Color(0xFF00E5FF), modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Mercado de Alimento para Mascotas", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                            Text(
+                                "Alimento de Mascota",
+                                color = Color(0xFF00E5FF),
+                                fontWeight = FontWeight.ExtraBold,
+                                fontSize = 12.sp,
+                                maxLines = 1
+                            )
                         }
                         TextButton(
                             onClick = { viewModel.changeScreen(GameScreen.PET_SCREEN) },
-                            contentPadding = PaddingValues(0.dp)
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
                         ) {
-                            Text("Ir a Mascota 🐾", fontSize = 11.sp, color = MedievalGold)
+                            Text("Mascota 🐾", fontSize = 10.sp, color = MedievalGold, fontWeight = FontWeight.Bold)
                         }
                     }
 
-                    Spacer(modifier = Modifier.height(8.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    data class FoodItemUi(
+                        val type: String,
+                        val name: String,
+                        val cost: String,
+                        val bonus: String,
+                        val imgRes: String
+                    )
 
                     val foodList = listOf(
-                        Triple("BESTIAL", "Ración Bestial", "150 🪙 (+25 Sac, +100 EXP)"),
-                        Triple("MISTICA", "Galleta Mística", "500 🪙 (+50 Sac, +400 EXP)"),
-                        Triple("DRAGON", "Manjar Imperial", "2,000 🪙 (+80 Sac, +1.8K EXP)"),
-                        Triple("CELESTIAL", "Elixir Estelar", "8,000 🪙 (+100 Sac, +7K EXP)")
+                        FoodItemUi("BESTIAL", "Ración Bestial", "150 🪙", "+25 Sac • +100 EXP", "img_food_bestial"),
+                        FoodItemUi("MISTICA", "Galleta Mística", "500 🪙", "+50 Sac • +400 EXP", "img_food_mistica"),
+                        FoodItemUi("DRAGON", "Manjar Imperial", "2,000 🪙", "+80 Sac • +1.8K EXP", "img_food_dragon"),
+                        FoodItemUi("CELESTIAL", "Elixir Estelar", "8,000 🪙", "+100 Sac • +7K EXP", "img_food_celestial")
                     )
 
                     LazyRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        items(foodList) { (type, name, desc) ->
-                            Button(
-                                onClick = { viewModel.buyPetFood(type) },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1526)),
+                        items(foodList) { food ->
+                            Card(
+                                onClick = {
+                                    quantityText = "1"
+                                    buyingItemType = food.type
+                                },
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFF0C1322)),
                                 border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.4f)),
                                 shape = RoundedCornerShape(8.dp),
                                 modifier = Modifier
-                                    .width(150.dp)
-                                    .testTag("buy_pet_food_$type")
+                                    .width(110.dp)
+                                    .testTag("buy_pet_food_${food.type}")
                             ) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 4.dp)) {
-                                    Text("🍖 $name", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(desc, fontSize = 9.sp, color = MedievalGold, textAlign = TextAlign.Center)
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.Center,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(6.dp)
+                                ) {
+                                    val imgId = getItemImageRes(food.imgRes, "PET_FOOD")
+                                    Image(
+                                        painter = painterResource(id = imgId),
+                                        contentDescription = food.name,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .size(38.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .border(1.dp, MedievalGold.copy(alpha = 0.6f), RoundedCornerShape(6.dp))
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = food.name,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+                                    Text(
+                                        text = food.cost,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        color = MedievalGold,
+                                        textAlign = TextAlign.Center
+                                    )
+                                    Text(
+                                        text = food.bonus,
+                                        fontSize = 8.sp,
+                                        color = Color(0xFF00E5FF),
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
                                 }
                             }
                         }
@@ -2725,6 +2802,209 @@ fun ShopScreen(viewModel: GameViewModel) {
                 }
             }
         )
+    }
+
+    buyingItemType?.let { itemType ->
+        data class ShopItemSpec(
+            val title: String,
+            val unitCost: Int,
+            val description: String,
+            val isPotion: Boolean
+        )
+
+        val spec = when (itemType) {
+            "POTION" -> ShopItemSpec("Poción Rejuvenecedora", 40, "Restaura instantáneamente el 50% de HP y Maná en combate.", true)
+            "BESTIAL" -> ShopItemSpec("Ración de Carne Bestial", 150, "Alimento. +25 Saciedad, +100 EXP para tu mascota.", false)
+            "MISTICA" -> ShopItemSpec("Galleta Mística de Mascota", 500, "Alimento. +50 Saciedad, +400 EXP para tu mascota.", false)
+            "DRAGON" -> ShopItemSpec("Manjar Imperial de Dragón", 2000, "Alimento. +80 Saciedad, +1,800 EXP para tu mascota.", false)
+            else -> ShopItemSpec("Elixir Celestial Estelar", 8000, "Alimento. +100 Saciedad, +7,000 EXP para tu mascota.", false)
+        }
+
+        val currentQty = quantityText.toIntOrNull()?.coerceAtLeast(1) ?: 1
+        val totalCost = spec.unitCost.toLong() * currentQty
+        val userGold = p.charGold
+
+        Dialog(onDismissRequest = { buyingItemType = null }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(12.dp),
+                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                border = BorderStroke(1.5.dp, MedievalGold),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = "🛒 Comprar ${spec.title}",
+                        color = MedievalGold,
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 15.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = spec.description,
+                        color = Color.White.copy(alpha = 0.8f),
+                        fontSize = 11.sp,
+                        textAlign = TextAlign.Center
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Precio unitario: ${spec.unitCost} 🪙 de oro",
+                        color = MedievalGold,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Text(
+                        text = "Cantidad a comprar (Sin límite):",
+                        color = Color.White,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = {
+                                val current = quantityText.toIntOrNull() ?: 1
+                                if (current > 1) quantityText = (current - 1).toString()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1526)),
+                            border = BorderStroke(1.dp, MedievalGold),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                        ) {
+                            Text("-1", color = MedievalGold, fontWeight = FontWeight.Bold)
+                        }
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        OutlinedTextField(
+                            value = quantityText,
+                            onValueChange = { newValue ->
+                                if (newValue.all { it.isDigit() }) {
+                                    quantityText = newValue
+                                }
+                            },
+                            modifier = Modifier.width(100.dp),
+                            textStyle = TextStyle(color = Color.White, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center, fontSize = 14.sp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = MedievalGold,
+                                unfocusedBorderColor = Color.Gray,
+                                focusedContainerColor = Color.Black.copy(alpha = 0.5f),
+                                unfocusedContainerColor = Color.Black.copy(alpha = 0.5f)
+                            )
+                        )
+
+                        Spacer(modifier = Modifier.width(8.dp))
+
+                        Button(
+                            onClick = {
+                                val current = quantityText.toIntOrNull() ?: 1
+                                quantityText = (current + 1).toString()
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1526)),
+                            border = BorderStroke(1.dp, MedievalGold),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp)
+                        ) {
+                            Text("+1", color = MedievalGold, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        listOf(5, 10, 50, 100).forEach { qty ->
+                            Button(
+                                onClick = {
+                                    val current = quantityText.toIntOrNull() ?: 0
+                                    quantityText = (current + qty).toString()
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1526)),
+                                border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                                shape = RoundedCornerShape(6.dp),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("+$qty", fontSize = 9.sp, color = Color.White)
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                            .padding(8.dp)
+                    ) {
+                        Text(
+                            text = "Costo Total: $totalCost 🪙",
+                            color = MedievalGold,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 14.sp
+                        )
+                        Text(
+                            text = "Tu Oro: $userGold 🪙",
+                            color = if (userGold >= totalCost) MedievalXpGreen else MedievalCrimson,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = { buyingItemType = null },
+                            colors = ButtonDefaults.buttonColors(containerColor = MedievalCrimson),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("Cancelar", color = Color.White, fontSize = 11.sp)
+                        }
+
+                        Button(
+                            onClick = {
+                                if (spec.isPotion) {
+                                    viewModel.buyPotion(currentQty)
+                                } else {
+                                    viewModel.buyPetFood(itemType, currentQty)
+                                }
+                                buyingItemType = null
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                            enabled = userGold >= totalCost,
+                            modifier = Modifier.weight(1.2f)
+                        ) {
+                            Text("Comprar ($currentQty)", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -3610,6 +3890,51 @@ fun CombatScreen(viewModel: GameViewModel) {
                             }
                             Text(" ${combatState.playerCurrentMp}", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
                         }
+
+                        // Hero Equipped Pet Visual Badge
+                        val playerEquippedPet = remember(p.equippedPetJson) {
+                            GameJsonParser.fromJson<Item>(p.equippedPetJson)
+                        }
+                        if (playerEquippedPet != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+                                    .border(1.dp, Color(0xFF00E5FF).copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                val petImgRes = getItemImageRes(playerEquippedPet.imageResName, "PET")
+                                Image(
+                                    painter = painterResource(id = petImgRes),
+                                    contentDescription = playerEquippedPet.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .border(0.5.dp, MedievalGold, RoundedCornerShape(4.dp))
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Column {
+                                    Text(
+                                        text = "🐾 " + playerEquippedPet.name.split(" ").first(),
+                                        color = Color(0xFF00E5FF),
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "Niv. ${p.petLevel}",
+                                        color = MedievalGold,
+                                        fontSize = 7.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     // VS CENTER COLUMN
@@ -3784,6 +4109,49 @@ fun CombatScreen(viewModel: GameViewModel) {
                                 Box(modifier = Modifier.fillMaxHeight().fillMaxWidth(enemyHpPercent).background(MedievalCrimson))
                             }
                             Text(" ${enemy.currentHp}", color = Color.White, fontSize = 8.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        // Enemy Pet Visual Badge
+                        val enemyPet = enemy.pet
+                        if (enemyPet != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color.Black.copy(alpha = 0.8f), RoundedCornerShape(6.dp))
+                                    .border(1.dp, MedievalCrimson.copy(alpha = 0.7f), RoundedCornerShape(6.dp))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                val enemyPetImgRes = getItemImageRes(enemyPet.imageResName, "PET")
+                                Image(
+                                    painter = painterResource(id = enemyPetImgRes),
+                                    contentDescription = enemyPet.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(20.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .border(0.5.dp, MedievalCrimson, RoundedCornerShape(4.dp))
+                                )
+                                Spacer(modifier = Modifier.width(3.dp))
+                                Column {
+                                    Text(
+                                        text = "🐾 " + enemyPet.name.split(" ").first(),
+                                        color = MedievalCrimson,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "Niv. ${enemyPet.level}",
+                                        color = Color.White.copy(alpha = 0.8f),
+                                        fontSize = 7.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -7046,12 +7414,28 @@ fun PetScreen(viewModel: GameViewModel) {
                         modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        Button(
+                            onClick = { viewModel.autoTrainPet("ATTACK") },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("auto_train_master_btn")
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.Black, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("⚡ ENTRENAMIENTO AUTOMÁTICO COMPLETO", fontSize = 11.sp, color = Color.Black, fontWeight = FontWeight.ExtraBold)
+                            }
+                        }
+
                         PetTrainingRow(
                             title = "Furia Celestial (Ataque)",
                             costText = "$trainCost 🪙 • -10 Sac",
                             desc = "+${220 + petLevel * 25} EXP • Aumenta daño directo",
                             icon = Icons.Default.Bolt,
                             onTrainClick = { viewModel.trainPet("ATTACK") },
+                            onAutoTrainClick = { viewModel.autoTrainPet("ATTACK") },
                             testTag = "train_pet_attack"
                         )
                         PetTrainingRow(
@@ -7060,6 +7444,7 @@ fun PetScreen(viewModel: GameViewModel) {
                             desc = "+${220 + petLevel * 25} EXP • Aumenta resistencia",
                             icon = Icons.Default.Shield,
                             onTrainClick = { viewModel.trainPet("DEFENSE") },
+                            onAutoTrainClick = { viewModel.autoTrainPet("DEFENSE") },
                             testTag = "train_pet_defense"
                         )
                         PetTrainingRow(
@@ -7068,6 +7453,7 @@ fun PetScreen(viewModel: GameViewModel) {
                             desc = "+${220 + petLevel * 25} EXP • Aumenta curación en turno",
                             icon = Icons.Default.Favorite,
                             onTrainClick = { viewModel.trainPet("VITALITY") },
+                            onAutoTrainClick = { viewModel.autoTrainPet("VITALITY") },
                             testTag = "train_pet_vitality"
                         )
                     }
@@ -7258,6 +7644,7 @@ fun PetTrainingRow(
     desc: String,
     icon: ImageVector,
     onTrainClick: () -> Unit,
+    onAutoTrainClick: (() -> Unit)? = null,
     testTag: String
 ) {
     Row(
@@ -7277,14 +7664,31 @@ fun PetTrainingRow(
                 Text(costText, fontSize = 9.sp, color = MedievalGold)
             }
         }
-        Button(
-            onClick = onTrainClick,
-            colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
-            shape = RoundedCornerShape(6.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-            modifier = Modifier.testTag(testTag)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Entrenar", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+            Button(
+                onClick = onTrainClick,
+                colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                shape = RoundedCornerShape(6.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier.testTag(testTag)
+            ) {
+                Text("Entrenar", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+            }
+
+            if (onAutoTrainClick != null) {
+                Button(
+                    onClick = onAutoTrainClick,
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF00E5FF)),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                    modifier = Modifier.testTag("${testTag}_auto")
+                ) {
+                    Text("⚡ Auto", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.ExtraBold)
+                }
+            }
         }
     }
 }

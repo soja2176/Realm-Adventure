@@ -27,6 +27,13 @@ enum class GameScreen {
     HELP_SCREEN
 }
 
+data class EnemyPet(
+    val name: String,
+    val level: Int,
+    val attack: Int,
+    val imageResName: String
+)
+
 data class Combatant(
     val name: String,
     val maxHp: Int,
@@ -37,7 +44,8 @@ data class Combatant(
     val defense: Int,
     val level: Int,
     val isBoss: Boolean = false,
-    val rarity: String = "NORMAL" // "NORMAL", "ELITE", "BOSS"
+    val rarity: String = "NORMAL", // "NORMAL", "ELITE", "BOSS"
+    val pet: EnemyPet? = null
 )
 
 data class CombatState(
@@ -1344,6 +1352,39 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         selectTileAndExplore(targetTile)
     }
 
+    private fun generateEnemyPetIfNeeded(monsterLevel: Int, rarity: String, isBoss: Boolean): EnemyPet? {
+        val petChance = when {
+            isBoss || rarity == "UNIVERSAL" || rarity == "LEGENDARY" -> 100
+            rarity == "CHAMPION" -> 80
+            rarity == "ELITE" -> 55
+            else -> 35
+        }
+
+        if (Random.nextInt(100) >= petChance) return null
+
+        val enemyPetsPool = listOf(
+            Pair("Huargo de las Sombras", "img_pet_lobo_celestial"),
+            Pair("Draco de la Ciénaga", "img_pet_dragon_sombras"),
+            Pair("Gárgola de Obsidiana", "img_pet_titan_cristal"),
+            Pair("Búho Abisal", "img_pet_gato_estelar"),
+            Pair("Víbora de Sangre", "img_pet_serpiente_astral"),
+            Pair("Cachorro de Fénix Demoniaco", "img_pet_fenix_cosmico"),
+            Pair("Grifo Infernal", "img_pet_grifo_dorado"),
+            Pair("Behemoth Sombrío", "img_pet_behemoth_vacio")
+        )
+
+        val (petName, imgRes) = enemyPetsPool.random()
+        val petLevel = maxOf(1, monsterLevel + Random.nextInt(-1, 3))
+        val petAttack = maxOf(8, (petLevel * 3.2 + Random.nextInt(4, 12)).toInt())
+
+        return EnemyPet(
+            name = petName,
+            level = petLevel,
+            attack = petAttack,
+            imageResName = imgRes
+        )
+    }
+
     // --- COMBAT ENGINE ---
     private fun startCombat(tile: MapTile) {
         val progress = _progressState.value ?: return
@@ -1392,6 +1433,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val attack = (baseAtk * atkMult * (if (isBoss) 1.25 else 1.0)).toInt()
         val defense = (baseDef * defMult * (if (isBoss) 1.2 else 1.0)).toInt()
 
+        val enemyPet = generateEnemyPetIfNeeded(monsterLevel, rarity, isBoss)
+
         val enemy = Combatant(
             name = name,
             maxHp = hp,
@@ -1402,7 +1445,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             defense = defense,
             level = monsterLevel,
             isBoss = isBoss,
-            rarity = rarity
+            rarity = rarity,
+            pet = enemyPet
         )
 
         val tierLabel = when (rarity) {
@@ -1412,12 +1456,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             else -> "Un monstruo común"
         }
 
+        val petMsg = if (enemyPet != null) " acompañado por su mascota ${enemyPet.name} (Niv.${enemyPet.level})" else ""
+
         _combatState.value = CombatState(
             active = true,
             enemy = enemy,
             playerCurrentHp = progress.currentHp,
             playerCurrentMp = progress.currentMp,
-            combatLogs = listOf("¡Un salvaje ${enemy.name} (Nivel ${enemy.level}) bloquea tu camino! $tierLabel"),
+            combatLogs = listOf("¡Un salvaje ${enemy.name} (Nivel ${enemy.level})$petMsg bloquea tu camino! $tierLabel"),
             playerTurn = true,
             victory = null
         )
@@ -1503,6 +1549,36 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + orcHeal)
                     log += " ¡Tu sed de sangre orca te sana +$orcHeal HP!"
                 }
+            }
+
+            // Player's Pet Attack on Hero's turn
+            var updatedEnemyHp = newEnemyHp
+            val playerPet = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
+            if (playerPet != null && updatedEnemyHp > 0) {
+                val petWpn = GameJsonParser.fromJson<Item>(progress.petEquippedWeaponJson)
+                val petArm = GameJsonParser.fromJson<Item>(progress.petEquippedArmorJson)
+                val petAcc = GameJsonParser.fromJson<Item>(progress.petEquippedAccessoryJson)
+
+                val extraDmg = (petWpn?.dmgBonus ?: 0) + (petWpn?.strBonus ?: 0) + (petAcc?.strBonus ?: 0) + (petAcc?.intBonus ?: 0)
+                val extraHeal = (petArm?.defBonus ?: 0) + (petArm?.conBonus ?: 0) + (petAcc?.conBonus ?: 0) + (petAcc?.hpRegen ?: 0)
+
+                val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
+                val petDmg = ((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult).toInt().coerceAtLeast(20)
+                val petHeal = ((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult).toInt().coerceAtLeast(10)
+
+                updatedEnemyHp = maxOf(0, updatedEnemyHp - petDmg)
+                enemy.currentHp = updatedEnemyHp
+
+                val currentPetSatiety = maxOf(0, progress.petSatiety - 1)
+                currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + petHeal)
+
+                log += "\n🐾 [Mascota ${playerPet.name} Niv.${progress.petLevel}] ¡Ataca asestando +$petDmg de daño a ${enemy.name} y te cura +$petHeal HP!"
+
+                val progressWithSatiety = progress.copy(
+                    currentHp = currentPlayerHp,
+                    petSatiety = currentPetSatiety
+                )
+                repository.saveProgress(progressWithSatiety)
             }
 
             _combatState.value = currentCombat.copy(
@@ -1623,6 +1699,30 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 newAntiHealTurns = 3
                 val antiHealMsg = "🚫 ¡Aplicas [Anti-Curación]! Se bloquea la sanación enemiga por 3 turnos."
                 log = if (log.isEmpty()) antiHealMsg else "$log $antiHealMsg"
+            }
+
+            // Player's Pet Attack on Skill Turn
+            val playerPet = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
+            val enemyObj = currentCombat.enemy
+            if (playerPet != null && enemyObj != null && currentEnemyHp > 0) {
+                val petWpn = GameJsonParser.fromJson<Item>(progress.petEquippedWeaponJson)
+                val petArm = GameJsonParser.fromJson<Item>(progress.petEquippedArmorJson)
+                val petAcc = GameJsonParser.fromJson<Item>(progress.petEquippedAccessoryJson)
+
+                val extraDmg = (petWpn?.dmgBonus ?: 0) + (petWpn?.strBonus ?: 0) + (petAcc?.strBonus ?: 0) + (petAcc?.intBonus ?: 0)
+                val extraHeal = (petArm?.defBonus ?: 0) + (petArm?.conBonus ?: 0) + (petAcc?.conBonus ?: 0) + (petAcc?.hpRegen ?: 0)
+
+                val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
+                val petDmg = ((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult).toInt().coerceAtLeast(20)
+                val petHeal = ((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult).toInt().coerceAtLeast(10)
+
+                currentEnemyHp = maxOf(0, currentEnemyHp - petDmg)
+                enemyObj.currentHp = currentEnemyHp
+
+                val currentPetSatiety = maxOf(0, progress.petSatiety - 1)
+                currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + petHeal)
+
+                log += "\n🐾 [Mascota ${playerPet.name} Niv.${progress.petLevel}] ¡Ataca coordinadamente con tu habilidad asestando +$petDmg de daño y te cura +$petHeal HP!"
             }
 
             // Synchronize player health and mana to database
@@ -1892,6 +1992,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             var updatedLogMsg = logMsg
             if (afterHealHp > 0) {
                 updatedLogMsg += " ¡Regeneras +$regenHpVal HP y +$regenMpVal MP al inicio de tu turno!"
+            }
+
+            // Enemy Pet Attack on Enemy's turn
+            val enemyPet = enemy.pet
+            if (enemyPet != null && finalPlayerHp > 0) {
+                val enemyPetRawAtk = enemyPet.attack + Random.nextInt(-2, 4)
+                val enemyPetDmg = maxOf(3, enemyPetRawAtk - (playerDefense / 5))
+                finalPlayerHp = maxOf(0, finalPlayerHp - enemyPetDmg)
+                updatedLogMsg += "\n🐾 [Mascota Enemiga: ${enemyPet.name} Niv.${enemyPet.level}] ¡Ataca embistiendo e inflige $enemyPetDmg de daño!"
             }
 
             // Pet Combat Assistance Action
@@ -2263,14 +2372,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val baseStat = levelBase * multiplier
 
         val petsPool = listOf(
-            Triple("Fénix Cósmico de Flama Eterna", "Mascota Universal. Imbuida de llama celestial. En combate abrasa al enemigo con fuego sagrado y restaura tu vitalidad.", "img_item_wings_1784658202673"),
-            Triple("Dragón de Sombras Abisales", "Mascota Universal. Forjado en la noche insondable. Desata alientos espectrales devoradores de vida.", "img_item_relic_1784658251007"),
-            Triple("Lobo Celestial de las Estrellas", "Mascota Universal. Cazador sideral. Realiza embestidas furiosas que aumentan el impacto de tus golpes.", "img_item_earring_1784658263366"),
-            Triple("Gato Estelar Fortuna", "Mascota Universal. Felino sagrado que canaliza la suerte del universo, restaurando tu Salud y Maná.", "img_item_ring_1784593597914"),
-            Triple("Titán de Cristal Ancestral", "Mascota Universal. Coloso impenetrable. Absorbe el impacto de los golpes enemigos protegiéndote.", "img_item_shield_1784593608106"),
-            Triple("Grifo Dorado de Eldoria", "Mascota Universal. Majestuoso grifo real. Embiste al enemigo provocando aturdimiento y cortes rúnicos.", "img_item_relic_1784658251007"),
-            Triple("Serpiente Astral de Luz", "Mascota Universal. Criatura de polvo de estrellas. Envenena al enemigo causando daño mágico sostenido.", "img_item_staff_1784593558118"),
-            Triple("Behemoth del Vacío Infinito", "Mascota Universal. Bestia de fuerza devastadora. Aplasta a los enemigos con ondas de choque multidimensionales.", "img_item_plate_1784593577913")
+            Triple("Fénix Cósmico de Flama Eterna", "Mascota Universal. Imbuida de llama celestial. En combate abrasa al enemigo con fuego sagrado y restaura tu vitalidad.", "img_pet_fenix_cosmico"),
+            Triple("Dragón de Sombras Abisales", "Mascota Universal. Forjado en la noche insondable. Desata alientos espectrales devoradores de vida.", "img_pet_dragon_sombras"),
+            Triple("Lobo Celestial de las Estrellas", "Mascota Universal. Cazador sideral. Realiza embestidas furiosas que aumentan el impacto de tus golpes.", "img_pet_lobo_celestial"),
+            Triple("Gato Estelar Fortuna", "Mascota Universal. Felino sagrado que canaliza la suerte del universo, restaurando tu Salud y Maná.", "img_pet_gato_estelar"),
+            Triple("Titán de Cristal Ancestral", "Mascota Universal. Coloso impenetrable. Absorbe el impacto de los golpes enemigos protegiéndote.", "img_pet_titan_cristal"),
+            Triple("Grifo Dorado de Eldoria", "Mascota Universal. Majestuoso grifo real. Embiste al enemigo provocando aturdimiento y cortes rúnicos.", "img_pet_grifo_dorado"),
+            Triple("Serpiente Astral de Luz", "Mascota Universal. Criatura de polvo de estrellas. Envenena al enemigo causando daño mágico sostenido.", "img_pet_serpiente_astral"),
+            Triple("Behemoth del Vacío Infinito", "Mascota Universal. Bestia de fuerza devastadora. Aplasta a los enemigos con ondas de choque multidimensionales.", "img_pet_behemoth_vacio")
         )
 
         val selectedPet = petsPool.random(r)
@@ -2410,6 +2519,73 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
     }
 
+    fun autoTrainPet(trainType: String = "ATTACK") {
+        val progress = _progressState.value ?: return
+        val equippedPet = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
+        if (equippedPet == null) {
+            showNotification("¡Necesitas equipar una mascota para entrenarla!")
+            return
+        }
+
+        if (progress.petSatiety < 10) {
+            showNotification("¡${equippedPet.name} tiene demasiada hambre (<10 Saciedad)! Aliméntala primero.")
+            return
+        }
+
+        var currentGold = progress.charGold
+        var currentSatiety = progress.petSatiety
+        var currentExp = progress.petExp
+        var currentLevel = progress.petLevel
+        var totalTrainings = 0
+        var totalGoldSpent = 0
+
+        val trainTitle = when (trainType) {
+            "ATTACK" -> "Furia Celestial"
+            "DEFENSE" -> "Bastión Sagrado"
+            else -> "Vitalidad Inmortal"
+        }
+
+        while (currentSatiety >= 10) {
+            val cost = currentLevel * 50 + 50
+            if (currentGold < cost) break
+
+            currentGold -= cost
+            totalGoldSpent += cost
+            currentSatiety -= 10
+            val expGained = 220 + currentLevel * 25
+            currentExp += expGained
+            totalTrainings++
+
+            var reqExp = currentLevel * 150 + (currentLevel * currentLevel * 25)
+            while (currentExp >= reqExp) {
+                currentExp -= reqExp
+                currentLevel++
+                reqExp = currentLevel * 150 + (currentLevel * currentLevel * 25)
+            }
+        }
+
+        if (totalTrainings == 0) {
+            val cost = currentLevel * 50 + 50
+            if (progress.charGold < cost) {
+                showNotification("¡Necesitas al menos $cost 🪙 de oro para entrenar!")
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            SoundManager.playVictory()
+            val updated = progress.copy(
+                charGold = currentGold,
+                petSatiety = currentSatiety,
+                petExp = currentExp,
+                petLevel = currentLevel
+            )
+            val synced = syncMaxHpAndMp(updated)
+            repository.saveProgress(synced)
+            showNotification("⚡ Auto-Entrenamiento ($trainTitle): ¡Entrenaste $totalTrainings veces! Nivel actual: $currentLevel. (Oro: -$totalGoldSpent 🪙)")
+        }
+    }
+
     fun equipPetGear(item: Item, petSlot: String) {
         val progress = _progressState.value ?: return
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
@@ -2478,41 +2654,48 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
     }
 
-    fun buyPetFood(foodName: String) {
+    fun buyPetFood(foodName: String, quantity: Int = 1) {
         val progress = _progressState.value ?: return
+        val qty = quantity.coerceAtLeast(1)
         val spec = when (foodName) {
-            "BESTIAL" -> FoodSpec(150, 25, 100, "Ración de Carne Bestial", "img_mat_cuero")
-            "MISTICA" -> FoodSpec(500, 50, 400, "Galleta Mística de Mascota", "img_mat_hierro")
-            "DRAGON" -> FoodSpec(2000, 80, 1800, "Manjar Imperial de Dragón", "img_mat_oro")
-            else -> FoodSpec(8000, 100, 7000, "Elixir Celestial Estelar", "img_item_relic_1784658251007")
+            "BESTIAL" -> FoodSpec(150, 25, 100, "Ración de Carne Bestial", "img_food_bestial")
+            "MISTICA" -> FoodSpec(500, 50, 400, "Galleta Mística de Mascota", "img_food_mistica")
+            "DRAGON" -> FoodSpec(2000, 80, 1800, "Manjar Imperial de Dragón", "img_food_dragon")
+            else -> FoodSpec(8000, 100, 7000, "Elixir Celestial Estelar", "img_food_celestial")
         }
 
-        if (progress.charGold < spec.cost) {
-            showNotification("¡No tienes suficiente oro (${spec.cost} 🪙) para comprar ${spec.name}!")
+        val totalCost = spec.cost.toLong() * qty
+        if (progress.charGold < totalCost) {
+            showNotification("¡No tienes suficiente oro ($totalCost 🪙) para comprar $qty de ${spec.name}!")
             return
         }
 
-        val foodItem = Item(
-            id = "petfood_${System.currentTimeMillis()}_${Random.nextInt(1000)}",
-            name = spec.name,
-            type = "PET_FOOD",
-            rarity = if (spec.cost >= 2000) "LEGENDARIO" else "ÉPICO",
-            strBonus = spec.exp,
-            conBonus = spec.satiety,
-            description = "Alimento de Mascota. Otorga +${spec.satiety} Saciedad y +${spec.exp} EXP a tu mascota.",
-            imageResName = spec.img
-        )
-
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+        val now = System.currentTimeMillis()
+
+        for (i in 0 until qty) {
+            invList.add(
+                Item(
+                    id = "petfood_${now}_${i}_${Random.nextInt(1000)}",
+                    name = spec.name,
+                    type = "PET_FOOD",
+                    rarity = if (spec.cost >= 2000) "LEGENDARIO" else "ÉPICO",
+                    strBonus = spec.exp,
+                    conBonus = spec.satiety,
+                    description = "Alimento de Mascota. Otorga +${spec.satiety} Saciedad y +${spec.exp} EXP a tu mascota.",
+                    imageResName = spec.img
+                )
+            )
+        }
+
         viewModelScope.launch {
             SoundManager.playButtonClick()
-            invList.add(foodItem)
             val updatedProgress = progress.copy(
-                charGold = progress.charGold - spec.cost,
+                charGold = (progress.charGold - totalCost).toInt(),
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
             repository.saveProgress(updatedProgress)
-            showNotification("¡Compraste ${spec.name} por ${spec.cost} 🪙 de oro!")
+            showNotification("¡Compraste $qty de ${spec.name} por $totalCost 🪙 de oro!")
         }
     }
 
@@ -2979,33 +3162,40 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
     }
 
-    fun buyPotion() {
+    fun buyPotion(quantity: Int = 1) {
         val progress = _progressState.value ?: return
-        if (progress.charGold < 40) {
-            showNotification("¡No tienes suficiente oro! La poción cuesta 40 monedas.")
+        val qty = quantity.coerceAtLeast(1)
+        val totalCost = 40L * qty
+        if (progress.charGold < totalCost) {
+            showNotification("¡No tienes suficiente oro! $qty pociones cuestan $totalCost monedas.")
             return
         }
 
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+        val now = System.currentTimeMillis()
+
+        for (i in 0 until qty) {
+            invList.add(
+                Item(
+                    id = "potion_${now}_${i}_${Random.nextInt(1000)}",
+                    name = "Poción Rejuvenecedora",
+                    type = "POTION",
+                    rarity = "COMÚN",
+                    description = "Restaura instantáneamente el 50% de HP y Maná en combate.",
+                    itemLevel = 1,
+                    imageResName = "img_item_potion_1784593618142"
+                )
+            )
+        }
 
         viewModelScope.launch {
-            val potion = Item(
-                id = "potion_${System.currentTimeMillis()}",
-                name = "Poción Rejuvenecedora",
-                type = "POTION",
-                rarity = "COMÚN",
-                description = "Restaura instantáneamente el 50% de HP y Maná en combate.",
-                itemLevel = 1,
-                imageResName = "img_item_potion_1784593618142"
-            )
-            invList.add(potion)
-
+            SoundManager.playButtonClick()
             val updated = progress.copy(
-                charGold = progress.charGold - 40,
+                charGold = (progress.charGold - totalCost).toInt(),
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
             repository.saveProgress(updated)
-            showNotification("Compraste 1 Poción por 40 monedas de oro.")
+            showNotification("Compraste $qty Poción(es) por $totalCost monedas de oro.")
         }
     }
 
@@ -3495,6 +3685,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val enemyAtk = (baseAtk * atkMult * (if (isFinalBoss) 1.3 else 1.05)).toInt()
         val enemyDef = (baseDef * defMult * (if (isFinalBoss) 1.25 else 1.05)).toInt()
 
+        val enemyPet = generateEnemyPetIfNeeded(monsterLevel, rarity, isFinalBoss)
+
         val enemy = Combatant(
             name = enemyName,
             maxHp = enemyHp,
@@ -3505,7 +3697,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             defense = enemyDef,
             level = monsterLevel,
             isBoss = isFinalBoss,
-            rarity = rarity
+            rarity = rarity,
+            pet = enemyPet
         )
 
         val stageTitle = if (isFinalBoss) "¡¡JEFE FINAL: ${dungeon.finalBossName.uppercase()}!!" else "Subjefe $stage/9 de ${dungeon.species}"
