@@ -324,14 +324,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     init {
         viewModelScope.launch {
             repository.progressFlow.collect { progress ->
-                _progressState.value = progress
                 if (progress != null && progress.hasActiveChar) {
+                    val synced = syncMaxHpAndMp(progress)
+                    _progressState.value = synced
                     if (isFirstLoad) {
                         _screenState.value = GameScreen.WORLD_MAP
-                        generateMapAround(progress.currentX, progress.currentY, progress.mapPointsExploredJson, progress.mapPointsClearedJson)
+                        generateMapAround(synced.currentX, synced.currentY, synced.mapPointsExploredJson, synced.mapPointsClearedJson)
                         isFirstLoad = false
                     }
                 } else {
+                    _progressState.value = progress
                     _screenState.value = GameScreen.CREATING_CHARACTER
                     isFirstLoad = false
                 }
@@ -672,9 +674,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         viewModelScope.launch {
             repository.deactivateAll()
 
-            val maxHp = (_creatorCon.value * 25) + 20
-            val maxMp = _creatorInt.value * 6
-
             // Starter items based on class
             val starterWeapon = when (_creatorClass.value) {
                 "Guerrero" -> Item("w_start", "Espada de Madera", "WEAPON", "COMÚN", strBonus = 2, dmgBonus = 4, description = "Una espada simple tallada en pino.", itemLevel = 1, imageResName = "img_item_sword_1784593548868")
@@ -684,6 +683,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             }
 
             val starterArmor = Item("a_start", "Harapos de Viaje", "ARMOR", "COMÚN", conBonus = 1, defBonus = 2, description = "Prenda básica que cubre lo justo.", itemLevel = 1, imageResName = "img_item_plate_1784593577913")
+
+            val initialCon = _creatorCon.value + starterArmor.conBonus + starterWeapon.conBonus
+            val initialInt = _creatorInt.value + starterArmor.intBonus + starterWeapon.intBonus
+            val maxHp = (initialCon * 30) + 25 + 120
+            val maxMp = (initialInt * 10) + 5 + 50
 
             // Base skills preloaded
             val skillsList = getStarterSkills(_creatorClass.value)
@@ -1335,23 +1339,24 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val progress = _progressState.value ?: return
         val isBoss = tile.encounterType == "BOSS"
 
-        val monsterLevel = tile.levelRequirement
-        val baseMultiplier = 1.0 + (monsterLevel * 0.15)
+        // Map monsters scale relative to hero level: hero level up to hero level + 10 (random)
+        val extraLevels = Random.nextInt(0, 11)
+        val monsterLevel = maxOf(tile.levelRequirement, progress.charLevel + extraLevels)
 
         val roll = Random.nextInt(100)
         val rarity = when {
             isBoss -> "LEGENDARY"
-            roll >= 90 -> "CHAMPION"
-            roll >= 74 -> "ELITE"
+            roll >= 92 -> "CHAMPION"
+            roll >= 75 -> "ELITE"
             else -> "NORMAL"
         }
 
-        val tierMultiplier = when (rarity) {
-            "UNIVERSAL" -> 81.0
-            "LEGENDARY" -> 27.0
-            "CHAMPION" -> 9.0
-            "ELITE" -> 3.0
-            else -> 1.0
+        val (hpMult, atkMult, defMult) = when (rarity) {
+            "UNIVERSAL" -> Triple(3.8, 1.8, 1.55)
+            "LEGENDARY" -> Triple(2.8, 1.6, 1.45)
+            "CHAMPION" -> Triple(1.9, 1.4, 1.35)
+            "ELITE" -> Triple(1.4, 1.25, 1.2)
+            else -> Triple(1.0, 1.0, 1.0)
         }
 
         val kingdom = KingdomGenerator.getKingdomForCoords(tile.x, tile.y)
@@ -1364,13 +1369,18 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val name = when (rarity) {
             "CHAMPION" -> "👑 $baseName Campeón"
             "ELITE" -> "⭐ $baseName Élite"
+            "LEGENDARY" -> "🔥 $baseName Leyenda"
             else -> baseName
         }
 
-        val levelScale = Math.pow(1.2, monsterLevel.toDouble())
-        val hp = if (isBoss) (180 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt() else (70 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
-        val attack = if (isBoss) (15 * baseMultiplier * 1.5 * tierMultiplier * levelScale * 1.5).toInt() else (8 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
-        val defense = if (isBoss) (10 * baseMultiplier * 1.4 * tierMultiplier * levelScale * 1.5).toInt() else (4 * baseMultiplier * tierMultiplier * levelScale * 1.5).toInt()
+        // Balanced linear-quadratic formula (replaces brutal exponential Math.pow(1.2, level) & 81x)
+        val baseHp = 55.0 + (monsterLevel * 38.0) + (monsterLevel * monsterLevel * 0.85)
+        val baseAtk = 8.0 + (monsterLevel * 3.5) + (monsterLevel * 0.1)
+        val baseDef = 3.0 + (monsterLevel * 1.8)
+
+        val hp = (baseHp * hpMult * (if (isBoss) 1.5 else 1.0)).toInt()
+        val attack = (baseAtk * atkMult * (if (isBoss) 1.25 else 1.0)).toInt()
+        val defense = (baseDef * defMult * (if (isBoss) 1.2 else 1.0)).toInt()
 
         val enemy = Combatant(
             name = name,
@@ -2194,6 +2204,36 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         return items
     }
 
+    fun syncMaxHpAndMp(progress: GameProgress): GameProgress {
+        val equipped = getAllEquippedItems(progress)
+        val bonusCon = equipped.sumOf { it.conBonus }
+        val bonusInt = equipped.sumOf { it.intBonus }
+
+        val totalCon = progress.statCon + bonusCon
+        val totalInt = progress.statInt + bonusInt
+
+        val calculatedMaxHp = (totalCon * 30) + (progress.charLevel * 25) + 120
+        val calculatedMaxMp = (totalInt * 10) + (progress.charLevel * 5) + 50
+
+        val currentHpClamped = progress.currentHp.coerceAtMost(calculatedMaxHp)
+        val currentMpClamped = progress.currentMp.coerceAtMost(calculatedMaxMp)
+
+        if (calculatedMaxHp != progress.maxHp || calculatedMaxMp != progress.maxMp || progress.highestUnlockedDungeon < 10) {
+            val updated = progress.copy(
+                maxHp = calculatedMaxHp,
+                maxMp = calculatedMaxMp,
+                highestUnlockedDungeon = 10,
+                currentHp = if (progress.currentHp >= progress.maxHp || progress.currentHp <= 0) calculatedMaxHp else currentHpClamped,
+                currentMp = if (progress.currentMp >= progress.maxMp) calculatedMaxMp else currentMpClamped
+            )
+            viewModelScope.launch {
+                repository.saveProgress(updated)
+            }
+            return updated
+        }
+        return progress
+    }
+
     fun getHpRegenerationValue(progress: GameProgress): Int {
         val equipped = getAllEquippedItems(progress)
         val itemRegen = equipped.sumOf { it.hpRegen }
@@ -2455,9 +2495,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             }
         }
 
-        val finalProgress = updatedProgress.copy(
+        val finalProgress = syncMaxHpAndMp(updatedProgress.copy(
             inventoryJson = GameJsonParser.listToJson(invList)
-        )
+        ))
         return Pair(finalProgress, equippedNames)
     }
 
@@ -2539,9 +2579,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 }
             }
 
-            val finalProgress = updatedProgress.copy(
+            val finalProgress = syncMaxHpAndMp(updatedProgress.copy(
                 inventoryJson = GameJsonParser.listToJson(invList)
-            )
+            ))
             repository.saveProgress(finalProgress)
             showNotification("¡Equipaste exitosamente: ${item.name}!")
         }
@@ -2600,7 +2640,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             if (itemToStore != null) {
                 invList.add(itemToStore)
-                val finalProgress = updated.copy(inventoryJson = GameJsonParser.listToJson(invList))
+                val finalProgress = syncMaxHpAndMp(updated.copy(inventoryJson = GameJsonParser.listToJson(invList)))
                 repository.saveProgress(finalProgress)
                 showNotification("Desequipaste ${itemToStore.name} al inventario.")
             }
@@ -2850,7 +2890,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         viewModelScope.launch {
-            val updated = when (stat) {
+            val baseUpdated = when (stat) {
                 "STR" -> progress.copy(
                     statStr = progress.statStr + 1,
                     statPointsAvailable = progress.statPointsAvailable - 1
@@ -2859,23 +2899,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     statDex = progress.statDex + 1,
                     statPointsAvailable = progress.statPointsAvailable - 1
                 )
-                "INT" -> {
-                    val newInt = progress.statInt + 1
-                    progress.copy(
-                        statInt = newInt,
-                        maxMp = newInt * 6,
-                        statPointsAvailable = progress.statPointsAvailable - 1
-                    )
-                }
-                else -> { // CON
-                    val newCon = progress.statCon + 1
-                    progress.copy(
-                        statCon = newCon,
-                        maxHp = (newCon * 25) + (progress.charLevel * 20),
-                        statPointsAvailable = progress.statPointsAvailable - 1
-                    )
-                }
+                "INT" -> progress.copy(
+                    statInt = progress.statInt + 1,
+                    statPointsAvailable = progress.statPointsAvailable - 1
+                )
+                else -> progress.copy( // CON
+                    statCon = progress.statCon + 1,
+                    statPointsAvailable = progress.statPointsAvailable - 1
+                )
             }
+            val updated = syncMaxHpAndMp(baseUpdated)
             repository.saveProgress(updated)
             showNotification("¡Aumentaste tu ${stat} en +1!")
         }
@@ -2929,15 +2962,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val newMaxHp = (newCon * 25) + (currentProgress.charLevel * 20)
             val newMaxMp = newInt * 6
 
-            val updated = currentProgress.copy(
+            val baseUpdated = currentProgress.copy(
                 statStr = newStr,
                 statDex = newDex,
                 statInt = newInt,
                 statCon = newCon,
-                maxHp = newMaxHp,
-                maxMp = newMaxMp,
                 statPointsAvailable = 0
             )
+
+            val updated = syncMaxHpAndMp(baseUpdated)
 
             repository.saveProgress(updated)
             
@@ -3114,8 +3147,19 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         playerHp: Int,
         playerMp: Int
     ) {
+        val progress = _progressState.value
+        val heroLevel = progress?.charLevel ?: 1
+        val monsterLevel = maxOf(dungeon.levelReq + (stage / 2), heroLevel + (stage / 3))
+
         val isFinalBoss = stage == 10
-        val baseMultiplier = 1.0 + (dungeon.levelReq * 0.12) + (stage * 0.15)
+        val rarity = if (isFinalBoss) "UNIVERSAL" else if (stage >= 7) "LEGENDARY" else if (stage >= 4) "CHAMPION" else "ELITE"
+
+        val (hpMult, atkMult, defMult) = when (rarity) {
+            "UNIVERSAL" -> Triple(3.8, 1.8, 1.55)
+            "LEGENDARY" -> Triple(2.6, 1.55, 1.4)
+            "CHAMPION" -> Triple(1.8, 1.35, 1.25)
+            else -> Triple(1.3, 1.15, 1.15)
+        }
 
         val enemyName = if (isFinalBoss) {
             "🔥 ${dungeon.finalBossName}"
@@ -3123,20 +3167,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             "⚔️ ${dungeon.subBosses.getOrElse(stage - 1) { "Subjefe de ${dungeon.species}" }}"
         }
 
-        val rarity = if (isFinalBoss) "UNIVERSAL" else if (stage >= 7) "LEGENDARY" else if (stage >= 4) "CHAMPION" else "ELITE"
-        val tierMultiplier = when (rarity) {
-            "UNIVERSAL" -> 81.0
-            "LEGENDARY" -> 27.0
-            "CHAMPION" -> 9.0
-            "ELITE" -> 3.0
-            else -> 1.0
-        }
+        val baseHp = 65.0 + (monsterLevel * 42.0) + (monsterLevel * monsterLevel * 0.95)
+        val baseAtk = 9.0 + (monsterLevel * 3.8) + (monsterLevel * 0.1)
+        val baseDef = 4.0 + (monsterLevel * 2.0)
 
-        val levelScale = Math.pow(1.2, (dungeon.levelReq + stage).toDouble())
-        // Dungeon monsters are 5x stronger in stats as requested
-        val enemyHp = if (isFinalBoss) (120 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt() else (40 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt()
-        val enemyAtk = if (isFinalBoss) (12 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt() else (6 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt()
-        val enemyDef = if (isFinalBoss) (8 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt() else (4 * baseMultiplier * tierMultiplier * levelScale * 5.0).toInt()
+        val enemyHp = (baseHp * hpMult * (if (isFinalBoss) 1.6 else 1.1)).toInt()
+        val enemyAtk = (baseAtk * atkMult * (if (isFinalBoss) 1.3 else 1.05)).toInt()
+        val enemyDef = (baseDef * defMult * (if (isFinalBoss) 1.25 else 1.05)).toInt()
 
         val enemy = Combatant(
             name = enemyName,
@@ -3146,7 +3183,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             currentMp = 100,
             attack = enemyAtk,
             defense = enemyDef,
-            level = dungeon.levelReq + stage,
+            level = monsterLevel,
             isBoss = isFinalBoss,
             rarity = rarity
         )

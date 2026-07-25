@@ -6366,7 +6366,27 @@ fun DungeonScreen(viewModel: GameViewModel) {
                             fontWeight = FontWeight.Bold,
                             textAlign = TextAlign.Center
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(Color(0xFF0D2818))
+                                .border(1.dp, Color(0xFF4CAF50), RoundedCornerShape(8.dp))
+                                .padding(vertical = 6.dp, horizontal = 10.dp)
+                        ) {
+                            Text(
+                                text = "🔓 10/10 CALABOZOS DESBLOQUEADOS: ¡Acceso libre a todos los calabozos!",
+                                color = Color(0xFF81C784),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
 
                         Box(
                             modifier = Modifier
@@ -6434,19 +6454,35 @@ fun DungeonScreen(viewModel: GameViewModel) {
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color(0xFF2E2413))
-                                    .border(1.dp, MedievalGold, RoundedCornerShape(6.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            ) {
-                                Text(
-                                    text = "Nivel Enemigos: ${dungeon.levelReq}",
-                                    color = Color(0xFFFFE082),
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF0D2818))
+                                        .border(1.dp, Color(0xFF4CAF50), RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "🔓 DESBLOQUEADO",
+                                        color = Color(0xFF81C784),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color(0xFF2E2413))
+                                        .border(1.dp, MedievalGold, RoundedCornerShape(6.dp))
+                                        .padding(horizontal = 6.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        text = "Nivel: ${dungeon.levelReq}",
+                                        color = Color(0xFFFFE082),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
                             }
                         }
 

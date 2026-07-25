@@ -64,16 +64,27 @@ fun Item.withScaledStats(): Item {
         "WEAPON" -> {
             newDmg = maxOf(newDmg, minStatAllowed)
         }
-        "ARMOR", "HELMET", "SHIELD", "GLOVES", "BOOTS" -> {
+        "ARMOR" -> {
             newDef = maxOf(newDef, minStatAllowed)
+            newCon = maxOf(newCon, minStatAllowed)
+        }
+        "SHIELD" -> {
+            newDef = maxOf(newDef, minStatAllowed)
+            newCon = maxOf(newCon, (minStatAllowed * 0.8).toInt().coerceAtLeast(1))
+        }
+        "HELMET", "BOOTS", "GLOVES" -> {
+            newDef = maxOf(newDef, (minStatAllowed * 0.7).toInt().coerceAtLeast(1))
+            newCon = maxOf(newCon, (minStatAllowed * 0.6).toInt().coerceAtLeast(1))
         }
         "WINGS", "RELIC" -> {
             newDmg = maxOf(newDmg, minStatAllowed)
-            newDef = maxOf(newDef, (minStatAllowed * 0.8).toInt())
+            newDef = maxOf(newDef, (minStatAllowed * 0.8).toInt().coerceAtLeast(1))
+            newCon = maxOf(newCon, (minStatAllowed * 0.7).toInt().coerceAtLeast(1))
         }
         "RING", "EARRING" -> {
+            newCon = maxOf(newCon, (minStatAllowed * 0.6).toInt().coerceAtLeast(1))
             if (newHpRegen > 0) {
-                newHpRegen = maxOf(newHpRegen, (minStatAllowed * 0.4).toInt())
+                newHpRegen = maxOf(newHpRegen, (minStatAllowed * 0.4).toInt().coerceAtLeast(1))
             }
         }
     }

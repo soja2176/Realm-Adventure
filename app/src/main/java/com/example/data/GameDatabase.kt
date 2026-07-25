@@ -50,7 +50,7 @@ data class GameProgress(
     val completedQuestsJson: String = "[]",
     val mapPointsExploredJson: String = "[]",
     val mapPointsClearedJson: String = "[]",
-    val highestUnlockedDungeon: Int = 1,
+    val highestUnlockedDungeon: Int = 10,
     val completedDungeonsJson: String = "[]",
     val dungeonCheckpointsJson: String = "{}",
     val currentX: Int = 0,
