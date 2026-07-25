@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -106,6 +107,7 @@ fun getItemImageRes(imageResName: String, itemType: String): Int {
                 "RING" -> R.drawable.img_item_ring_1784593597914
                 "EARRING" -> R.drawable.img_item_earring_1784658263366
                 "RELIC" -> R.drawable.img_item_relic_1784658251007
+                "PET" -> R.drawable.img_item_relic_1784658251007
                 "SHIELD" -> R.drawable.img_item_shield_1784593608106
                 else -> R.drawable.img_item_potion_1784593618142
             }
@@ -445,6 +447,7 @@ fun EldoriaMainContainer(viewModel: GameViewModel) {
                 GameScreen.TALENTS -> TalentsScreen(viewModel)
                 GameScreen.INVENTORY -> InventoryScreen(viewModel)
                 GameScreen.SHOP -> ShopScreen(viewModel)
+                GameScreen.PET_SCREEN -> PetScreen(viewModel)
                 GameScreen.HELP_SCREEN -> HelpGuideScreen(onBack = { viewModel.changeScreen(GameScreen.WORLD_MAP) })
             }
 
@@ -584,7 +587,7 @@ fun GameTopHeader(progress: GameProgress, onHelpClick: () -> Unit) {
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("${progress.currentHp}/${progress.maxHp}", color = Color.White, fontSize = 8.sp, maxLines = 1)
+                    Text("${formatGameNumber(progress.currentHp)}/${formatGameNumber(progress.maxHp)}", color = Color.White, fontSize = 8.sp, maxLines = 1)
                 }
 
                 // MP Bar
@@ -606,7 +609,7 @@ fun GameTopHeader(progress: GameProgress, onHelpClick: () -> Unit) {
                         )
                     }
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("${progress.currentMp}/${progress.maxMp}", color = Color.White, fontSize = 8.sp, maxLines = 1)
+                    Text("${formatGameNumber(progress.currentMp)}/${formatGameNumber(progress.maxMp)}", color = Color.White, fontSize = 8.sp, maxLines = 1)
                 }
             }
 
@@ -624,7 +627,7 @@ fun GameTopHeader(progress: GameProgress, onHelpClick: () -> Unit) {
                     modifier = Modifier.size(16.dp)
                 )
                 Text(
-                    text = "${progress.charGold}",
+                    text = formatGameNumber(progress.charGold),
                     color = MedievalGold,
                     fontWeight = FontWeight.Bold,
                     fontSize = 13.sp,
@@ -704,6 +707,7 @@ fun GameBottomNav(currentScreen: GameScreen, onTabSelect: (GameScreen) -> Unit) 
         ) {
             val tabs = listOf(
                 Triple(GameScreen.CHARACTER_SCREEN, "Héroe", Icons.Default.Person),
+                Triple(GameScreen.PET_SCREEN, "Mascota", Icons.Default.Pets),
                 Triple(GameScreen.WORLD_MAP, "Mapa", Icons.Default.Map),
                 Triple(GameScreen.DUNGEON, "Dungeon", Icons.Default.Castle),
                 Triple(GameScreen.INVENTORY, "Inventario", Icons.Default.ShoppingBag),
@@ -1428,7 +1432,7 @@ fun SpecialMerchantDialog(merchantState: SpecialMerchantState, viewModel: GameVi
 
                                         Row(verticalAlignment = Alignment.CenterVertically) {
                                             Text(
-                                                text = "${itemSpec.originalPrice}",
+                                                text = formatGameNumber(itemSpec.originalPrice),
                                                 color = Color.Gray,
                                                 fontSize = 10.sp,
                                                 style = androidx.compose.ui.text.TextStyle(textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)
@@ -1436,7 +1440,7 @@ fun SpecialMerchantDialog(merchantState: SpecialMerchantState, viewModel: GameVi
                                             Spacer(modifier = Modifier.width(4.dp))
                                             Icon(Icons.Default.MonetizationOn, "Oro", tint = MedievalGold, modifier = Modifier.size(11.dp))
                                             Text(
-                                                text = " ${itemSpec.discountPrice}",
+                                                text = " ${formatGameNumber(itemSpec.discountPrice)}",
                                                 color = MedievalGold,
                                                 fontWeight = FontWeight.ExtraBold,
                                                 fontSize = 11.sp
@@ -2338,6 +2342,68 @@ fun ShopScreen(viewModel: GameViewModel) {
             }
         }
 
+        // Pet Food Section in Shop
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                border = BorderStroke(1.dp, Color(0xFF00E5FF).copy(alpha = 0.6f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Pets, "Comida de Mascota", tint = Color(0xFF00E5FF), modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Mercado de Alimento para Mascotas", color = Color(0xFF00E5FF), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                        }
+                        TextButton(
+                            onClick = { viewModel.changeScreen(GameScreen.PET_SCREEN) },
+                            contentPadding = PaddingValues(0.dp)
+                        ) {
+                            Text("Ir a Mascota 🐾", fontSize = 11.sp, color = MedievalGold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    val foodList = listOf(
+                        Triple("BESTIAL", "Ración Bestial", "150 🪙 (+25 Sac, +100 EXP)"),
+                        Triple("MISTICA", "Galleta Mística", "500 🪙 (+50 Sac, +400 EXP)"),
+                        Triple("DRAGON", "Manjar Imperial", "2,000 🪙 (+80 Sac, +1.8K EXP)"),
+                        Triple("CELESTIAL", "Elixir Estelar", "8,000 🪙 (+100 Sac, +7K EXP)")
+                    )
+
+                    LazyRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        items(foodList) { (type, name, desc) ->
+                            Button(
+                                onClick = { viewModel.buyPetFood(type) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1526)),
+                                border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.4f)),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier
+                                    .width(150.dp)
+                                    .testTag("buy_pet_food_$type")
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 4.dp)) {
+                                    Text("🍖 $name", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(desc, fontSize = 9.sp, color = MedievalGold, textAlign = TextAlign.Center)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // Buy Section Title
         item {
             Text(
@@ -2367,12 +2433,12 @@ fun ShopScreen(viewModel: GameViewModel) {
         } else {
             items(shopItems) { item ->
                 val cost = when (item.rarity.uppercase()) {
-                    "UNIVERSAL" -> 600
-                    "ARCANO" -> 450
-                    "LEGENDARIO", "LEGENDARY" -> 300
-                    "ÉPICO", "EPIC" -> 160
-                    "RARO", "RARE" -> 80
-                    else -> 30
+                    "UNIVERSAL" -> 12000 + (item.itemLevel * 300)
+                    "ARCANO" -> 7000 + (item.itemLevel * 200)
+                    "LEGENDARIO", "LEGENDARY" -> 4000 + (item.itemLevel * 150)
+                    "ÉPICO", "EPIC" -> 1000 + (item.itemLevel * 50)
+                    "RARO", "RARE" -> 350 + (item.itemLevel * 25)
+                    else -> 100 + (item.itemLevel * 10)
                 }
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
@@ -2493,7 +2559,7 @@ fun ShopScreen(viewModel: GameViewModel) {
                                 Text("Comprar", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 10.sp)
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Icon(Icons.Default.MonetizationOn, "Oro", tint = Color.Black, modifier = Modifier.size(11.dp))
-                                    Text(" $cost", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                                    Text(" ${formatGameNumber(cost)}", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 11.sp)
                                 }
                             }
                         }
@@ -3343,6 +3409,23 @@ fun CombatScreen(viewModel: GameViewModel) {
                             fontWeight = FontWeight.Medium,
                             maxLines = 1
                         )
+                        if (combatState.enemyAntiHealTurns > 0) {
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Box(
+                                modifier = Modifier
+                                    .background(MedievalCrimson.copy(alpha = 0.3f), RoundedCornerShape(3.dp))
+                                    .border(0.5.dp, MedievalCrimson, RoundedCornerShape(3.dp))
+                                    .padding(horizontal = 4.dp, vertical = 1.dp)
+                            ) {
+                                Text(
+                                    text = "🚫 Anti-Heal (${combatState.enemyAntiHealTurns}t)",
+                                    color = Color.Red,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 }
 
@@ -3355,7 +3438,7 @@ fun CombatScreen(viewModel: GameViewModel) {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text("HP ", color = MedievalCrimson, fontSize = 8.sp, fontWeight = FontWeight.Bold)
-                        Text("${enemy.currentHp}/${enemy.maxHp}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
+                        Text("${formatGameNumber(enemy.currentHp)}/${formatGameNumber(enemy.maxHp)}", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                     }
                     Spacer(modifier = Modifier.height(2.dp))
                     Box(
@@ -4108,7 +4191,7 @@ fun CharacterScreen(viewModel: GameViewModel) {
                     Spacer(modifier = Modifier.height(14.dp))
 
                     // EXP Bar (Unified & Full-Width for high visibility and legibility)
-                    val nextLvlExp = p.charLevel * 300
+                    val nextLvlExp = com.example.data.getRequiredExpForLevel(p.charLevel)
                     val expRatio = if (nextLvlExp > 0) (p.charExp.toFloat() / nextLvlExp).coerceIn(0f, 1f) else 0f
                     val expPercent = (expRatio * 100).toInt()
                     Column {
@@ -5425,6 +5508,7 @@ fun filterInventory(
             "Guantes" -> item.type == "GLOVES"
             "Botas" -> item.type == "BOOTS"
             "Anillos/Joyas" -> item.type in listOf("RING", "EARRING", "RELIC")
+            "Mascotas" -> item.type == "PET"
             "Pociones" -> item.type == "POTION"
             else -> true
         }
@@ -5658,7 +5742,7 @@ fun InventoryFilterBar(
                             modifier = Modifier.horizontalScroll(rememberScrollState()),
                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
-                            listOf("Todos", "Armas", "Pechera", "Escudo", "Casco", "Alas", "Guantes", "Botas", "Anillos/Joyas", "Pociones").forEach { option ->
+                            listOf("Todos", "Armas", "Pechera", "Escudo", "Casco", "Alas", "Guantes", "Botas", "Anillos/Joyas", "Mascotas", "Pociones").forEach { option ->
                                 FilterPill(
                                     label = option,
                                     isSelected = selectedType == option,
@@ -5725,6 +5809,7 @@ fun InventoryScreen(viewModel: GameViewModel) {
     val ring = GameJsonParser.fromJson<Item>(p.equippedRingJson)
     val earring = GameJsonParser.fromJson<Item>(p.equippedEarringJson)
     val relic = GameJsonParser.fromJson<Item>(p.equippedRelicJson)
+    val pet = GameJsonParser.fromJson<Item>(p.equippedPetJson)
 
     Column(
         modifier = Modifier
@@ -5801,13 +5886,14 @@ fun InventoryScreen(viewModel: GameViewModel) {
                     MuEquipmentSlot("Botas", "BOOTS", boots) { viewModel.unequipItem("BOOTS") }
                 }
 
-                // Row 4: Ring, Earring
+                // Row 4: Ring, Pet, Earring
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceEvenly,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     MuEquipmentSlot("Anillo", "RING", ring) { viewModel.unequipItem("RING") }
+                    MuEquipmentSlot("Mascota", "PET", pet) { viewModel.unequipItem("PET") }
                     MuEquipmentSlot("Pendientes", "EARRING", earring) { viewModel.unequipItem("EARRING") }
                 }
             }
@@ -6643,4 +6729,563 @@ fun DungeonScreen(viewModel: GameViewModel) {
             }
         }
     }
+
+@Composable
+fun PetScreen(viewModel: GameViewModel) {
+    val progress by viewModel.progressState.collectAsState()
+    val p = progress ?: return
+
+    val equippedPet = remember(p.equippedPetJson) {
+        GameJsonParser.fromJson<Item>(p.equippedPetJson)
+    }
+
+    val petWpn = remember(p.petEquippedWeaponJson) {
+        GameJsonParser.fromJson<Item>(p.petEquippedWeaponJson)
+    }
+
+    val petArm = remember(p.petEquippedArmorJson) {
+        GameJsonParser.fromJson<Item>(p.petEquippedArmorJson)
+    }
+
+    val petAcc = remember(p.petEquippedAccessoryJson) {
+        GameJsonParser.fromJson<Item>(p.petEquippedAccessoryJson)
+    }
+
+    val inventory = remember(p.inventoryJson) {
+        GameJsonParser.listFromJson<Item>(p.inventoryJson).filter { it.type != "EMPTY" }
+    }
+
+    val petFoodItems = remember(inventory) {
+        inventory.filter { it.type == "PET_FOOD" }
+    }
+
+    val ownedPets = remember(inventory) {
+        inventory.filter { it.type == "PET" }
+    }
+
+    var showEquipDialogForSlot by remember { mutableStateOf<String?>(null) }
+
+    val petLevel = p.petLevel
+    val petExp = p.petExp
+    val reqExp = petLevel * 150 + (petLevel * petLevel * 25)
+    val petSatiety = p.petSatiety
+
+    val baseDmg = equippedPet?.dmgBonus ?: 0
+    val baseDef = equippedPet?.defBonus ?: 0
+    val baseRegen = equippedPet?.hpRegen ?: 0
+
+    val wpnDmg = petWpn?.dmgBonus ?: 0
+    val armDef = petArm?.defBonus ?: 0
+    val accCon = petAcc?.conBonus ?: 0
+
+    val totalPetDmg = ((baseDmg + wpnDmg + p.charLevel * 6 + petLevel * 18 + (equippedPet?.strBonus ?: 0) * 0.5) * (if (petSatiety >= 50) 1.25f else if (petSatiety > 0) 1.0f else 0.6f)).toInt()
+    val totalPetHeal = ((baseRegen * 3 + armDef + accCon + petLevel * 8 + (equippedPet?.conBonus ?: 0) * 0.5) * (if (petSatiety >= 50) 1.25f else if (petSatiety > 0) 1.0f else 0.6f)).toInt()
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Top Header
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                border = BorderStroke(1.5.dp, MedievalGold),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (equippedPet != null) {
+                        val rarityColor = getRarityColor(equippedPet.rarity)
+                        Box(
+                            modifier = Modifier
+                                .size(100.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .border(3.dp, rarityColor, RoundedCornerShape(16.dp))
+                                .background(Color.Black.copy(alpha = 0.6f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Image(
+                                painter = painterResource(id = getItemImageRes(equippedPet.imageResName, equippedPet.type)),
+                                contentDescription = equippedPet.name,
+                                modifier = Modifier.size(80.dp),
+                                contentScale = ContentScale.Fit
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = equippedPet.name,
+                            color = MedievalGold,
+                            fontWeight = FontWeight.ExtraBold,
+                            fontSize = 18.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        Text(
+                            text = "${equippedPet.rarity.uppercase()} • Mascotas Ancestrales",
+                            color = rarityColor,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 11.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Level & Exp Bar
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("Nivel $petLevel", color = Color.White, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                            Text("$petExp / $reqExp EXP", color = MedievalGold, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { (petExp.toFloat() / reqExp.toFloat()).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = MedievalXpGreen,
+                            trackColor = Color.Black
+                        )
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Satiety Bar
+                        val satietyColor = when {
+                            petSatiety >= 50 -> MedievalXpGreen
+                            petSatiety >= 20 -> MedievalGold
+                            else -> MedievalCrimson
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("🍖 Saciedad: $petSatiety%", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                            val statusText = if (petSatiety >= 50) "Satisfecho (+25% Poder)" else if (petSatiety >= 20) "Normal" else "Hambriento (-40% Poder)"
+                            Text(statusText, color = satietyColor, fontWeight = FontWeight.ExtraBold, fontSize = 10.sp)
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        LinearProgressIndicator(
+                            progress = { (petSatiety.toFloat() / 100f).coerceIn(0f, 1f) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = satietyColor,
+                            trackColor = Color.Black
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Pet Stats Breakdown Grid
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🗡️ Ataque", fontSize = 10.sp, color = Color.Gray)
+                                Text("+$totalPetDmg", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MedievalGold)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("🛡️ Defensa", fontSize = 10.sp, color = Color.Gray)
+                                Text("+${baseDef + armDef}", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MedievalManaBlue)
+                            }
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("💖 Curación/Turno", fontSize = 10.sp, color = Color.Gray)
+                                Text("+$totalPetHeal HP", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = MedievalXpGreen)
+                            }
+                        }
+
+                    } else {
+                        Icon(Icons.Default.Pets, contentDescription = "Sin mascota", tint = Color.Gray, modifier = Modifier.size(54.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text("No tienes una mascota equipada", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Text("¡Las mascotas atacan a los enemigos y te curan en cada turno de combate!", color = Color.Gray, fontSize = 11.sp, textAlign = TextAlign.Center)
+                    }
+                }
+            }
+        }
+
+        // PET EQUIPMENT SLOTS
+        if (equippedPet != null) {
+            item {
+                Text(
+                    text = "🛡️ Equipamiento de Mascota",
+                    color = MedievalGold,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        PetSlotCard(
+                            label = "Arma",
+                            item = petWpn,
+                            defaultIcon = Icons.Default.Hardware,
+                            onSlotClick = {
+                                if (petWpn != null) viewModel.unequipPetGear("PET_WEAPON")
+                                else showEquipDialogForSlot = "PET_WEAPON"
+                            }
+                        )
+
+                        PetSlotCard(
+                            label = "Armadura",
+                            item = petArm,
+                            defaultIcon = Icons.Default.Shield,
+                            onSlotClick = {
+                                if (petArm != null) viewModel.unequipPetGear("PET_ARMOR")
+                                else showEquipDialogForSlot = "PET_ARMOR"
+                            }
+                        )
+
+                        PetSlotCard(
+                            label = "Accesorio",
+                            item = petAcc,
+                            defaultIcon = Icons.Default.Diamond,
+                            onSlotClick = {
+                                if (petAcc != null) viewModel.unequipPetGear("PET_ACCESSORY")
+                                else showEquipDialogForSlot = "PET_ACCESSORY"
+                            }
+                        )
+                    }
+                }
+            }
+
+            // FEED PET SECTION
+            item {
+                Text(
+                    text = "🍖 Alimentar Mascota (Comida en Inventario)",
+                    color = MedievalGold,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.4f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        if (petFoodItems.isEmpty()) {
+                            Text("No tienes alimentos en tu inventario.", color = Color.Gray, fontSize = 11.sp)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { viewModel.changeScreen(GameScreen.SHOP) },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1526)),
+                                border = BorderStroke(1.dp, MedievalGold),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.ShoppingCart, "Tienda", tint = MedievalGold, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Comprar Comida en la Tienda 🪙", fontSize = 11.sp, color = Color.White)
+                            }
+                        } else {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                items(petFoodItems) { food ->
+                                    Button(
+                                        onClick = { viewModel.feedPet(food) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0D1526)),
+                                        border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.6f)),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.testTag("feed_pet_item_${food.id}")
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("🍖 ${food.name}", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            Text("+${food.conBonus} Sac, +${food.strBonus} EXP", fontSize = 9.sp, color = MedievalXpGreen)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // TRAIN PET SECTION
+            item {
+                Text(
+                    text = "⚔️ Centro de Entrenamiento de Mascotas",
+                    color = MedievalGold,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp
+                )
+            }
+
+            item {
+                val trainCost = petLevel * 50 + 50
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                    border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.5f)),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        PetTrainingRow(
+                            title = "Furia Celestial (Ataque)",
+                            costText = "$trainCost 🪙 • -10 Sac",
+                            desc = "+${220 + petLevel * 25} EXP • Aumenta daño directo",
+                            icon = Icons.Default.Bolt,
+                            onTrainClick = { viewModel.trainPet("ATTACK") },
+                            testTag = "train_pet_attack"
+                        )
+                        PetTrainingRow(
+                            title = "Bastión Sagrado (Defensa)",
+                            costText = "$trainCost 🪙 • -10 Sac",
+                            desc = "+${220 + petLevel * 25} EXP • Aumenta resistencia",
+                            icon = Icons.Default.Shield,
+                            onTrainClick = { viewModel.trainPet("DEFENSE") },
+                            testTag = "train_pet_defense"
+                        )
+                        PetTrainingRow(
+                            title = "Vitalidad Inmortal (Salud)",
+                            costText = "$trainCost 🪙 • -10 Sac",
+                            desc = "+${220 + petLevel * 25} EXP • Aumenta curación en turno",
+                            icon = Icons.Default.Favorite,
+                            onTrainClick = { viewModel.trainPet("VITALITY") },
+                            testTag = "train_pet_vitality"
+                        )
+                    }
+                }
+            }
+        }
+
+        // SWITCH PET / OWNED PETS SECTION
+        item {
+            Text(
+                text = "🐾 Mascotas en Inventario",
+                color = MedievalGold,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+        }
+
+        item {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                border = BorderStroke(1.dp, MedievalGold.copy(alpha = 0.4f)),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    if (ownedPets.isEmpty()) {
+                        Text("No tienes otras mascotas en el inventario. ¡Derrota Jefes de Mazmorra para conseguir mascotas de grado Universal!", color = Color.Gray, fontSize = 11.sp)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            ownedPets.forEach { petItem ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                                        .padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Image(
+                                            painter = painterResource(id = getItemImageRes(petItem.imageResName, petItem.type)),
+                                            contentDescription = petItem.name,
+                                            modifier = Modifier.size(36.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Column {
+                                            Text(petItem.name, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = MedievalGold)
+                                            Text(petItem.rarity, fontSize = 10.sp, color = getRarityColor(petItem.rarity))
+                                        }
+                                    }
+                                    Button(
+                                        onClick = { viewModel.equipItem(petItem) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                                        shape = RoundedCornerShape(6.dp),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Equipar", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Equipment Selector Modal Dialog for Pet
+    showEquipDialogForSlot?.let { slot ->
+        val candidateItems = remember(inventory, slot) {
+            when (slot) {
+                "PET_WEAPON" -> inventory.filter { it.type in listOf("WEAPON", "STAFF") }
+                "PET_ARMOR" -> inventory.filter { it.type in listOf("ARMOR", "SHIELD", "HELMET", "GLOVES", "BOOTS") }
+                else -> inventory.filter { it.type in listOf("RING", "EARRING", "RELIC") }
+            }
+        }
+
+        Dialog(onDismissRequest = { showEquipDialogForSlot = null }) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                colors = CardDefaults.cardColors(containerColor = MedievalCardBg),
+                border = BorderStroke(1.5.dp, MedievalGold),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "Seleccionar ${if (slot == "PET_WEAPON") "Arma" else if (slot == "PET_ARMOR") "Armadura" else "Accesorio"} para Mascota",
+                        color = MedievalGold,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (candidateItems.isEmpty()) {
+                        Text("No tienes objetos de esta categoría en tu inventario.", color = Color.Gray, fontSize = 11.sp)
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.heightIn(max = 280.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            items(candidateItems) { item ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(Color.Black.copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                                        .padding(8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.name, color = MedievalGold, fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                        Text(item.getStatDescription(), color = Color.White.copy(alpha = 0.8f), fontSize = 9.sp)
+                                    }
+                                    Button(
+                                        onClick = {
+                                            viewModel.equipPetGear(item, slot)
+                                            showEquipDialogForSlot = null
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+                                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                    ) {
+                                        Text("Equipar", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { showEquipDialogForSlot = null },
+                        colors = ButtonDefaults.buttonColors(containerColor = MedievalCrimson),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Cerrar", color = Color.White)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PetSlotCard(
+    label: String,
+    item: Item?,
+    defaultIcon: ImageVector,
+    onSlotClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(label, fontSize = 11.sp, color = MedievalGold, fontWeight = FontWeight.Bold)
+        Spacer(modifier = Modifier.height(4.dp))
+        Box(
+            modifier = Modifier
+                .size(68.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .border(
+                    width = 1.5.dp,
+                    color = if (item != null) getRarityColor(item.rarity) else Color.Gray.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp)
+                )
+                .background(Color.Black.copy(alpha = 0.6f))
+                .clickable { onSlotClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            if (item != null) {
+                Image(
+                    painter = painterResource(id = getItemImageRes(item.imageResName, item.type)),
+                    contentDescription = item.name,
+                    modifier = Modifier.size(50.dp)
+                )
+            } else {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(defaultIcon, label, tint = Color.Gray, modifier = Modifier.size(24.dp))
+                    Text("+ Equipar", fontSize = 8.sp, color = Color.Gray)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PetTrainingRow(
+    title: String,
+    costText: String,
+    desc: String,
+    icon: ImageVector,
+    onTrainClick: () -> Unit,
+    testTag: String
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+            Icon(icon, title, tint = MedievalGold, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Column {
+                Text(title, fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                Text(desc, fontSize = 10.sp, color = MedievalXpGreen)
+                Text(costText, fontSize = 9.sp, color = MedievalGold)
+            }
+        }
+        Button(
+            onClick = onTrainClick,
+            colors = ButtonDefaults.buttonColors(containerColor = MedievalGold),
+            shape = RoundedCornerShape(6.dp),
+            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.testTag(testTag)
+        ) {
+            Text("Entrenar", fontSize = 10.sp, color = Color.Black, fontWeight = FontWeight.Bold)
+        }
+    }
+}
 

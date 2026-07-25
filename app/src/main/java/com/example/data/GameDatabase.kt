@@ -44,6 +44,13 @@ data class GameProgress(
     val equippedRingJson: String = "",
     val equippedEarringJson: String = "",
     val equippedRelicJson: String = "",
+    val equippedPetJson: String = "",
+    val petLevel: Int = 1,
+    val petExp: Int = 0,
+    val petSatiety: Int = 100,
+    val petEquippedWeaponJson: String = "",
+    val petEquippedArmorJson: String = "",
+    val petEquippedAccessoryJson: String = "",
     val inventoryJson: String = "[]",
     val talentsJson: String = "[]",
     val skillsJson: String = "[]",
@@ -92,7 +99,7 @@ interface GameProgressDao {
     suspend fun clearGameProgress()
 }
 
-@Database(entities = [GameProgress::class], version = 5, exportSchema = false)
+@Database(entities = [GameProgress::class], version = 7, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun gameProgressDao(): GameProgressDao
 }

@@ -23,6 +23,7 @@ enum class GameScreen {
     TALENTS,
     INVENTORY,
     SHOP,
+    PET_SCREEN,
     HELP_SCREEN
 }
 
@@ -52,6 +53,7 @@ data class CombatState(
     val lootDropped: Item? = null,
     val expGained: Int = 0,
     val goldGained: Int = 0,
+    val enemyAntiHealTurns: Int = 0,
     val activeAnimation: String? = null // "PLAYER_ATTACK", "PLAYER_HEAL", "PLAYER_MAGIC", "ENEMY_ATTACK", "ENEMY_SKILL", "PLAYER_POTION"
 )
 
@@ -421,7 +423,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     fun generateShopItems(level: Int) {
         val list = mutableListOf<Item>()
         for (i in 1..8) {
-            list.add(generateProceduralItem(level, isBoss = false))
+            val roll = Random.nextInt(100)
+            val rarity = when {
+                roll < 20 -> "ÉPICO"
+                roll < 60 -> "RARO"
+                else -> "COMÚN"
+            }
+            list.add(generateProceduralItem(level, isBoss = false, rarityPreset = rarity))
         }
         _shopItems.value = list
     }
@@ -461,12 +469,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
     fun calculateSellPrice(item: Item): Int {
         val basePrice = when (item.rarity.uppercase()) {
-            "LEGENDARY", "LEGENDARIO" -> 150
-            "EPIC", "ÉPICO" -> 80
-            "RARE", "RARO" -> 40
-            else -> 15
+            "UNIVERSAL" -> 3500
+            "ARCANO" -> 2000
+            "LEGENDARY", "LEGENDARIO" -> 1200
+            "EPIC", "ÉPICO" -> 350
+            "RARE", "RARO" -> 120
+            else -> 30
         }
-        return basePrice + (item.itemLevel * 3)
+        return basePrice + (item.itemLevel * 10)
     }
 
     fun sellItem(item: Item) {
@@ -723,6 +733,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 equippedRingJson = "",
                 equippedEarringJson = "",
                 equippedRelicJson = "",
+                equippedPetJson = "",
                 inventoryJson = "[]",
                 talentsJson = GameJsonParser.listToJson(talentsList),
                 skillsJson = GameJsonParser.listToJson(skillsList),
@@ -741,20 +752,20 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     private fun getStarterSkills(cls: String): List<Skill> {
         return when (cls) {
             "Guerrero" -> listOf(
-                Skill("g_1", "Golpe Feroz", "Un ataque de fuerza bruta que inflige 1.6x de daño físico.", manaCost = 10, minLevel = 1, damageMultiplier = 1.6),
+                Skill("g_1", "Golpe Sangriento", "Un ataque de fuerza bruta que inflige 1.6x de daño e inflige Herida Anti-Curación por 3 turnos (anula sanación enemiga).", manaCost = 10, minLevel = 1, damageMultiplier = 1.6, isAntiHeal = true),
                 Skill("g_2", "Grito de Provocación", "Intimida al enemigo, aumentando tu defensa en un 30%.", manaCost = 12, minLevel = 2, damageMultiplier = 0.0, healingMultiplier = 0.0)
             )
             "Mago" -> listOf(
-                Skill("m_1", "Centella", "Arroja una chispa arcana rápida que inflige 1.5x de daño mágico.", manaCost = 8, minLevel = 1, damageMultiplier = 1.5),
-                Skill("m_2", "Llama Sagrada", "Desata una explosión de fuego sagrado. Daño 2.2x.", manaCost = 18, minLevel = 3, damageMultiplier = 2.2)
+                Skill("m_1", "Centella Arcana", "Arroja una chispa arcana rápida que inflige 1.5x de daño mágico.", manaCost = 8, minLevel = 1, damageMultiplier = 1.5),
+                Skill("m_2", "Llama Necrótica", "Desata fuego maldito. Daño 2.2x e impida que el enemigo se cure durante 3 turnos (Anti-Curación).", manaCost = 18, minLevel = 3, damageMultiplier = 2.2, isAntiHeal = true)
             )
             "Pícaro" -> listOf(
-                Skill("p_1", "Puñalada", "Ataque rápido a puntos débiles. Daño 1.4x con alta probabilidad de crítico.", manaCost = 10, minLevel = 1, damageMultiplier = 1.4),
+                Skill("p_1", "Puñalada Venenosa", "Ataque veloz a puntos débiles. Daño 1.4x e infecta con Veneno Anti-Curación por 3 turnos.", manaCost = 10, minLevel = 1, damageMultiplier = 1.4, isAntiHeal = true),
                 Skill("p_2", "Ataque Sombrío", "Desaparece en las sombras e inflige 2.0x de daño sorpresa.", manaCost = 15, minLevel = 3, damageMultiplier = 2.0)
             )
             else -> listOf( // Clérigo
                 Skill("c_1", "Luz Sagrada", "Invoca el poder de los cielos para curar tus heridas.", manaCost = 12, minLevel = 1, damageMultiplier = 0.0, healingMultiplier = 1.8),
-                Skill("c_2", "Martillo de Justicia", "Golpea con fe pura, infligiendo 1.3x de daño y sanándote un 20%.", manaCost = 14, minLevel = 2, damageMultiplier = 1.3, healingMultiplier = 0.5)
+                Skill("c_2", "Martillo de Justicia", "Golpea con fe pura, infligiendo 1.3x de daño, sanándote 20% y sellando la curación enemiga por 3 turnos (Anti-Curación).", manaCost = 14, minLevel = 2, damageMultiplier = 1.3, healingMultiplier = 0.5, isAntiHeal = true)
             )
         }
     }
@@ -1225,15 +1236,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     val items = mutableListOf<SpecialMerchantItem>()
                     val kingdomTag = kingdom.name.replace("Reino de ", "")
                     for (i in 1..4) {
-                        val isLegendary = i == 1 && random.nextInt(100) < 60
-                        val item = generateProceduralItem(levelReq + 2, isBoss = isLegendary)
+                        val item = generateProceduralItem(levelReq + 2, isBoss = false, rarityPreset = "LEGENDARIO")
                         val kingdomItem = item.copy(
                             name = "${item.name} de $kingdomTag",
-                            rarity = if (isLegendary) "LEGENDARY" else if (i <= 2) "EPIC" else "RARE"
+                            rarity = "LEGENDARIO"
                         )
-                        val baseVal = getItemSellValue(kingdomItem) * 3
-                        val discount = random.nextInt(35, 65)
-                        val discountedPrice = maxOf(15, (baseVal * (100 - discount) / 100))
+                        val baseVal = 2500 + (levelReq * 120) + (i * 200)
+                        val discount = random.nextInt(10, 25)
+                        val discountedPrice = maxOf(1800, (baseVal * (100 - discount) / 100))
                         items.add(SpecialMerchantItem(kingdomItem, baseVal, discountedPrice, discount))
                     }
 
@@ -1241,10 +1251,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         active = true,
                         merchantName = merchantName,
                         kingdomName = kingdom.name,
-                        dialogue = "¡Saludos, noble guerrero! Traigo artefactos raros rescatados en las profundidades de ${kingdom.name}. ¡Hoy todo con descuento especial de la corona!",
+                        dialogue = "¡Saludos, noble viajero! Solo vendo reliquias de grado LEGENDARIO rescatadas en las zonas más peligrosas de ${kingdom.name}. Sus precios son elevados, reflejando su inmenso poder.",
                         items = items
                     )
-                    showNotification("¡Encontraste a $merchantName con ofertas de equipo exclusivo!")
+                    showNotification("¡Encontraste a $merchantName con reliquias LEGENDARIAS exclusivas!")
                 }
             }
             "MONSTER", "BOSS" -> {
@@ -1608,6 +1618,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 log = if (log.isEmpty()) healLog else "$log $healLog"
             }
 
+            var newAntiHealTurns = currentCombat.enemyAntiHealTurns
+            if (skill.isAntiHeal) {
+                newAntiHealTurns = 3
+                val antiHealMsg = "🚫 ¡Aplicas [Anti-Curación]! Se bloquea la sanación enemiga por 3 turnos."
+                log = if (log.isEmpty()) antiHealMsg else "$log $antiHealMsg"
+            }
+
             // Synchronize player health and mana to database
             val progressAfterSkill = progress.copy(
                 currentHp = currentPlayerHp,
@@ -1618,6 +1635,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             _combatState.value = currentCombat.copy(
                 playerCurrentHp = currentPlayerHp,
                 playerCurrentMp = newPlayerMp,
+                enemyAntiHealTurns = newAntiHealTurns,
                 playerTurn = false,
                 damageFeedbackEnemy = damageFeedbackEnemy,
                 damageFeedbackPlayer = damageFeedbackPlayer,
@@ -1745,58 +1763,67 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val skillChosen = availableSkills.random()
                 when (skillChosen) {
                     "ARMOR_PIERCE" -> {
-                        val rawDmg = (baseDmg * 1.6).toInt()
-                        finalDmg = maxOf(5, rawDmg)
+                        val rawDmg = (baseDmg * 2.2).toInt()
+                        finalDmg = maxOf(12, rawDmg) // DAÑO PURO: Ignores 100% armor!
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "${enemy.name} lanza [Perforación de Armadura] 🗡️ ¡Ignores tu defensa e inflige $finalDmg de daño directo!"
+                        logMsg = "${enemy.name} lanza [Perforación de Armadura] 🗡️💥 ¡DAÑO PURO! Atraviesa el 100% de tu armadura por $finalDmg de daño directo."
                         feedbackText = "-$finalDmg HP 🛡️❌"
                     }
                     "TRUE_STRIKE" -> {
-                        val rawDmg = (baseDmg * 1.8).toInt()
-                        finalDmg = maxOf(4, rawDmg - (playerDefense / 2))
+                        val rawDmg = (baseDmg * 2.0).toInt()
+                        finalDmg = maxOf(10, rawDmg) // DAÑO PURO e inesquivable!
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "${enemy.name} ejecuta [Golpe Certero Implacable] 👁️ ¡Ataque inesquivable! Te asesta $finalDmg de daño certero."
+                        logMsg = "${enemy.name} ejecuta [Golpe Certero Implacable] 👁️🎯 ¡DAÑO PURO inesquivable! Atraviesa tu defensa e inflige $finalDmg de daño certero."
                         feedbackText = "-$finalDmg HP 🎯"
                     }
                     "POISON" -> {
-                        val rawDmg = (baseDmg * 1.4).toInt()
-                        finalDmg = maxOf(3, rawDmg - (playerDefense / 3))
+                        val rawDmg = (baseDmg * 1.6).toInt() + (progress.maxHp * 0.05).toInt()
+                        finalDmg = maxOf(6, rawDmg - (playerDefense / 4))
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
                         mpDrained = 15
-                        logMsg = "${enemy.name} escupe [Veneno Corrosivo] 🧪 e inflige $finalDmg de daño tóxico y drena 15 MP."
+                        logMsg = "${enemy.name} escupe [Veneno Corrosivo] 🧪 e inflige $finalDmg de daño tóxico penetrante y drena 15 MP."
                         feedbackText = "-$finalDmg HP 🧪"
                     }
                     "FREEZE" -> {
-                        val rawDmg = (baseDmg * 1.5).toInt()
-                        finalDmg = maxOf(3, rawDmg - (playerDefense / 2))
+                        val rawDmg = (baseDmg * 1.7).toInt() + (progress.maxHp * 0.06).toInt()
+                        finalDmg = maxOf(6, rawDmg - (playerDefense / 3))
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
                         mpDrained = 25
                         logMsg = "${enemy.name} conjura [Congelación Arcana] ❄️ hiela tus venas por $finalDmg de daño y -25 MP."
                         feedbackText = "-$finalDmg HP ❄️"
                     }
                     "BLEED" -> {
-                        val extraBleed = (progress.maxHp * 0.05).toInt()
-                        val rawDmg = (baseDmg * 2.0).toInt() + extraBleed
-                        finalDmg = maxOf(8, rawDmg - (playerDefense / 2))
+                        val extraBleed = (progress.maxHp * 0.10).toInt()
+                        val rawDmg = (baseDmg * 2.2).toInt() + extraBleed
+                        finalDmg = maxOf(15, rawDmg - (playerDefense / 4))
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "${enemy.name} asesta un tajo de [Hemorragia Mortal] 🩸 infligiendo $finalDmg de daño profundo!"
+                        logMsg = "${enemy.name} asesta un tajo de [Hemorragia Mortal] 🩸 infligiendo $finalDmg de daño profundo que atraviesa armadura!"
                         feedbackText = "-$finalDmg HP 🩸"
                     }
                     "BOSS_FURY" -> {
-                        val rawDmg = (baseDmg * 2.8).toInt()
-                        finalDmg = maxOf(15, rawDmg)
+                        val trueDamagePart = (progress.maxHp * 0.18).toInt()
+                        val rawDmg = (baseDmg * 3.2).toInt() + trueDamagePart
+                        finalDmg = maxOf(30, rawDmg) // DAÑO PURO DE JEFE!
                         if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "🔥 ${enemy.name} desata su [IRA ABSOLUTA DE JEFE] ¡Un impacto catastrófico que causa $finalDmg de daño brutal!"
+                        logMsg = "🔥 ${enemy.name} desata su [IRA PURO DE JEFE] 💥 ¡Atraviesa tu armadura por $finalDmg de DAÑO PURO devastador!"
                         feedbackText = "-$finalDmg HP ⚡🔥"
                     }
                     "REGEN_SHIELD" -> {
-                        val healVal = (enemy.maxHp * 0.15).toInt()
-                        enemy.currentHp = minOf(enemy.maxHp, enemy.currentHp + healVal)
-                        val rawDmg = (baseDmg * 1.5).toInt()
-                        finalDmg = maxOf(2, rawDmg - (playerDefense / 2))
-                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "🖤 ${enemy.name} invoca [Escudo de Sangre], regenerando +$healVal HP y golpeando por $finalDmg de daño!"
-                        feedbackText = "-$finalDmg HP 🛡️🖤"
+                        if (currentCombat.enemyAntiHealTurns > 0) {
+                            val rawDmg = (baseDmg * 1.5).toInt()
+                            finalDmg = maxOf(4, rawDmg - (playerDefense / 2))
+                            if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                            logMsg = "🖤 ${enemy.name} intenta curarse con [Escudo de Sangre], pero 🚫 ¡la [Maldición Anti-Curación] anula su regeneración! Te golpea por $finalDmg daño."
+                            feedbackText = "-$finalDmg HP 🚫🖤"
+                        } else {
+                            val healVal = (enemy.maxHp * 0.18).toInt()
+                            enemy.currentHp = minOf(enemy.maxHp, enemy.currentHp + healVal)
+                            val rawDmg = (baseDmg * 1.5).toInt()
+                            finalDmg = maxOf(2, rawDmg - (playerDefense / 2))
+                            if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                            logMsg = "🖤 ${enemy.name} invoca [Escudo de Sangre], regenerando +$healVal HP y golpeando por $finalDmg de daño!"
+                            feedbackText = "-$finalDmg HP 🛡️🖤"
+                        }
                     }
                     else -> {
                         finalDmg = maxOf(1, baseDmg - (playerDefense / 2))
@@ -1859,7 +1886,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val regenHpVal = getHpRegenerationValue(progress)
             val regenMpVal = getMpRegenerationValue(progress)
             
-            val afterRegenHp = if (afterHealHp > 0) minOf(progress.maxHp, afterHealHp + regenHpVal) else 0
+            var finalPlayerHp = if (afterHealHp > 0) minOf(progress.maxHp, afterHealHp + regenHpVal) else 0
             val afterRegenMp = if (afterHealHp > 0) minOf(progress.maxMp, newPlayerMp + regenMpVal) else newPlayerMp
             
             var updatedLogMsg = logMsg
@@ -1867,16 +1894,43 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 updatedLogMsg += " ¡Regeneras +$regenHpVal HP y +$regenMpVal MP al inicio de tu turno!"
             }
 
+            // Pet Combat Assistance Action
+            val pet = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
+            var currentPetSatiety = progress.petSatiety
+            if (pet != null && enemyHpAfterReflect > 0 && finalPlayerHp > 0) {
+                val petWpn = GameJsonParser.fromJson<Item>(progress.petEquippedWeaponJson)
+                val petArm = GameJsonParser.fromJson<Item>(progress.petEquippedArmorJson)
+                val petAcc = GameJsonParser.fromJson<Item>(progress.petEquippedAccessoryJson)
+
+                val extraDmg = (petWpn?.dmgBonus ?: 0) + (petWpn?.strBonus ?: 0) + (petAcc?.strBonus ?: 0) + (petAcc?.intBonus ?: 0)
+                val extraHeal = (petArm?.defBonus ?: 0) + (petArm?.conBonus ?: 0) + (petAcc?.conBonus ?: 0) + (petAcc?.hpRegen ?: 0)
+
+                val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
+                val petDmg = ((pet.dmgBonus * 0.9 + progress.charLevel * 6 + progress.petLevel * 18 + pet.strBonus * 0.5 + extraDmg + Random.nextInt(15, 35)) * satietyMult).toInt().coerceAtLeast(35)
+                val petHeal = ((pet.hpRegen * 3 + progress.petLevel * 8 + pet.conBonus * 0.5 + extraHeal + Random.nextInt(10, 20)) * satietyMult).toInt().coerceAtLeast(15)
+
+                enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - petDmg)
+                enemy.currentHp = enemyHpAfterReflect
+
+                finalPlayerHp = minOf(progress.maxHp, finalPlayerHp + petHeal)
+                currentPetSatiety = maxOf(0, progress.petSatiety - 1)
+                updatedLogMsg += "\n🐾 [Mascota ${pet.name} Niv.${progress.petLevel}] ¡Ataca asestando $petDmg de daño a ${enemy.name} y te cura +$petHeal HP! (Saciedad: $currentPetSatiety%)"
+            }
+
             // Synchronize with database so stats screens and HUDs are updated
             val progressAfterEnemyTurn = progress.copy(
-                currentHp = afterRegenHp,
-                currentMp = afterRegenMp
+                currentHp = finalPlayerHp,
+                currentMp = afterRegenMp,
+                petSatiety = currentPetSatiety
             )
             repository.saveProgress(progressAfterEnemyTurn)
 
+            val nextAntiHeal = maxOf(0, currentCombat.enemyAntiHealTurns - 1)
+
             _combatState.value = currentCombat.copy(
-                playerCurrentHp = afterRegenHp,
+                playerCurrentHp = finalPlayerHp,
                 playerCurrentMp = afterRegenMp,
+                enemyAntiHealTurns = nextAntiHeal,
                 playerTurn = true,
                 damageFeedbackPlayer = feedbackText,
                 combatLogs = currentCombat.combatLogs + updatedLogMsg,
@@ -1899,15 +1953,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
         // Drop rates calibration
         val pLvl = maxOf(1, progress.charLevel)
-        val baseGoldReward = 100 * pLvl * enemy.level + (if (enemy.isBoss) 500 * pLvl else 0)
-        val baseExpReward = 100 * pLvl * enemy.level + (if (enemy.isBoss) 500 * pLvl else 0)
+        val baseGoldReward = 80 * pLvl * enemy.level + (if (enemy.isBoss) 400 * pLvl else 0)
+        val baseExpReward = 15 * enemy.level + (enemy.level * enemy.level * 2) + (if (enemy.isBoss) 120 * enemy.level else 0)
 
-        // Tier multipliers for rewards (scales with x3 rarity tiers)
+        // Tier multipliers for rewards
         val rewardMultiplier = when (enemy.rarity) {
-            "UNIVERSAL" -> 81.0
-            "LEGENDARY" -> 27.0
-            "CHAMPION" -> 9.0
-            "ELITE" -> 3.0
+            "UNIVERSAL" -> 12.0
+            "LEGENDARY" -> 7.0
+            "CHAMPION" -> 4.0
+            "ELITE" -> 2.2
             else -> 1.0
         }
 
@@ -1934,36 +1988,31 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val rareThreshold = epicThreshold - _dropRateRare.value
 
         var droppedItem: Item? = null
-        val shouldDrop = when (enemy.rarity) {
-            "LEGENDARY" -> true
-            "CHAMPION" -> Random.nextInt(100) < 85 // 85% chance
-            "ELITE" -> Random.nextInt(100) < 60 // 60% chance
-            else -> Random.nextInt(100) < 40 // 40% chance
-        }
+        val isBossEnemy = isBoss || enemy.isBoss || enemy.rarity == "BOSS" || enemy.rarity == "UNIVERSAL"
+        val isChampionOrElite = enemy.rarity == "CHAMPION" || enemy.rarity == "ELITE"
 
-        if (shouldDrop) {
-            val rarity = when (enemy.rarity) {
-                "LEGENDARY" -> if (Random.nextInt(100) < 50) "LEGENDARY" else "EPIC"
-                "CHAMPION" -> if (Random.nextInt(100) < 30) "LEGENDARY" else "EPIC"
-                "ELITE" -> {
-                    val r = Random.nextInt(100)
-                    when {
-                        r < 10 -> "LEGENDARY"
-                        r < 60 -> "EPIC"
-                        else -> "RARE"
-                    }
-                }
-                else -> {
-                    val roll = Random.nextInt(100)
-                    when {
-                        roll >= legendaryThreshold -> "LEGENDARY"
-                        roll >= epicThreshold -> "EPIC"
-                        roll >= rareThreshold -> "RARE"
-                        else -> "COMMON"
-                    }
-                }
+        if (isBossEnemy) {
+            // Jefes: drop 100% asegurado de grado UNIVERSAL (Mascotas o Equipos Universales)
+            if (Random.nextBoolean()) {
+                droppedItem = generateUniversalPet(enemy.level)
+            } else {
+                droppedItem = generateProceduralItem(enemy.level, isBoss = true, rarityPreset = "UNIVERSAL")
             }
-            droppedItem = generateProceduralItem(enemy.level, isBoss = isBoss, rarityPreset = rarity)
+        } else if (isChampionOrElite) {
+            // Campeones y Elites: drop 100% asegurado de grado LEGENDARIO
+            droppedItem = generateProceduralItem(enemy.level, isBoss = false, rarityPreset = "LEGENDARIO")
+        } else {
+            // Enemigos normales: 40% probabilidad de drop (COMÚN, RARO o ÉPICO)
+            val shouldDrop = Random.nextInt(100) < 40
+            if (shouldDrop) {
+                val roll = Random.nextInt(100)
+                val rarity = when {
+                    roll >= 85 -> "ÉPICO"
+                    roll >= 50 -> "RARO"
+                    else -> "COMÚN"
+                }
+                droppedItem = generateProceduralItem(enemy.level, isBoss = false, rarityPreset = rarity)
+            }
         }
 
         viewModelScope.launch {
@@ -1980,6 +2029,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 if (isFinalBoss && dungeon != null) {
                     finalDroppedItem = dungeon.uniqueTreasure
                     invList.add(finalDroppedItem)
+                    val dungeonPet = generateUniversalPet(enemy.level)
+                    invList.add(dungeonPet)
                 } else {
                     if (droppedItem != null) {
                         invList.add(droppedItem)
@@ -1993,7 +2044,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             var currentExp = progress.charExp + expReward
             var currentLevel = progress.charLevel
-            var nextLevelExp = currentLevel * 300
+            var nextLevelExp = getRequiredExpForLevel(currentLevel)
             var didLevelUp = false
             var addedStatPoints = 0
             var addedTalentPoints = 0
@@ -2008,7 +2059,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             while (currentExp >= nextLevelExp) {
                 currentExp -= nextLevelExp
                 currentLevel += 1
-                nextLevelExp = currentLevel * 300
+                nextLevelExp = getRequiredExpForLevel(currentLevel)
                 didLevelUp = true
                 addedStatPoints += 5
                 addedTalentPoints += 1
@@ -2163,27 +2214,24 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         if (!currentCombat.active || !currentCombat.playerTurn || currentCombat.victory != null) return
 
         viewModelScope.launch {
-            val success = Random.nextInt(100) < 55 // 55% flee chance
-            if (success) {
-                val progress = _progressState.value
-                if (progress != null) {
-                    repository.saveProgress(progress.copy(
-                        currentHp = currentCombat.playerCurrentHp,
-                        currentMp = currentCombat.playerCurrentMp
-                    ))
-                }
-                _combatState.value = currentCombat.copy(
-                    active = false,
-                    victory = false
-                )
-                showNotification("¡Lograste huir exitosamente!")
-                _screenState.value = GameScreen.WORLD_MAP
+            val progress = _progressState.value
+            if (progress != null) {
+                repository.saveProgress(progress.copy(
+                    currentHp = maxOf(1, currentCombat.playerCurrentHp),
+                    currentMp = currentCombat.playerCurrentMp
+                ))
+            }
+            val isDungeon = _dungeonRunState.value.inDungeonRun
+            _combatState.value = currentCombat.copy(
+                active = false,
+                victory = false
+            )
+            showNotification("🏃 ¡Huiste del combate exitosamente!")
+            if (isDungeon) {
+                _dungeonRunState.value = DungeonRunState(inDungeonRun = false)
+                _screenState.value = GameScreen.DUNGEON
             } else {
-                _combatState.value = currentCombat.copy(
-                    playerTurn = false,
-                    combatLogs = currentCombat.combatLogs + "Intentas huir pero el enemigo te bloquea el paso agresivamente."
-                )
-                executeEnemyTurn()
+                _screenState.value = GameScreen.WORLD_MAP
             }
         }
     }
@@ -2201,7 +2249,271 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         GameJsonParser.fromJson<Item>(progress.equippedRingJson)?.let { items.add(it.withScaledStats()) }
         GameJsonParser.fromJson<Item>(progress.equippedEarringJson)?.let { items.add(it.withScaledStats()) }
         GameJsonParser.fromJson<Item>(progress.equippedRelicJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.equippedPetJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.petEquippedWeaponJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.petEquippedArmorJson)?.let { items.add(it.withScaledStats()) }
+        GameJsonParser.fromJson<Item>(progress.petEquippedAccessoryJson)?.let { items.add(it.withScaledStats()) }
         return items
+    }
+
+    fun generateUniversalPet(itemLevel: Int): Item {
+        val r = Random.Default
+        val levelBase = maxOf(1, itemLevel)
+        val multiplier = getRarityMultiplier("UNIVERSAL")
+        val baseStat = levelBase * multiplier
+
+        val petsPool = listOf(
+            Triple("Fénix Cósmico de Flama Eterna", "Mascota Universal. Imbuida de llama celestial. En combate abrasa al enemigo con fuego sagrado y restaura tu vitalidad.", "img_item_wings_1784658202673"),
+            Triple("Dragón de Sombras Abisales", "Mascota Universal. Forjado en la noche insondable. Desata alientos espectrales devoradores de vida.", "img_item_relic_1784658251007"),
+            Triple("Lobo Celestial de las Estrellas", "Mascota Universal. Cazador sideral. Realiza embestidas furiosas que aumentan el impacto de tus golpes.", "img_item_earring_1784658263366"),
+            Triple("Gato Estelar Fortuna", "Mascota Universal. Felino sagrado que canaliza la suerte del universo, restaurando tu Salud y Maná.", "img_item_ring_1784593597914"),
+            Triple("Titán de Cristal Ancestral", "Mascota Universal. Coloso impenetrable. Absorbe el impacto de los golpes enemigos protegiéndote.", "img_item_shield_1784593608106"),
+            Triple("Grifo Dorado de Eldoria", "Mascota Universal. Majestuoso grifo real. Embiste al enemigo provocando aturdimiento y cortes rúnicos.", "img_item_relic_1784658251007"),
+            Triple("Serpiente Astral de Luz", "Mascota Universal. Criatura de polvo de estrellas. Envenena al enemigo causando daño mágico sostenido.", "img_item_staff_1784593558118"),
+            Triple("Behemoth del Vacío Infinito", "Mascota Universal. Bestia de fuerza devastadora. Aplasta a los enemigos con ondas de choque multidimensionales.", "img_item_plate_1784593577913")
+        )
+
+        val selectedPet = petsPool.random(r)
+        val s = (baseStat * 1.3).toInt() + r.nextInt(10, 30)
+        val d = (baseStat * 1.3).toInt() + r.nextInt(10, 30)
+        val i = (baseStat * 1.3).toInt() + r.nextInt(10, 30)
+        val c = (baseStat * 1.4).toInt() + r.nextInt(15, 35)
+        val dmg = (baseStat * 1.2).toInt() + r.nextInt(20, 50)
+        val def = (baseStat * 1.2).toInt() + r.nextInt(20, 50)
+        val hpReg = (baseStat * 0.5).toInt() + r.nextInt(5, 15)
+
+        return Item(
+            id = "pet_${System.currentTimeMillis()}_${r.nextInt(1000)}",
+            name = selectedPet.first,
+            type = "PET",
+            rarity = "UNIVERSAL",
+            strBonus = s,
+            dexBonus = d,
+            intBonus = i,
+            conBonus = c,
+            dmgBonus = dmg,
+            defBonus = def,
+            hpRegen = hpReg,
+            description = selectedPet.second,
+            itemLevel = levelBase,
+            imageResName = selectedPet.third
+        ).withScaledStats()
+    }
+
+    // --- PET MANAGEMENT & TRAINING SYSTEM ---
+    private data class FoodSpec(val cost: Int, val satiety: Int, val exp: Int, val name: String, val img: String)
+
+    fun feedPet(foodItem: Item) {
+        val progress = _progressState.value ?: return
+        val equippedPet = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
+        if (equippedPet == null) {
+            showNotification("¡Debes equipar una mascota primero para alimentarla!")
+            return
+        }
+
+        val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+        val foodIndex = invList.indexOfFirst { it.id == foodItem.id }
+        if (foodIndex == -1) return
+        invList.removeAt(foodIndex)
+
+        val satietyGained = if (foodItem.conBonus > 0) foodItem.conBonus else 30
+        val expGained = if (foodItem.strBonus > 0) foodItem.strBonus else 150
+
+        val newSatiety = minOf(100, progress.petSatiety + satietyGained)
+        var newExp = progress.petExp + expGained
+        var newLevel = progress.petLevel
+
+        var requiredExp = newLevel * 150 + (newLevel * newLevel * 25)
+        var leveledUp = false
+
+        while (newExp >= requiredExp) {
+            newExp -= requiredExp
+            newLevel++
+            requiredExp = newLevel * 150 + (newLevel * newLevel * 25)
+            leveledUp = true
+        }
+
+        viewModelScope.launch {
+            SoundManager.playHealPotion()
+            val updated = progress.copy(
+                petSatiety = newSatiety,
+                petExp = newExp,
+                petLevel = newLevel,
+                inventoryJson = GameJsonParser.listToJson(invList)
+            )
+            val synced = syncMaxHpAndMp(updated)
+            repository.saveProgress(synced)
+
+            if (leveledUp) {
+                showNotification("🍖 Alimentaste a ${equippedPet.name}. ¡Salió un destello divino y SUBIÓ AL NIVEL $newLevel!")
+            } else {
+                showNotification("🍖 Alimentaste a ${equippedPet.name}. +$satietyGained Saciedad, +$expGained EXP.")
+            }
+        }
+    }
+
+    fun trainPet(trainType: String) {
+        val progress = _progressState.value ?: return
+        val equippedPet = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
+        if (equippedPet == null) {
+            showNotification("¡Debes equipar una mascota para entrenarla!")
+            return
+        }
+
+        if (progress.petSatiety < 10) {
+            showNotification("¡${equippedPet.name} tiene demasiada hambre (<10 Saciedad)! Aliméntala antes de entrenar.")
+            return
+        }
+
+        val cost = progress.petLevel * 50 + 50
+        if (progress.charGold < cost) {
+            showNotification("¡Necesitas $cost 🪙 monedas de oro para este entrenamiento!")
+            return
+        }
+
+        val (trainTitle, expGained) = when (trainType) {
+            "ATTACK" -> Pair("Entrenamiento de Furia Celestial", 220 + progress.petLevel * 25)
+            "DEFENSE" -> Pair("Entrenamiento Bastión Sagrado", 220 + progress.petLevel * 25)
+            else -> Pair("Entrenamiento Vitalidad Inmortal", 220 + progress.petLevel * 25)
+        }
+
+        val newSatiety = maxOf(0, progress.petSatiety - 10)
+        var newExp = progress.petExp + expGained
+        var newLevel = progress.petLevel
+        var requiredExp = newLevel * 150 + (newLevel * newLevel * 25)
+        var leveledUp = false
+
+        while (newExp >= requiredExp) {
+            newExp -= requiredExp
+            newLevel++
+            requiredExp = newLevel * 150 + (newLevel * newLevel * 25)
+            leveledUp = true
+        }
+
+        viewModelScope.launch {
+            SoundManager.playButtonClick()
+            val updated = progress.copy(
+                charGold = progress.charGold - cost,
+                petSatiety = newSatiety,
+                petExp = newExp,
+                petLevel = newLevel
+            )
+            val synced = syncMaxHpAndMp(updated)
+            repository.saveProgress(synced)
+
+            if (leveledUp) {
+                SoundManager.playVictory()
+                showNotification("⚔️ $trainTitle completado. ¡${equippedPet.name} SUBIÓ AL NIVEL $newLevel!")
+            } else {
+                showNotification("⚔️ $trainTitle completado. +$expGained EXP, -10 Saciedad.")
+            }
+        }
+    }
+
+    fun equipPetGear(item: Item, petSlot: String) {
+        val progress = _progressState.value ?: return
+        val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+
+        val itemIndex = invList.indexOfFirst { it.id == item.id }
+        if (itemIndex != -1) {
+            invList.removeAt(itemIndex)
+        }
+
+        var updated = progress
+        when (petSlot) {
+            "PET_WEAPON" -> {
+                val oldItem = GameJsonParser.fromJson<Item>(progress.petEquippedWeaponJson)
+                if (oldItem != null) invList.add(oldItem)
+                updated = updated.copy(petEquippedWeaponJson = GameJsonParser.toJson(item))
+            }
+            "PET_ARMOR" -> {
+                val oldItem = GameJsonParser.fromJson<Item>(progress.petEquippedArmorJson)
+                if (oldItem != null) invList.add(oldItem)
+                updated = updated.copy(petEquippedArmorJson = GameJsonParser.toJson(item))
+            }
+            "PET_ACCESSORY" -> {
+                val oldItem = GameJsonParser.fromJson<Item>(progress.petEquippedAccessoryJson)
+                if (oldItem != null) invList.add(oldItem)
+                updated = updated.copy(petEquippedAccessoryJson = GameJsonParser.toJson(item))
+            }
+        }
+
+        viewModelScope.launch {
+            SoundManager.playButtonClick()
+            val finalProgress = syncMaxHpAndMp(updated.copy(inventoryJson = GameJsonParser.listToJson(invList)))
+            repository.saveProgress(finalProgress)
+            showNotification("¡Equipaste ${item.name} a tu mascota!")
+        }
+    }
+
+    fun unequipPetGear(petSlot: String) {
+        val progress = _progressState.value ?: return
+        val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+        var itemToReturn: Item? = null
+        var updated = progress
+
+        when (petSlot) {
+            "PET_WEAPON" -> {
+                itemToReturn = GameJsonParser.fromJson<Item>(progress.petEquippedWeaponJson)
+                updated = updated.copy(petEquippedWeaponJson = "")
+            }
+            "PET_ARMOR" -> {
+                itemToReturn = GameJsonParser.fromJson<Item>(progress.petEquippedArmorJson)
+                updated = updated.copy(petEquippedArmorJson = "")
+            }
+            "PET_ACCESSORY" -> {
+                itemToReturn = GameJsonParser.fromJson<Item>(progress.petEquippedAccessoryJson)
+                updated = updated.copy(petEquippedAccessoryJson = "")
+            }
+        }
+
+        if (itemToReturn != null) {
+            invList.add(itemToReturn)
+            viewModelScope.launch {
+                SoundManager.playButtonClick()
+                val finalProgress = syncMaxHpAndMp(updated.copy(inventoryJson = GameJsonParser.listToJson(invList)))
+                repository.saveProgress(finalProgress)
+                showNotification("¡Desequipaste ${itemToReturn.name} de tu mascota!")
+            }
+        }
+    }
+
+    fun buyPetFood(foodName: String) {
+        val progress = _progressState.value ?: return
+        val spec = when (foodName) {
+            "BESTIAL" -> FoodSpec(150, 25, 100, "Ración de Carne Bestial", "img_mat_cuero")
+            "MISTICA" -> FoodSpec(500, 50, 400, "Galleta Mística de Mascota", "img_mat_hierro")
+            "DRAGON" -> FoodSpec(2000, 80, 1800, "Manjar Imperial de Dragón", "img_mat_oro")
+            else -> FoodSpec(8000, 100, 7000, "Elixir Celestial Estelar", "img_item_relic_1784658251007")
+        }
+
+        if (progress.charGold < spec.cost) {
+            showNotification("¡No tienes suficiente oro (${spec.cost} 🪙) para comprar ${spec.name}!")
+            return
+        }
+
+        val foodItem = Item(
+            id = "petfood_${System.currentTimeMillis()}_${Random.nextInt(1000)}",
+            name = spec.name,
+            type = "PET_FOOD",
+            rarity = if (spec.cost >= 2000) "LEGENDARIO" else "ÉPICO",
+            strBonus = spec.exp,
+            conBonus = spec.satiety,
+            description = "Alimento de Mascota. Otorga +${spec.satiety} Saciedad y +${spec.exp} EXP a tu mascota.",
+            imageResName = spec.img
+        )
+
+        val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+        viewModelScope.launch {
+            SoundManager.playButtonClick()
+            invList.add(foodItem)
+            val updatedProgress = progress.copy(
+                charGold = progress.charGold - spec.cost,
+                inventoryJson = GameJsonParser.listToJson(invList)
+            )
+            repository.saveProgress(updatedProgress)
+            showNotification("¡Compraste ${spec.name} por ${spec.cost} 🪙 de oro!")
+        }
     }
 
     fun syncMaxHpAndMp(progress: GameProgress): GameProgress {
@@ -2218,11 +2530,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val currentHpClamped = progress.currentHp.coerceAtMost(calculatedMaxHp)
         val currentMpClamped = progress.currentMp.coerceAtMost(calculatedMaxMp)
 
-        if (calculatedMaxHp != progress.maxHp || calculatedMaxMp != progress.maxMp || progress.highestUnlockedDungeon < 10) {
+        if (calculatedMaxHp != progress.maxHp || calculatedMaxMp != progress.maxMp || progress.highestUnlockedDungeon < 16) {
             val updated = progress.copy(
                 maxHp = calculatedMaxHp,
                 maxMp = calculatedMaxMp,
-                highestUnlockedDungeon = 10,
+                highestUnlockedDungeon = 16,
                 currentHp = if (progress.currentHp >= progress.maxHp || progress.currentHp <= 0) calculatedMaxHp else currentHpClamped,
                 currentMp = if (progress.currentMp >= progress.maxMp) calculatedMaxMp else currentMpClamped
             )
@@ -2251,15 +2563,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     private fun generateProceduralItem(level: Int, isBoss: Boolean, rarityPreset: String? = null): Item {
         val r = Random.Default
         val rarity = rarityPreset?.uppercase() ?: if (isBoss) {
-            listOf("LEGENDARIO", "ARCANO", "UNIVERSAL").random()
+            "UNIVERSAL"
         } else {
             val roll = r.nextInt(100)
             when {
-                roll >= 99 -> "UNIVERSAL"
-                roll >= 95 -> "ARCANO"
-                roll >= 83 -> "LEGENDARIO"
-                roll >= 65 -> "ÉPICO"
-                roll >= 40 -> "RARO"
+                roll >= 85 -> "ÉPICO"
+                roll >= 50 -> "RARO"
                 else -> "COMÚN"
             }
         }
@@ -2444,7 +2753,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         var updatedProgress = progress
-        val slots = listOf("HELMET", "WINGS", "WEAPON", "SHIELD", "ARMOR", "GLOVES", "BOOTS", "RING", "EARRING", "RELIC")
+        val slots = listOf("HELMET", "WINGS", "WEAPON", "SHIELD", "ARMOR", "GLOVES", "BOOTS", "RING", "EARRING", "RELIC", "PET")
         val equippedNames = mutableListOf<String>()
 
         for (slot in slots) {
@@ -2459,6 +2768,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 "RING" -> updatedProgress.equippedRingJson
                 "EARRING" -> updatedProgress.equippedEarringJson
                 "RELIC" -> updatedProgress.equippedRelicJson
+                "PET" -> updatedProgress.equippedPetJson
                 else -> ""
             }
             val currentEquipped = if (currentEquippedJson.isNotEmpty()) {
@@ -2488,6 +2798,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         "RING" -> updatedProgress.copy(equippedRingJson = GameJsonParser.toJson(bestItemInInv))
                         "EARRING" -> updatedProgress.copy(equippedEarringJson = GameJsonParser.toJson(bestItemInInv))
                         "RELIC" -> updatedProgress.copy(equippedRelicJson = GameJsonParser.toJson(bestItemInInv))
+                        "PET" -> updatedProgress.copy(equippedPetJson = GameJsonParser.toJson(bestItemInInv))
                         else -> updatedProgress
                     }
                     equippedNames.add(bestItemInInv.name)
@@ -2577,6 +2888,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     if (current != null) invList.add(current)
                     updatedProgress = updatedProgress.copy(equippedRelicJson = GameJsonParser.toJson(item))
                 }
+                "PET" -> {
+                    val current = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
+                    if (current != null) invList.add(current)
+                    updatedProgress = updatedProgress.copy(equippedPetJson = GameJsonParser.toJson(item))
+                }
             }
 
             val finalProgress = syncMaxHpAndMp(updatedProgress.copy(
@@ -2635,6 +2951,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 "RELIC" -> {
                     itemToStore = GameJsonParser.fromJson<Item>(progress.equippedRelicJson)
                     updated = updated.copy(equippedRelicJson = "")
+                }
+                "PET" -> {
+                    itemToStore = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
+                    updated = updated.copy(equippedPetJson = "")
                 }
             }
 
@@ -2788,10 +3108,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val ultimateSkill = when (progress.charClass) {
-            "Guerrero" -> Skill("sk_adv_warrior", "Furia de Guerra Alada", "Lanza un embate devastador con alas en llamas. Hace x5 de daño y causa Hemorragia masiva.", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, isUltimate = true)
-            "Mago" -> Skill("sk_adv_mage", "Cataclismo Cósmico", "Desata una tormenta de éter estelar con alas celestiales. Hace x5 de daño y causa Congelación profunda.", manaCost = 40, minLevel = 20, damageMultiplier = 5.0, isUltimate = true)
-            "Pícaro" -> Skill("sk_adv_rogue", "Danza de Sombras Celestes", "Se desplaza a velocidad de la luz asestando cortes mortales. Hace x5 de daño y aplica Veneno Mortal.", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, isUltimate = true)
-            else -> Skill("sk_adv_cleric", "Sentencia Serafín", "Invoca un rayo divino con alas angélicas. Hace x5 de daño, otorga Daño Sagrado y sana al héroe.", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, healingMultiplier = 1.0, isUltimate = true)
+            "Guerrero" -> Skill("sk_adv_warrior", "Furia de Guerra Alada", "Lanza un embate devastador. Hace x5 de daño, causa Hemorragia y bloquea curación enemiga (Anti-Curación).", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, isUltimate = true, isAntiHeal = true)
+            "Mago" -> Skill("sk_adv_mage", "Cataclismo Cósmico", "Desata una tormenta de éter estelar. Hace x5 de daño, Congelación y bloquea curación enemiga (Anti-Curación).", manaCost = 40, minLevel = 20, damageMultiplier = 5.0, isUltimate = true, isAntiHeal = true)
+            "Pícaro" -> Skill("sk_adv_rogue", "Danza de Sombras Celestes", "Se desplaza a velocidad luz. Hace x5 de daño, aplica Veneno Mortal y bloquea curación enemiga (Anti-Curación).", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, isUltimate = true, isAntiHeal = true)
+            else -> Skill("sk_adv_cleric", "Sentencia Serafín", "Invoca un rayo divino. Hace x5 de daño, sana al héroe y anula la curación enemiga (Anti-Curación).", manaCost = 35, minLevel = 20, damageMultiplier = 5.0, healingMultiplier = 1.0, isUltimate = true, isAntiHeal = true)
         }
 
         val currentSkills = GameJsonParser.listFromJson<Skill>(progress.skillsJson).toMutableList()
@@ -3514,5 +3834,183 @@ val DUNGEONS_LIST = listOf(
         ),
         bossImageResName = "img_boss_dark_dragon_1784674128719",
         description = "El desafío definitivo de Eldoria. Derrota a los 9 supremos dragones antes de enfrentar al Dragón Oscuro."
+    ),
+    DungeonData(
+        id = 11,
+        name = "Santuario Serafín del Firmamento",
+        species = "Serafines y Ángeles",
+        levelReq = 220,
+        finalBossName = "Archicreador Seraph",
+        finalBossTitle = "Soberano Sagrado de los Cielos Astrales",
+        subBosses = listOf(
+            "Ángel Guerrero", "Valquiria de Cristal", "Serafín de Luz",
+            "Sentinela Sagrado", "Guardián Celestial", "Arcángel Menor",
+            "Querubín de Guerra", "Sacerdote Estelar", "Juez del Firmamento"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_11",
+            name = "Corona Divina del Archicreador",
+            type = "HELMET",
+            rarity = "UNIVERSAL",
+            itemLevel = 110,
+            strBonus = 180,
+            dexBonus = 180,
+            intBonus = 220,
+            conBonus = 180,
+            dmgBonus = 450,
+            defBonus = 450,
+            imageResName = "img_item_relic_1784658251007",
+            description = "Corona forjada con rayos de luz pura celestial. Emite un aura de inmortalidad suprema."
+        ),
+        bossImageResName = "img_boss_yggdrasil_machine_1784674150126",
+        description = "Templo suspendido en el éter habitado por seres de luz divina. El Archicreador juzga a los mortales."
+    ),
+    DungeonData(
+        id = 12,
+        name = "Cráter Abisal del Maelstrom",
+        species = "Devoradores Abisales",
+        levelReq = 250,
+        finalBossName = "Leviatán Cthulhu",
+        finalBossTitle = "Titán Abisal Devorador de Mundos",
+        subBosses = listOf(
+            "Calamar Estigio", "Devorador de Almas", "Guardián de la Fosa",
+            "Engendro del Maelstrom", "Sombra Estigia", "Tritón Maldito",
+            "Kraken de Sangre", "Basilisco Marino", "Horror de la Fosa"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_12",
+            name = "Orbe Abisal de Cthulhu",
+            type = "RELIC",
+            rarity = "UNIVERSAL",
+            itemLevel = 125,
+            strBonus = 200,
+            dexBonus = 200,
+            intBonus = 250,
+            conBonus = 220,
+            dmgBonus = 520,
+            defBonus = 500,
+            imageResName = "img_item_relic_1784658251007",
+            description = "Orbe de materia abisal primigenia que retuerce la realidad y absorbe el alma de los enemigos."
+        ),
+        bossImageResName = "img_enemy_spectre_1784386971041",
+        description = "Abismo insondable bajo las corrientes del multiverso donde Cthulhu aguarda su despertar."
+    ),
+    DungeonData(
+        id = 13,
+        name = "Forja Cósmica de los Titanidos",
+        species = "Titanes de Piedra",
+        levelReq = 280,
+        finalBossName = "Forjador Supremo Aethel",
+        finalBossTitle = "Creador de las Estrellas Primigenias",
+        subBosses = listOf(
+            "Gólem de Obsidiana", "Coloso de Bronce", "Minotauro de Titanio",
+            "Elemental de Plasma", "Destructor Estelar", "Guardián de la Forja",
+            "Escultor del Caos", "Centinela Cósmico", "Bégimo Rúnico"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_13",
+            name = "Martillo de la Creación Cósmica",
+            type = "WEAPON",
+            rarity = "UNIVERSAL",
+            itemLevel = 140,
+            strBonus = 300,
+            conBonus = 250,
+            dmgBonus = 650,
+            defBonus = 400,
+            imageResName = "img_item_sword_1784593548868",
+            description = "Martillo con el que Aethel forjó las galaxias. Sus impactos desatan supernovas."
+        ),
+        bossImageResName = "img_enemy_ogre_1784386944311",
+        description = "La forja primordial del universo donde se moldearon las primeras estrellas y planetas."
+    ),
+    DungeonData(
+        id = 14,
+        name = "Infierno de la Llama Caótica",
+        species = "Demonios Supremos",
+        levelReq = 320,
+        finalBossName = "Lucifer Señor del Inframundo",
+        finalBossTitle = "Emperador Infernal del Caos Absoluto",
+        subBosses = listOf(
+            "Súcubo Infernal", "Cerbero de Lava", "Belfegor de la Gula",
+            "Mammon del Infortunio", "Gárgola de Inframundo", "Íncubo de la Sombra",
+            "Archidemonio de Azufre", "Balrog de las Cenizas", "Señor de la Tormenta"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_14",
+            name = "Manto Infernal de Lucifer",
+            type = "ARMOR",
+            rarity = "UNIVERSAL",
+            itemLevel = 160,
+            strBonus = 280,
+            dexBonus = 280,
+            intBonus = 280,
+            conBonus = 320,
+            dmgBonus = 600,
+            defBonus = 700,
+            imageResName = "img_item_plate_1784593577913",
+            description = "Armadura de fuego eterno y azufre del infierno. Devora los ataques y sana al portador."
+        ),
+        bossImageResName = "img_boss_hobgoblin_1784674116743",
+        description = "El noveno círculo infernal. Lucifer gobierna sobre las llamas eternas consumiendo a los caídos."
+    ),
+    DungeonData(
+        id = 15,
+        name = "Vértice del Vacío Absoluto",
+        species = "Espectros del Vacío",
+        levelReq = 360,
+        finalBossName = "Sombra del Dios Olvidado",
+        finalBossTitle = "Deidad Omnipotente Inmemorial",
+        subBosses = listOf(
+            "Espíritu del Abismo", "Terror Nocturno", "Aniquilador Estelar",
+            "Ente Incorpóreo", "Vértice de Sombras", "Distorsión Cuántica",
+            "Espectro Infinito", "Centinela del Vacío", "Herrero del Olvido"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_15",
+            name = "Anillo del Creador Inmortal",
+            type = "RING",
+            rarity = "UNIVERSAL",
+            itemLevel = 180,
+            strBonus = 350,
+            dexBonus = 350,
+            intBonus = 350,
+            conBonus = 350,
+            dmgBonus = 800,
+            defBonus = 800,
+            imageResName = "img_item_ring_1784593597914",
+            description = "Anillo de la existencia pura. Concede omnipresencia e invulnerabilidad casi perfecta."
+        ),
+        bossImageResName = "img_boss_high_vampire_1784674139269",
+        description = "La nada absoluta más allá del espacio-tiempo. Solo los guerreros más legendarios sobreviven."
+    ),
+    DungeonData(
+        id = 16,
+        name = "Trono del Gran Multiverso",
+        species = "Dioses Primigenios",
+        levelReq = 400,
+        finalBossName = "Ouroboros el Eterno",
+        finalBossTitle = "Señor del Infinito y Creador del Multiverso",
+        subBosses = listOf(
+            "Guardián del Tiempo", "Sombra del Big Bang", "Dragón de la Creación",
+            "Titán del Espacio", "Avatar de la Realidad", "Nébula Destructora",
+            "Soberano Cósmico", "Vértice Infinito", "Heraldo del Destino"
+        ),
+        uniqueTreasure = Item(
+            id = "item_treasure_16",
+            name = "Cetro del Infinito Multiversal",
+            type = "WEAPON",
+            rarity = "UNIVERSAL",
+            itemLevel = 200,
+            strBonus = 500,
+            dexBonus = 500,
+            intBonus = 500,
+            conBonus = 500,
+            dmgBonus = 1200,
+            defBonus = 1000,
+            imageResName = "img_item_staff_1784593558118",
+            description = "El arma suprema del multiverso. Canaliza el poder creador y destructor de todas las dimensiones."
+        ),
+        bossImageResName = "img_boss_dark_dragon_1784674128719",
+        description = "La cúspide suprema de toda la existencia. Enfrenta a Ouroboros para dominar el multiverso."
     )
 )

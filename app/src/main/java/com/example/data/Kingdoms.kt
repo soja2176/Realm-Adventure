@@ -30,7 +30,9 @@ object KingdomGenerator {
                 monsters = listOf(
                     "Duende Silvestre", "Lobo Hambriento", "Espectro de Niebla", "Oso Cavernario",
                     "Treant Ancestral", "Bandido del Valle", "Araña Gigante", "Minotauro de la Arboleda",
-                    "Guardián Hobgoblin", "Orco Explorador", "Licántropo Nocturno", "Chamán Silvestre"
+                    "Guardián Hobgoblin", "Orco Explorador", "Licántropo Nocturno", "Chamán Silvestre",
+                    "Grifo del Alba", "Manticora de Pradera", "Hipogrifo de Cristal", "Bioluminiscente del Lago",
+                    "Gólem de Musgo", "Sílfide Solar", "Fauno Guardián", "Lobo de Luz", "Guardián Centauro", "Espíritu del Bosque"
                 ),
                 bossNames = listOf("Dragón Dorado de Eldoria", "Gran Treant Corrupto", "Guardián de Piedra Ancestral", "Señor Minotauro de las Praderas"),
                 castleNames = listOf("Castillo de Ciudad Alba", "Fortaleza del Sol Naciente", "Ciudadela de Cristal"),
@@ -46,7 +48,9 @@ object KingdomGenerator {
                 monsters = listOf(
                     "Salamandra de Fuego", "Cultista de la Llama", "Elemental de Magma", "Culebra Abrasadora",
                     "Troll de Ceniza", "Wyrm de Obsidiana", "Demonio de la Forja", "Gólem de Lava",
-                    "Acolito del Fuego", "Minotauro Infernal", "Basilisco Volcánico", "Gárgola de Obsidiana"
+                    "Acolito del Fuego", "Minotauro Infernal", "Basilisco Volcánico", "Gárgola de Obsidiana",
+                    "Efreeti Rabioso", "Manticora Volcánica", "Perro Cerbero Infernal", "Bégimo de Magma",
+                    "Fénix Corrupto", "Quimera Abrasadora", "Troll de Basalto", "Devorador de Cenizas", "Espectro Llameante", "Gárgola de Fuego"
                 ),
                 bossNames = listOf("Dragón Volcánico Ignis", "Señor del Magma Pyros", "Archidemonio de Cenizas", "Gran Wyrm de Flama"),
                 castleNames = listOf("Fortaleza de Obsidiana", "Castillo de la Llama Eterna", "Ciudadela Abrasadora"),
@@ -62,7 +66,9 @@ object KingdomGenerator {
                 monsters = listOf(
                     "Lobo de Tundra", "Golem de Hielo", "Espectro del Ventisquero", "Yeti Devorador",
                     "Guardián de Escarcha", "Oso Glacial", "Bruja de Escarcha", "Kraken de Hielo",
-                    "Warg de Cristal", "Vampiro Glacial", "Autómata Helado", "Serpiente Glacial"
+                    "Warg de Cristal", "Vampiro Glacial", "Autómata Helado", "Serpiente Glacial",
+                    "Wendigo de las Nieves", "Morticola de Escarcha", "Mamut Helado", "Gólem de Ventisca",
+                    "Minotauro de los Hielos", "Dragón Bebé de Nieve", "Caminante Helado", "Brujo Rúnico del Viento", "Espíritu Glacial", "Esquife Silencioso"
                 ),
                 bossNames = listOf("Wyrm Blanco de Ventisca", "Reina de Escarcha Freya", "Titán del Hielo Glacius", "Señor Yeti de la Tundra"),
                 castleNames = listOf("Castillo de Escarcha", "Ciudadela del Viento Helado", "Bastión Glacial"),
@@ -78,7 +84,9 @@ object KingdomGenerator {
                 monsters = listOf(
                     "Zombi del Pantano", "Basilisco Umbrío", "Bruja Arcana", "Señor de la Peste",
                     "Lich Devorador", "Sombra Devoradora", "Vampiro de la Noche", "Demonio Umbrío",
-                    "Esqueleto Guerrero", "Cultista del Vacío", "Ghouls Abisales", "Naga Abisal"
+                    "Esqueleto Guerrero", "Cultista del Vacío", "Ghouls Abisales", "Naga Abisal",
+                    "Bailarina del Pantano", "Hombre Caimán de la Ciénaga", "Kelpie de la Bruma", "Cazador Estigio",
+                    "Señor de las Moscas", "Calavera Flotante", "Bestia Necrótica", "Espectro de la Peste", "Caminante de las Sombras", "Górgana Abisal"
                 ),
                 bossNames = listOf("Lich Primordial Malakor", "Gran Vampiro Lord", "Bailarina de Sombras", "Archidemonio Umbrío"),
                 castleNames = listOf("Castillo de las Sombras", "Bastión de la Ciénaga", "Torreón Umbrío"),
@@ -94,7 +102,9 @@ object KingdomGenerator {
                 monsters = listOf(
                     "Escorpión Gigante", "Guardián Anubis", "Sacerdote Solar", "Manta del Desierto",
                     "Gólem de Arena", "Momia Real", "Víbora de Arena", "Naga Solar",
-                    "Ladrón de Tumbas", "Esfinge Menor", "Cultista del Sol", "Demonio del Desierto"
+                    "Ladrón de Tumbas", "Esfinge Menor", "Cultista del Sol", "Demonio del Desierto",
+                    "Gorgona del Desierto", "Cactus Devorador", "Gólem de Pirámide", "Behemoth del Espejismo",
+                    "Escarabajo de Rubí", "Sombra de Anubis", "Gárgola Dorada", "Víbora de Fuego", "Genio del Oasis", "Ifrit de las Dunas"
                 ),
                 bossNames = listOf("Dragón de Arena Ra-Horakhty", "Faraón Inmortal Osiris", "Gran Esfinge Solar", "Señor Anubis de la Tumba"),
                 castleNames = listOf("Pirámide del Sol Dorado", "Palacio de los Oasis", "Fortaleza del Viento Dorado"),
@@ -110,7 +120,9 @@ object KingdomGenerator {
                 monsters = listOf(
                     "Guardián Astral", "Quimera Celestial", "Sentinela de Luz", "Arcángel Caído",
                     "Bestia Estelar", "Sombra Estelar", "Autómata Celestial", "Vampiro Astral",
-                    "Serpiente Astral", "Demonio de las Estrellas", "Lich Cósmico", "Kraken Celestial"
+                    "Serpiente Astral", "Demonio de las Estrellas", "Lich Cósmico", "Kraken Celestial",
+                    "Fénix Cósmico", "Seraph de Cristal", "Pegaso del Firmamento", "Behemoth Estelar",
+                    "Gólem de Meteorito", "Devorador del Vacío", "Titán del Éter", "Dragón Estelar Bebé", "Sentinela Solar", "Soberano del Orbe"
                 ),
                 bossNames = listOf("Dragón Cósmico Aetherion", "Arcángel Seraphiel", "Titán del Firmamento", "Gran Archidemonio Astral"),
                 castleNames = listOf("Palacio Astral de Aetheria", "Fortaleza del Firmamento", "Templo Celestial de la Luz"),

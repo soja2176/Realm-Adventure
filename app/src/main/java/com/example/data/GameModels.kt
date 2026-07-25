@@ -116,16 +116,29 @@ fun Item.withScaledStats(): Item {
 }
 
 fun formatGameNumber(number: Long): String {
-    if (number < 1000) return number.toString()
-    if (number < 1_000_000) {
-        val kValue = number / 1000.0
-        return if (kValue % 1.0 == 0.0) "${kValue.toInt()}K" else String.format("%.1fK", kValue)
+    if (number < 0) return "-" + formatGameNumber(-number)
+    if (number < 1_000) return number.toString()
+
+    val (divider, suffix) = when {
+        number < 1_000_000 -> Pair(1_000.0, "K")
+        number < 1_000_000_000 -> Pair(1_000_000.0, "M")
+        number < 1_000_000_000_000L -> Pair(1_000_000_000.0, "G")
+        number < 1_000_000_000_000_000L -> Pair(1_000_000_000_000.0, "T")
+        else -> Pair(1_000_000_000_000_000.0, "P")
     }
-    val mValue = number / 1_000_000.0
-    return if (mValue % 1.0 == 0.0) "${mValue.toInt()}M" else String.format("%.1fM", mValue)
+
+    val valScaled = number / divider
+    return if (valScaled % 1.0 == 0.0) {
+        "${valScaled.toLong()}$suffix"
+    } else if (valScaled < 10) {
+        String.format(java.util.Locale.US, "%.2f%s", valScaled, suffix)
+    } else {
+        String.format(java.util.Locale.US, "%.1f%s", valScaled, suffix)
+    }
 }
 
 fun formatGameNumber(number: Int): String = formatGameNumber(number.toLong())
+fun formatGameNumber(number: Double): String = formatGameNumber(number.toLong())
 
 fun getItemSellValue(item: Item, playerLevel: Int = 1): Int {
     val lvl = maxOf(1, item.itemLevel)
@@ -139,6 +152,11 @@ fun getItemBuyPrice(item: Item, playerLevel: Int = 1): Int {
     val pLvl = maxOf(1, playerLevel)
     val rarityMult = getRarityMultiplier(item.rarity)
     return 100 * lvl * pLvl * rarityMult
+}
+
+fun getRequiredExpForLevel(level: Int): Int {
+    val lvl = maxOf(1, level)
+    return 350 * lvl + (lvl * lvl * 120)
 }
 
 data class Talent(
@@ -163,6 +181,7 @@ data class Skill(
     val damageMultiplier: Double = 1.0,
     val healingMultiplier: Double = 0.0,
     val isUltimate: Boolean = false,
+    val isAntiHeal: Boolean = false,
     val classRestriction: String? = null
 )
 
