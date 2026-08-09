@@ -311,21 +311,19 @@ fun DialogueBox(
                             fontSize = 13.sp
                         )
                     }
-                    
-                    if (option.closesConversation) {
-                        item {
-                            Button(
-                                onClick = onClose,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = 8.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = MedievalColors.BloodRed
-                                )
-                            ) {
-                                Text("Despedirse", color = MedievalColors.Parchment)
-                            }
-                        }
+                }
+
+                item {
+                    Button(
+                        onClick = onClose,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MedievalColors.BloodRed
+                        )
+                    ) {
+                        Text("Despedirse", color = MedievalColors.Parchment)
                     }
                 }
             }

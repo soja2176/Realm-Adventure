@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -25,13 +26,6 @@ import androidx.compose.ui.window.Dialog
 import com.example.data.GameViewModel
 import com.example.scene3d.IsometricWorldMapView
 import com.example.scene3d.IsometricCombatView
-
-// Colores de la paleta medieval
-val MedievalDarkBg = Color(0xFF0F111A)
-val MedievalCardBg = Color(0xFF161A26)
-val MedievalGold = Color(0xFFFFC107)
-val MedievalGoldDark = Color(0xFFC79100)
-val MedievalCrimson = Color(0xFFE53935)
 
 /**
  * Pantalla del Mapa Mundial en 3D Isométrico

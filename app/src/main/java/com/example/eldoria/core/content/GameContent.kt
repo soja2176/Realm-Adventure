@@ -103,7 +103,7 @@ enum class EnemyType(
     val xpValue: Int,
     val goldValue: Int,
     val modelAsset: String, // Clave para el AssetManager3D
-    val colorHex: Int,     // Color para variantes o si no hay modelo
+    val colorHex: Long,    // Color para variantes o si no hay modelo
     val isElite: Boolean = false,
     val requiredRealm: Realm = Realm.STARTER
 ) {

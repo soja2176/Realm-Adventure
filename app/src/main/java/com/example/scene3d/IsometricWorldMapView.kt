@@ -11,8 +11,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.example.data.GameViewModel
-import io.github.sceneview.math.Position
-import io.github.sceneview.math.Rotation
 
 /**
  * Vista 3D Isométrica del Mapa Mundial para Eldoria RPG
@@ -52,7 +50,7 @@ fun IsometricWorldMapView(
                 playerModel = Player3DModel(
                     position = IsometricConverter.mapToPosition(progress.currentX, progress.currentY),
                     rotation = Rotation(0f, 45f, 0f),
-                    characterClass = progress.characterClass
+                    characterClass = progress.charClass
                 ),
                 terrain = mapTiles.map { tile ->
                     TerrainNode(
@@ -78,7 +76,7 @@ fun IsometricWorldMapView(
                     .padding(12.dp)
             ) {
                 Text(
-                    text = "${progress.charName} • Nvl ${progress.level}",
+                    text = "${progress.charName} • Nvl ${progress.charLevel}",
                     style = MaterialTheme.typography.titleMedium,
                     color = Color.White
                 )
@@ -170,7 +168,7 @@ fun IsometricCombatView(
                     Player3DModel(
                         position = Position(-5f, 0f, 0f),
                         rotation = Rotation(0f, 0f, 0f),
-                        characterClass = p.characterClass
+                        characterClass = p.charClass
                     )
                 },
                 enemies = listOf(enemyModel),
