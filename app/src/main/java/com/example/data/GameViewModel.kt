@@ -13,6 +13,18 @@ import com.example.eldoria.core.content.RandomEvent
 import com.example.eldoria.core.content.Realm
 import com.example.eldoria.core.content.EnemyType
 import com.example.eldoria.core.content.GameBalance
+import com.example.eldoria.systems.Achievement
+import com.example.eldoria.systems.AchievementDefinitions
+import com.example.eldoria.systems.DailyRewardState
+import com.example.eldoria.systems.NpcType
+import com.example.eldoria.systems.canClaimDailyReward
+import com.example.eldoria.systems.claimDailyReward
+import com.example.data.content.EldoriaBestiary
+import com.example.data.content.KingdomAtlas
+import com.example.data.content.EldoriaExpeditions
+import com.example.data.content.EldoriaPets
+import com.example.data.engine.EldoriaHost
+import com.example.data.engine.EldoriaSystemsController
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +48,17 @@ enum class GameScreen {
     INVENTORY,
     SHOP,
     PET_SCREEN,
-    HELP_SCREEN
+    HELP_SCREEN,
+    ACHIEVEMENTS,
+    CRAFTING,
+    DAILY_REWARDS,
+    MAIN_MENU,
+    SETTINGS,
+    EXPEDITION,
+    PET_SANCTUARY,
+    MINIGAMES,
+    BESTIARY,
+    CONTRACTS
 }
 
 data class EnemyPet(
@@ -74,7 +96,26 @@ data class CombatState(
     val expGained: Int = 0,
     val goldGained: Int = 0,
     val enemyAntiHealTurns: Int = 0,
-    val activeAnimation: String? = null // "PLAYER_ATTACK", "PLAYER_HEAL", "PLAYER_MAGIC", "ENEMY_ATTACK", "ENEMY_SKILL", "PLAYER_POTION"
+    val activeAnimation: String? = null, // "PLAYER_ATTACK", "PLAYER_HEAL", "PLAYER_MAGIC", "ENEMY_ATTACK", "ENEMY_SKILL", "PLAYER_POTION"
+    // === Renacer de Eldoria: campos nuevos, TODOS con default y al final ===
+    val enemyIntent: String? = null,
+    val enemyIntentIcon: String = "",
+    val enemyArchetype: String = "BRUTO",
+    val enemyAffixes: List<String> = emptyList(),
+    val enemySpeciesId: String = "",
+    val reactionWindow: Boolean = false,
+    val reactionDeadline: Long = 0L,
+    val momentum: Int = 0,
+    val petCooldown: Int = 0,
+    val inExpedition: Boolean = false,
+    val expeditionDepth: Int = 0,
+    val expeditionRoomLabel: String = "",
+    /**
+     * Id de la última habilidad lanzada por el jugador. La UI lo usa para elegir
+     * el efecto visual (fuego, veneno, sagrado…): sin esto, todas las habilidades
+     * se verían igual, y con auto-combate la pantalla no tendría forma de saberlo.
+     */
+    val lastSkillId: String = ""
 )
 
 data class SpecialMerchantItem(
@@ -102,6 +143,59 @@ data class CastleState(
     val tile: MapTile? = null
 )
 
+/**
+ * Hito de reino: el evento único de cada tierra. Vive en memoria como el
+ * castillo — una vez reclamado, la casilla queda marcada como limpia y el
+ * estado sólo sirve para volver a leer su lore.
+ */
+data class LandmarkState(
+    val active: Boolean = false,
+    val kingdomId: String = "",
+    val kingdomName: String = "",
+    val name: String = "",
+    val lore: String = "",
+    val boon: String = "",
+    val claimed: Boolean = false,
+    val x: Int = 0,
+    val y: Int = 0
+)
+
+// === CRÓNICAS DE ELDORIA: modelos de misiones, eventos y NPCs ===
+
+data class ActiveBuff(
+    val type: String, // "ATTACK" | "DEFENSE"
+    val value: Int,
+    val label: String
+)
+
+data class TravelEventOutcome(
+    val title: String,
+    val description: String,
+    val resultText: String,
+    val isPositive: Boolean,
+    val ambush: Boolean = false,
+    val ambushTile: MapTile? = null
+)
+
+data class NpcEncounterState(
+    val npcType: NpcType,
+    val npcName: String,
+    val npcTitle: String,
+    val tileKey: String
+)
+
+data class PersistedQuest(
+    val quest: Quest,
+    val progress: Int
+)
+
+val NPC_ROSTER = listOf(
+    Pair("Eldrin", "Anciano del Valle"),
+    Pair("Grek", "Mercader Itinerante"),
+    Pair("Kael", "Guerrero Veterano"),
+    Pair("Lyra", "Vidente de los Susurros")
+)
+
 data class MapTile(
     val x: Int,
     val y: Int,
@@ -119,9 +213,9 @@ data class MapTile(
     val specialName: String = ""
 )
 
-class GameViewModel(private val repository: GameProgressRepository) : ViewModel() {
+class GameViewModel(private val repository: GameProgressRepository) : ViewModel(), EldoriaHost {
 
-    private val _screenState = MutableStateFlow(GameScreen.CREATING_CHARACTER)
+    private val _screenState = MutableStateFlow(GameScreen.MAIN_MENU)
     val screenState: StateFlow<GameScreen> = _screenState.asStateFlow()
 
     private val _progressState = MutableStateFlow<GameProgress?>(null)
@@ -187,6 +281,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     private val _castleState = MutableStateFlow(CastleState())
     val castleState: StateFlow<CastleState> = _castleState.asStateFlow()
 
+    private val _landmarkState = MutableStateFlow(LandmarkState())
+    val landmarkState: StateFlow<LandmarkState> = _landmarkState.asStateFlow()
+
     // Active screen notices/notifications
     private val _notification = MutableStateFlow<String?>(null)
     val notification = _notification.asStateFlow()
@@ -214,7 +311,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
     fun startNewCharacterCreator() {
         viewModelScope.launch {
-            repository.deactivateAll()
+            // Abrir el creador NO desactiva al héroe anterior: si el jugador se
+            // arrepiente y pulsa VOLVER, su partida sigue activa. `submitCharacter()`
+            // ya llama a `deactivateAll()` justo antes de insertar al nuevo héroe.
             _screenState.value = GameScreen.CREATING_CHARACTER
             _creatorName.value = ""
             _creatorPointsAvailable.value = 15
@@ -236,9 +335,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         viewModelScope.launch {
             repository.deleteCharacter(characterId)
             showNotification("Personaje eliminado.")
-            val remaining = repository.getProgress()
+            // Lectura PURA: `getProgress()` restauraría el backup del héroe recién
+            // borrado y lo dejaría otra vez como activo.
+            val remaining = repository.getActiveProgressSync()
             if (remaining == null) {
-                _screenState.value = GameScreen.CREATING_CHARACTER
+                // Al menú principal, no al creador: desde allí se ve el resto del
+                // Salón de Héroes y también se puede crear uno nuevo.
+                _screenState.value = GameScreen.MAIN_MENU
             }
         }
     }
@@ -246,12 +349,20 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     fun toggleAutoCombat() {
         _isAutoCombat.value = !_isAutoCombat.value
         val state = _combatState.value
+        if (_isAutoCombat.value && isAutoCombatBlocked(state)) {
+            _isAutoCombat.value = false
+            systems.showToast("⚔️ Aquí no hay piloto automático: esta sala se gana a mano.", "EMBER")
+            return
+        }
         if (_isAutoCombat.value && state.active && state.playerTurn && state.victory == null) {
             viewModelScope.launch {
                 performAutoCombatTurn(state)
             }
         }
-        showNotification(if (_isAutoCombat.value) "¡Combate Automático ACTIVADO!" else "Combate Automático desactivado")
+        systems.showToast(
+            if (_isAutoCombat.value) "⚔️ Combate automático activado." else "⚔️ Combate automático desactivado.",
+            "GOLD"
+        )
     }
 
     fun toggleAutoNavigation() {
@@ -264,7 +375,21 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 }
             }
         }
-        showNotification(if (_isAutoNavigation.value) "¡Navegación Automática ACTIVADA!" else "Navegación Automática desactivada")
+        systems.showToast(
+            if (_isAutoNavigation.value) "🧭 Navegación automática activada." else "🧭 Navegación automática desactivada.",
+            "GOLD"
+        )
+    }
+
+    /**
+     * E13 — El piloto automático se apaga en las salas serias de una expedición
+     * (ÉLITE y JEFE): ahí la ventana de reacción y las órdenes de la bestia deciden
+     * el combate, y dejarlo en manos de la IA sería regalar la run.
+     */
+    private fun isAutoCombatBlocked(state: CombatState): Boolean {
+        if (!state.inExpedition) return false
+        val enemy = state.enemy ?: return false
+        return enemy.isBoss || enemy.rarity == "CHAMPION" || enemy.rarity == "UNIVERSAL"
     }
 
     private fun performAutoCombatTurn(state: CombatState) {
@@ -343,20 +468,211 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  PUENTE «RENACER DE ELDORIA» — implementación de EldoriaHost
+    // ═══════════════════════════════════════════════════════════════════════
+
+    override val hostScope: kotlinx.coroutines.CoroutineScope
+        get() = viewModelScope
+
+    override fun currentProgress(): GameProgress? = _progressState.value
+
+    override fun persistProgress(updated: GameProgress) {
+        // El estado en memoria se adelanta a Room para que dos acciones seguidas
+        // del controlador no lean una fila obsoleta y se pisen entre sí.
+        _progressState.value = updated
+        viewModelScope.launch { repository.saveProgress(updated) }
+    }
+
+    /**
+     * Guardado normal del ViewModel. Misma disciplina que [persistProgress]: la fila
+     * escrita se publica en memoria ANTES de que Room la emita, de modo que dos
+     * acciones seguidas (vender dos objetos, equipar dos piezas, vender y aceptar un
+     * contrato…) no partan las dos del mismo snapshot y se borren la una a la otra.
+     */
+    private suspend fun saveProgressSynced(updated: GameProgress): Long {
+        _progressState.value = updated
+        return repository.saveProgress(updated)
+    }
+
+    override fun hostNotify(message: String) {
+        showNotification(message)
+    }
+
+    override fun hostNavigate(screen: GameScreen) {
+        _screenState.value = screen
+    }
+
+    override fun hostSyncStats(progress: GameProgress): GameProgress = syncMaxHpAndMp(progress)
+
+    override fun hostPlaySound(key: String) {
+        when (key) {
+            "click" -> SoundManager.playButtonClick()
+            "slash" -> SoundManager.playSwordSlash()
+            "crit" -> SoundManager.playCriticalHit()
+            "magic" -> SoundManager.playMagicSpell()
+            "heal" -> SoundManager.playHealPotion()
+            "enemy" -> SoundManager.playEnemyAttack()
+            "victory" -> SoundManager.playVictory()
+            "defeat" -> SoundManager.playDefeat()
+            else -> Unit
+        }
+    }
+
+    override fun hostGrantItem(item: Item) {
+        val progress = _progressState.value ?: return
+        val inventory = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+        inventory.add(item)
+        val updated = progress.copy(inventoryJson = GameJsonParser.listToJson(inventory.toList()))
+        _progressState.value = updated
+        viewModelScope.launch { repository.saveProgress(updated) }
+    }
+
+    /** Reino canónico de cada destino de expedición (mismo escalón que el tier del calabozo). */
+    private fun expeditionKingdomFor(dungeonId: Int): String = when {
+        dungeonId >= 13 -> "aetheria"
+        dungeonId >= 11 -> "solaria"
+        dungeonId >= 8 -> "aethelgard"
+        dungeonId >= 6 -> "frostgard"
+        dungeonId >= 3 -> "drakenhold"
+        else -> "eldoria"
+    }
+
+    /**
+     * E9 — Combate dentro de una expedición.
+     * Reutiliza la maquinaria de `startDungeonStageCombat` (mismas curvas de HP/ATK/DEF)
+     * pero marca `inExpedition`/`expeditionDepth`/`expeditionRoomLabel` y NO toca `_dungeonRunState`.
+     */
+    override fun hostStartExpeditionCombat(
+        dungeonId: Int,
+        depth: Int,
+        roomKind: String,
+        roomLabel: String,
+        hp: Int,
+        mp: Int,
+        bossName: String?
+    ) {
+        val progress = _progressState.value ?: return
+        resetCombatAuxiliaries()
+        val kind = roomKind.uppercase()
+        val isBoss = kind == EldoriaExpeditions.KIND_BOSS
+        val isElite = kind == EldoriaExpeditions.KIND_ELITE
+
+        val blueprint = EldoriaExpeditions.blueprint(dungeonId)
+        val levelReq = blueprint?.levelReq ?: 1
+        val heroLevel = progress.charLevel.coerceAtLeast(1)
+        val safeDepth = depth.coerceAtLeast(0)
+        val monsterLevel = maxOf(
+            levelReq + safeDepth * 2,
+            heroLevel + safeDepth + (if (isBoss) 3 else 0)
+        ).coerceAtLeast(1)
+
+        val rarity = when {
+            isBoss -> "UNIVERSAL"
+            isElite -> "CHAMPION"
+            else -> "ELITE"
+        }
+
+        val (hpMult, atkMult, defMult) = when (rarity) {
+            "UNIVERSAL" -> Triple(3.8, 1.8, 1.55)
+            "CHAMPION" -> Triple(1.8, 1.35, 1.25)
+            else -> Triple(1.3, 1.15, 1.15)
+        }
+
+        val deco = systems.decorateEnemy(
+            kingdomId = expeditionKingdomFor(dungeonId),
+            level = monsterLevel,
+            rarity = rarity,
+            isBoss = isBoss
+        )
+
+        val baseHp = 65.0 + (monsterLevel * 42.0) + (monsterLevel * monsterLevel * 0.95)
+        val baseAtk = 9.0 + (monsterLevel * 3.8) + (monsterLevel * 0.1)
+        val baseDef = 4.0 + (monsterLevel * 2.0)
+
+        val enemyHp = (baseHp * hpMult * (if (isBoss) 1.6 else 1.1) * deco.hpMult).toInt().coerceAtLeast(1)
+        val enemyAtk = (baseAtk * atkMult * (if (isBoss) 1.3 else 1.05) * deco.atkMult).toInt().coerceAtLeast(1)
+        val enemyDef = (baseDef * defMult * (if (isBoss) 1.25 else 1.05) * deco.defMult).toInt().coerceAtLeast(0)
+
+        val displayName = when {
+            isBoss && !bossName.isNullOrBlank() -> "👑 $bossName"
+            isBoss -> "👑 ${deco.displayName}"
+            isElite -> "⭐ ${deco.displayName}"
+            else -> deco.displayName
+        }
+
+        val enemy = Combatant(
+            name = displayName,
+            maxHp = enemyHp,
+            currentHp = enemyHp,
+            maxMp = 100,
+            currentMp = 100,
+            attack = enemyAtk,
+            defense = enemyDef,
+            level = monsterLevel,
+            isBoss = isBoss,
+            rarity = rarity,
+            pet = generateEnemyPetIfNeeded(monsterLevel, rarity, isBoss)
+        )
+
+        val maxHp = progress.maxHp.coerceAtLeast(1)
+        val maxMp = progress.maxMp.coerceAtLeast(1)
+        val affixNames = deco.affixes.mapNotNull { EldoriaBestiary.affix(it)?.name }
+        val logs = mutableListOf(
+            "🕯️ ${blueprint?.name ?: "Abismo"} · Profundidad ${safeDepth + 1} · $roomLabel",
+            "⚔️ ${enemy.name} (Nivel ${enemy.level}) te cierra el paso."
+        )
+        if (affixNames.isNotEmpty()) logs.add("☠️ Afijos: ${affixNames.joinToString(" · ")}")
+        logs.add("⚠️ Tu salud y maná son los que traías de la sala anterior.")
+
+        _combatState.value = CombatState(
+            active = true,
+            enemy = enemy,
+            playerCurrentHp = hp.coerceIn(1, maxHp),
+            playerCurrentMp = mp.coerceIn(0, maxMp),
+            combatLogs = logs.toList(),
+            playerTurn = true,
+            victory = null,
+            enemyArchetype = deco.archetype,
+            enemyAffixes = deco.affixes,
+            enemySpeciesId = deco.speciesId,
+            petCooldown = 0,
+            momentum = 0,
+            inExpedition = true,
+            expeditionDepth = safeDepth,
+            expeditionRoomLabel = roomLabel
+        )
+
+        _screenState.value = GameScreen.COMBAT
+    }
+
+    /**
+     * Controlador de expediciones, mascotas, bestiario, materiales, contratos,
+     * minijuegos y ajustes. Se inicializa aquí, antes del bloque `init`, de modo
+     * que la hidratación del colector ya lo encuentra construido.
+     */
+    val systems: EldoriaSystemsController = EldoriaSystemsController(this)
+
     init {
         viewModelScope.launch {
             repository.progressFlow.collect { progress ->
                 if (progress != null && progress.hasActiveChar) {
                     val synced = syncMaxHpAndMp(progress)
                     _progressState.value = synced
+                    systems.hydrate(synced)
                     if (isFirstLoad) {
-                        _screenState.value = GameScreen.WORLD_MAP
                         generateMapAround(synced.currentX, synced.currentY, synced.mapPointsExploredJson, synced.mapPointsClearedJson)
                         isFirstLoad = false
                     }
                 } else {
                     _progressState.value = progress
-                    _screenState.value = GameScreen.CREATING_CHARACTER
+                    // Sin personaje activo no hay dónde volver: el menú principal
+                    // es el único destino seguro (y el creador si ya está abierto).
+                    if (_screenState.value != GameScreen.CREATING_CHARACTER &&
+                        _screenState.value != GameScreen.MAIN_MENU
+                    ) {
+                        _screenState.value = GameScreen.MAIN_MENU
+                    }
                     isFirstLoad = false
                 }
             }
@@ -365,19 +681,27 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         // Auto Combat collector
         viewModelScope.launch {
             _combatState.collect { state ->
-                if (state.active && state.playerTurn && state.victory == null && _isAutoCombat.value) {
+                if (state.active && state.playerTurn && state.victory == null &&
+                    _isAutoCombat.value && !isAutoCombatBlocked(state)
+                ) {
                     kotlinx.coroutines.delay(1000)
                     val currentState = _combatState.value
-                    if (currentState.active && currentState.playerTurn && currentState.victory == null && _isAutoCombat.value) {
+                    if (currentState.active && currentState.playerTurn && currentState.victory == null &&
+                        _isAutoCombat.value && !isAutoCombatBlocked(currentState)
+                    ) {
                         performAutoCombatTurn(currentState)
                     }
                 }
             }
         }
 
-        // Auto Navigation checker loop
+        // Auto Navigation checker loop — dormido de verdad mientras está desactivada.
         viewModelScope.launch {
             while (true) {
+                if (!_isAutoNavigation.value) {
+                    kotlinx.coroutines.delay(1500)
+                    continue
+                }
                 kotlinx.coroutines.delay(1200)
                 if (_isAutoNavigation.value && _screenState.value == GameScreen.WORLD_MAP && !isExploring && !_combatState.value.active) {
                     val progress = _progressState.value
@@ -408,7 +732,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     val backupStatus = _backupStatus.asStateFlow()
 
     fun refreshBackupStatus() {
-        _backupStatus.value = repository.getBackupStatusText()
+        // Consulta al sistema de ficheros: fuera del hilo principal.
+        viewModelScope.launch {
+            _backupStatus.value = repository.getBackupStatusText()
+        }
     }
 
     fun exportManualBackup() {
@@ -462,7 +789,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
         viewModelScope.launch {
             val updated = progress.copy(charGold = progress.charGold - 20)
-            repository.saveProgress(updated)
+            saveProgressSynced(updated)
             generateShopItems(progress.charLevel)
             showNotification("¡La tienda ha sido reabastecida con mercancías nuevas!")
         }
@@ -481,9 +808,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 charGold = progress.charGold - cost,
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
-            repository.saveProgress(updatedProgress)
+            saveProgressSynced(updatedProgress)
             _shopItems.value = _shopItems.value.filter { it.id != item.id }
-            showNotification("¡Compraste ${item.name} por $cost monedas de oro!")
+            systems.showToast("🛒 Compras ${item.name} por $cost de oro.", "GOLD")
         }
     }
 
@@ -513,8 +840,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 charGold = progress.charGold + sellPrice,
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
-            repository.saveProgress(updatedProgress)
-            showNotification("¡Vendiste ${item.name} por $sellPrice 🪙 de oro!")
+            saveProgressSynced(updatedProgress)
+            systems.showToast("🪙 Vendes ${item.name} por $sellPrice de oro.", "GOLD")
         }
     }
 
@@ -543,18 +870,26 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 charGold = progress.charGold + totalEarnedGold,
                 inventoryJson = GameJsonParser.listToJson(remainingInv)
             )
-            repository.saveProgress(updatedProgress)
-            showNotification("¡Venta Masiva! Vendiste ${itemsToSell.size} objetos por $totalEarnedGold 🪙 de oro.")
+            saveProgressSynced(updatedProgress)
+            systems.showToast("🪙 Venta masiva: ${itemsToSell.size} objetos por $totalEarnedGold de oro.", "GOLD")
         }
     }
 
     fun changeScreen(screen: GameScreen) {
+        // E12 — Gancho perezoso: sin expedición viva no hay mapa de expedición que enseñar.
+        if (screen == GameScreen.EXPEDITION && !systems.expedition.value.active) {
+            _screenState.value = GameScreen.DUNGEON
+            return
+        }
+
         _screenState.value = screen
+
         if (screen == GameScreen.SHOP && _shopItems.value.isEmpty()) {
             _progressState.value?.let {
                 generateShopItems(it.charLevel)
             }
         }
+        if (screen == GameScreen.CONTRACTS) systems.refreshContracts(false)
     }
 
     // --- CHARACTER CREATOR ---
@@ -764,7 +1099,20 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             )
 
             repository.saveProgress(progress)
+
+            // El controlador necesita la fila ya escrita (con su id real) antes de
+            // conceder nada: si no, `currentProgress()` devolvería la partida anterior.
+            isFirstLoad = true
+            val stored = repository.getProgress()
+            if (stored != null) {
+                _progressState.value = stored
+                systems.hydrate(stored)
+            }
+
             _screenState.value = GameScreen.WORLD_MAP
+            // La bestia inicial la concede `systems.hydrate(...)` (llamado arriba):
+            // así también la reciben las partidas migradas, que nunca pasaron por aquí.
+            systems.refreshContracts(force = true)
             showNotification("¡Tu aventura comienza en Eldoria, $name!")
         }
     }
@@ -861,6 +1209,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val clearedSet = GameJsonParser.listFromJson<String>(clearedJson).toSet()
         val tiles = mutableListOf<MapTile>()
 
+        // Este es el embudo por el que pasa todo movimiento: si el paso ha
+        // cruzado una frontera, el tablón de encargos locales se rehace solo.
+        _progressState.value?.let { systems.refreshKingdomBoard(cx, cy, it.charLevel) }
+
         // Generate a 5x5 viewing grid around player (cx, cy) for infinite viewport rendering
         for (dx in -2..2) {
             for (dy in -2..2) {
@@ -882,7 +1234,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val levelReq = maxOf(1, 1 + (abs(x) + abs(y)) / 3)
 
                 var specialName = ""
-                val encounterType = if (x == 0 && y == 0) {
+                // El hito del reino manda sobre cualquier otro encuentro: es la
+                // única casilla irrepetible de toda la banda.
+                val landmark = KingdomAtlas.isLandmarkTile(x, y)
+                val encounterType = if (landmark != null) {
+                    specialName = landmark.landmarkName
+                    "LANDMARK"
+                } else if (x == 0 && y == 0) {
                     specialName = "Santuario Inicial"
                     "SHRINE"
                 } else if ((abs(x) % 12 == 0 && abs(y) % 12 == 0 && (x != 0 || y != 0)) || (x == 7 && y == -7) || (x == -10 && y == 10)) {
@@ -911,7 +1269,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     }
                 }
 
-                val isObs = (biome.contains("Montaña") || biome.contains("Picos") || biome.contains("Cráter")) && (abs(x) + abs(y) > 1) && (random.nextInt(100) < 30)
+                // Un hito nunca es terreno intransitable: sería un destino al que
+                // no se puede llegar.
+                val isObs = landmark == null &&
+                    (biome.contains("Montaña") || biome.contains("Picos") || biome.contains("Cráter")) &&
+                    (abs(x) + abs(y) > 1) && (random.nextInt(100) < 30)
                 val isEnemy = (encounterType == "MONSTER" || encounterType == "BOSS") && !isCleared && (x != 0 || y != 0)
 
                 val tileHasEncounter = when (encounterType) {
@@ -1050,15 +1412,28 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         if (combatVictory) {
                             if (!exploredList.contains(tileKey)) {
                                 exploredList.add(tileKey)
+                                systems.progressRealmExploration(
+                                    KingdomAtlas.entryForCoords(stepTile.x, stepTile.y).id
+                                )
                             }
                             val postProgress = _progressState.value ?: currentProgress
+                            // E11 — La casilla queda LIMPIA tras la victoria: si no, el
+                            // mismo monstruo reaparecía cada vez que pasabas por encima.
+                            val clearedAfter = GameJsonParser
+                                .listFromJson<String>(postProgress.mapPointsClearedJson)
+                                .toMutableList()
+                            if (!clearedAfter.contains(tileKey)) clearedAfter.add(tileKey)
+                            val clearedAfterJson = GameJsonParser.listToJson(clearedAfter.toList())
+
                             val updatedProgress = postProgress.copy(
                                 currentX = stepTile.x,
                                 currentY = stepTile.y,
-                                mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
+                                mapPointsExploredJson = GameJsonParser.listToJson(exploredList),
+                                mapPointsClearedJson = clearedAfterJson
                             )
-                            repository.saveProgress(updatedProgress)
-                            generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList), postProgress.mapPointsClearedJson)
+                            saveProgressSynced(updatedProgress)
+                            _progressState.value = updatedProgress
+                            generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList), clearedAfterJson)
 
                             // Wait until user exits combat screen
                             while (_combatState.value.active) {
@@ -1072,7 +1447,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                                 currentY = originY,
                                 mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
                             )
-                            repository.saveProgress(returnedProgress)
+                            saveProgressSynced(returnedProgress)
                             generateMapAround(originX, originY, GameJsonParser.listToJson(exploredList), postProgress.mapPointsClearedJson)
                             showNotification("Te retiras al cuadro anterior. El enemigo sigue custodiando la casilla.")
 
@@ -1084,6 +1459,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     } else {
                         if (!wasAlreadyExplored) {
                             exploredList.add(tileKey)
+                            // Casilla nueva: cuenta para los encargos de cartografía
+                            // del reino al que pertenece.
+                            systems.progressRealmExploration(
+                                KingdomAtlas.entryForCoords(stepTile.x, stepTile.y).id
+                            )
                         }
 
                         val hpRegVal = getHpRegenerationValue(currentProgress)
@@ -1100,7 +1480,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                             mapPointsExploredJson = GameJsonParser.listToJson(exploredList)
                         )
 
-                        repository.saveProgress(updatedProgress)
+                        saveProgressSynced(updatedProgress)
                         generateMapAround(stepTile.x, stepTile.y, GameJsonParser.listToJson(exploredList), currentProgress.mapPointsClearedJson)
 
                         val isDestination = stepTile.x == tile.x && stepTile.y == tile.y
@@ -1108,10 +1488,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                             if (!wasAlreadyCleared || stepTile.encounterType == "CASTLE" || stepTile.encounterType == "SPECIAL_MERCHANT") {
                                 triggerEncounter(stepTile)
                             } else {
-                                showNotification("Has viajado a: ${stepTile.biome} ($tileKey).")
+                                systems.showToast("🧭 Viajas a ${stepTile.biome} ($tileKey).", "SILVER")
                             }
                         } else {
-                            showNotification("Has viajado a: ${stepTile.biome} ($tileKey).")
+                            systems.showToast("🧭 Viajas a ${stepTile.biome} ($tileKey).", "SILVER")
                         }
 
                         while (_combatState.value.active) {
@@ -1138,6 +1518,28 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val clearedList = GameJsonParser.listFromJson<String>(progress.mapPointsClearedJson).toMutableList()
 
         when (tile.encounterType) {
+            // ─── Hito del reino: el evento irrepetible de cada tierra ───
+            "LANDMARK" -> {
+                val entry = KingdomAtlas.isLandmarkTile(tile.x, tile.y)
+                if (entry == null) {
+                    showNotification("El hito se ha desvanecido antes de que llegaras.")
+                    return
+                }
+                viewModelScope.launch {
+                    val alreadyTaken = clearedList.contains(tileKey)
+                    _landmarkState.value = LandmarkState(
+                        active = true,
+                        kingdomId = entry.id,
+                        name = entry.landmarkName,
+                        lore = entry.landmarkLore,
+                        boon = entry.landmarkBoon,
+                        kingdomName = KingdomAtlas.dataOf(entry).name,
+                        claimed = alreadyTaken,
+                        x = tile.x,
+                        y = tile.y
+                    )
+                }
+            }
             "SHRINE" -> {
                 viewModelScope.launch {
                     if (clearedList.contains(tileKey)) {
@@ -1157,7 +1559,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         charGold = progress.charGold + 25,
                         mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
                     )
-                    repository.saveProgress(updated)
+                    saveProgressSynced(updated)
                     generateMapAround(progress.currentX, progress.currentY, updated.mapPointsExploredJson, updated.mapPointsClearedJson)
                     showNotification("¡Activaste un Santuario Ancestral! Sanas +$healHp HP, +$healMp MP y obtienes 25 de oro. El altar se ha agotado.")
                 }
@@ -1189,7 +1591,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
                     )
                     val (finalProgress, equippedNames) = autoEquipProgress(updated)
-                    repository.saveProgress(finalProgress)
+                    saveProgressSynced(finalProgress)
                     generateMapAround(progress.currentX, progress.currentY, finalProgress.mapPointsExploredJson, finalProgress.mapPointsClearedJson)
                     if (equippedNames.isNotEmpty()) {
                         notificationMsg += " (Auto-Equipado: ${equippedNames.joinToString(", ")})"
@@ -1222,7 +1624,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
                     )
                     val (finalProgress, equippedNames) = autoEquipProgress(updated)
-                    repository.saveProgress(finalProgress)
+                    saveProgressSynced(finalProgress)
                     generateMapAround(progress.currentX, progress.currentY, finalProgress.mapPointsExploredJson, finalProgress.mapPointsClearedJson)
                     if (equippedNames.isNotEmpty()) {
                         notificationMsg += " (Auto-Equipado: ${equippedNames.joinToString(", ")})"
@@ -1303,7 +1705,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 charGold = progress.charGold + goldBonus,
                 mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
             )
-            repository.saveProgress(updatedProgress)
+            saveProgressSynced(updatedProgress)
             _castleState.value = castle.copy(blessingClaimed = true)
             showNotification("¡Restauras todo tu HP/MP y recibes $goldBonus de oro de la Bendición Real de ${castle.kingdomName}!")
         }
@@ -1318,6 +1720,66 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
     fun closeCastleDialog() {
         _castleState.value = CastleState()
+    }
+
+    // ─── Hitos de reino ───
+
+    fun closeLandmarkDialog() {
+        _landmarkState.value = LandmarkState()
+    }
+
+    /**
+     * Reclama el don del hito. Cada reino paga en su propia moneda: Eldoria
+     * cura, Drakenhold da brasas de forja, Aetheria suelta un diamante infinito.
+     * Se cobra una sola vez y la casilla queda marcada como limpia para siempre.
+     */
+    fun claimLandmarkBoon() {
+        val state = _landmarkState.value
+        val progress = _progressState.value ?: return
+        val entry = KingdomAtlas.byId(state.kingdomId) ?: return
+        if (state.claimed) {
+            systems.showToast("🏛️ Ya tomaste lo que este lugar tenía que dar.", "IRON")
+            return
+        }
+
+        viewModelScope.launch {
+            val tileKey = "${state.x},${state.y}"
+            val clearedList = GameJsonParser
+                .listFromJson<String>(progress.mapPointsClearedJson)
+                .toMutableList()
+            if (!clearedList.contains(tileKey)) clearedList.add(tileKey)
+
+            // Oro del hito: escala con el tier del reino.
+            val goldBoon = entry.tier * entry.tier * 350
+
+            val updated = progress.copy(
+                currentHp = progress.maxHp,
+                currentMp = progress.maxMp,
+                charGold = progress.charGold + goldBoon,
+                mapPointsClearedJson = GameJsonParser.listToJson(clearedList)
+            )
+            saveProgressSynced(updated)
+            _progressState.value = updated
+
+            // Materiales temáticos del reino, entregados por el controlador para
+            // que el bolsón y los contratos de recolección se enteren.
+            val drops: Map<String, Int> = when (entry.id) {
+                "eldoria" -> emptyMap()
+                "drakenhold" -> mapOf("forge_ember" to 3)
+                "frostgard" -> mapOf("pure_crystal" to 2)
+                "aethelgard" -> mapOf("shadow_essence" to 3, "anima_shard" to 1)
+                "solaria" -> mapOf("ancient_relic" to 2)
+                else -> mapOf("infinite_diamond" to 1)
+            }
+            if (drops.isNotEmpty()) systems.grantMaterials(drops)
+
+            generateMapAround(updated.currentX, updated.currentY, updated.mapPointsExploredJson, updated.mapPointsClearedJson)
+            _landmarkState.value = state.copy(claimed = true)
+
+            showNotification(
+                "🏛️ ${entry.landmarkName}\n\n${entry.landmarkBoon}\n\nRecuperas toda tu vida y maná, y recibes $goldBoon de oro."
+            )
+        }
     }
 
     fun buySpecialMerchantItem(specialItem: SpecialMerchantItem) {
@@ -1336,7 +1798,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
             val (finalProgress, equippedNames) = autoEquipProgress(updated)
-            repository.saveProgress(finalProgress)
+            saveProgressSynced(finalProgress)
 
             val currentMerchant = _specialMerchantState.value
             val updatedItems = currentMerchant.items.filter { it.item.id != specialItem.item.id }
@@ -1352,6 +1814,87 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
     fun closeSpecialMerchantDialog() {
         _specialMerchantState.value = SpecialMerchantState()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  VIAJE ENTRE REINOS
+    //  El mundo son seis anillos alrededor del Santuario. Caminar de Eldoria a
+    //  Aetheria son más de cien casillas; la caravana lo hace en un pago, pero
+    //  sólo lleva a quien tiene nivel para sobrevivir al destino.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    fun travelToKingdom(kingdomId: String) {
+        val progress = _progressState.value ?: return
+        val entry = KingdomAtlas.byId(kingdomId)
+        if (entry == null) {
+            systems.showToast("🧭 Ese reino no figura en ningún atlas.", "IRON")
+            return
+        }
+
+        val current = KingdomAtlas.entryForCoords(progress.currentX, progress.currentY)
+        if (current.id == entry.id) {
+            systems.showToast("🧭 Ya estás en ${entry.capitalName}… o muy cerca.", "SILVER")
+            return
+        }
+        if (progress.charLevel < entry.requiredLevel) {
+            systems.showToast(
+                "🔒 La caravana no cruza a ese reino con un héroe de nivel ${progress.charLevel}: exige ${entry.requiredLevel}.",
+                "IRON"
+            )
+            return
+        }
+        if (progress.charGold < entry.travelCost) {
+            systems.showToast(
+                "💰 El pasaje cuesta ${entry.travelCost} de oro y llevas ${progress.charGold}.",
+                "IRON"
+            )
+            return
+        }
+        if (_combatState.value.active) {
+            systems.showToast("⚔️ Termina el combate antes de partir.", "IRON")
+            return
+        }
+
+        viewModelScope.launch {
+            SoundManager.playButtonClick()
+
+            val exploredList = GameJsonParser
+                .listFromJson<String>(progress.mapPointsExploredJson)
+                .toMutableList()
+            val destinationKey = "${entry.capitalX},${entry.capitalY}"
+            if (!exploredList.contains(destinationKey)) {
+                exploredList.add(destinationKey)
+                systems.progressRealmExploration(entry.id)
+            }
+            val exploredJson = GameJsonParser.listToJson(exploredList)
+
+            // El viaje agota: se llega con la vida y el maná al máximo, pero
+            // pagando el pasaje. Es un descanso caro, no un atajo gratis.
+            val travelled = progress.copy(
+                currentX = entry.capitalX,
+                currentY = entry.capitalY,
+                charGold = (progress.charGold - entry.travelCost).coerceAtLeast(0),
+                currentHp = progress.maxHp,
+                currentMp = progress.maxMp,
+                mapPointsExploredJson = exploredJson
+            )
+            saveProgressSynced(travelled)
+            _progressState.value = travelled
+            generateMapAround(entry.capitalX, entry.capitalY, exploredJson, travelled.mapPointsClearedJson)
+
+            // Al pisar tierra nueva, el tablón local se rehace.
+            systems.refreshKingdomBoard(entry.capitalX, entry.capitalY, travelled.charLevel, force = true)
+
+            val kingdomName = KingdomAtlas.dataOf(entry).name
+            systems.showToast("🧭 La caravana te deja en ${entry.capitalName}. Bienvenido a $kingdomName.", "GOLD")
+            _isAutoNavigation.value = false
+        }
+    }
+
+    /** Reinos que el héroe ha pisado alguna vez. Se deduce de lo explorado. */
+    fun discoveredKingdomIds(progress: GameProgress): Set<String> {
+        val explored = GameJsonParser.listFromJson<String>(progress.mapPointsExploredJson)
+        return KingdomAtlas.discoveredIds(explored, progress.currentX, progress.currentY)
     }
 
     fun moveDirection(dx: Int, dy: Int) {
@@ -1401,6 +1944,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     private fun startCombat(tile: MapTile) {
         val progress = _progressState.value ?: return
         val isBoss = tile.encounterType == "BOSS"
+        resetCombatAuxiliaries()
 
         // Map monsters scale relative to hero level: hero level up to hero level + 10 (random)
         val extraLevels = Random.nextInt(0, 11)
@@ -1423,10 +1967,20 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
 
         val kingdom = KingdomGenerator.getKingdomForCoords(tile.x, tile.y)
+
+        // E7 — El bestiario decide qué criatura concreta aparece, con qué arquetipo
+        // y con qué afijos; sus multiplicadores se aplican ENCIMA de los de rareza.
+        val deco = systems.decorateEnemy(
+            kingdomId = EldoriaBestiary.kingdomIdForCoords(tile.x, tile.y),
+            level = monsterLevel,
+            rarity = rarity,
+            isBoss = isBoss
+        )
+
         val baseName = if (isBoss) {
             if (tile.specialName.isNotEmpty()) tile.specialName else kingdom.bossNames.random()
         } else {
-            kingdom.monsters.random()
+            deco.displayName
         }
 
         val name = when (rarity) {
@@ -1441,9 +1995,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val baseAtk = 8.0 + (monsterLevel * 3.5) + (monsterLevel * 0.1)
         val baseDef = 3.0 + (monsterLevel * 1.8)
 
-        val hp = (baseHp * hpMult * (if (isBoss) 1.5 else 1.0)).toInt()
-        val attack = (baseAtk * atkMult * (if (isBoss) 1.25 else 1.0)).toInt()
-        val defense = (baseDef * defMult * (if (isBoss) 1.2 else 1.0)).toInt()
+        val hp = (baseHp * hpMult * (if (isBoss) 1.5 else 1.0) * deco.hpMult).toInt().coerceAtLeast(1)
+        val attack = (baseAtk * atkMult * (if (isBoss) 1.25 else 1.0) * deco.atkMult).toInt().coerceAtLeast(1)
+        val defense = (baseDef * defMult * (if (isBoss) 1.2 else 1.0) * deco.defMult).toInt().coerceAtLeast(0)
 
         val enemyPet = generateEnemyPetIfNeeded(monsterLevel, rarity, isBoss)
 
@@ -1470,14 +2024,25 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
         val petMsg = if (enemyPet != null) " acompañado por su mascota ${enemyPet.name} (Niv.${enemyPet.level})" else ""
 
+        val affixNames = deco.affixes.mapNotNull { EldoriaBestiary.affix(it)?.name }
+        val logs = mutableListOf(
+            "¡Un salvaje ${enemy.name} (Nivel ${enemy.level})$petMsg bloquea tu camino! $tierLabel"
+        )
+        if (affixNames.isNotEmpty()) logs.add("☠️ Afijos: ${affixNames.joinToString(" · ")}")
+
         _combatState.value = CombatState(
             active = true,
             enemy = enemy,
             playerCurrentHp = progress.currentHp,
             playerCurrentMp = progress.currentMp,
-            combatLogs = listOf("¡Un salvaje ${enemy.name} (Nivel ${enemy.level})$petMsg bloquea tu camino! $tierLabel"),
+            combatLogs = logs.toList(),
             playerTurn = true,
-            victory = null
+            victory = null,
+            enemyArchetype = deco.archetype,
+            enemyAffixes = deco.affixes,
+            enemySpeciesId = deco.speciesId,
+            petCooldown = 0,
+            momentum = 0
         )
 
         _screenState.value = GameScreen.COMBAT
@@ -1513,6 +2078,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 else -> 1.0
             }
             finalDmg = (finalDmg * raceDmgMult).toInt()
+
+            // Ímpetu acumulado con las paradas: hasta un +50 % de daño.
+            val momentumMult = 1.0 + (currentCombat.momentum / 200.0)
+            finalDmg = (finalDmg * momentumMult).toInt()
 
             // Armor mitigation of enemy
             val enemyDef = currentCombat.enemy?.defense ?: 0
@@ -1564,6 +2133,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             }
 
             // Player's Pet Attack on Hero's turn
+            // `working` acumula los cambios del turno: si se volviera a copiar del
+            // snapshot original, la última escritura borraría la saciedad gastada.
+            var working = progress
             var updatedEnemyHp = newEnemyHp
             val playerPet = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
             if (playerPet != null && updatedEnemyHp > 0) {
@@ -1574,9 +2146,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val extraDmg = (petWpn?.dmgBonus ?: 0) + (petWpn?.strBonus ?: 0) + (petAcc?.strBonus ?: 0) + (petAcc?.intBonus ?: 0)
                 val extraHeal = (petArm?.defBonus ?: 0) + (petArm?.conBonus ?: 0) + (petAcc?.conBonus ?: 0) + (petAcc?.hpRegen ?: 0)
 
+                // Pasivo NERFEADO (×0.40): la mascota ya tiene órdenes activas propias.
                 val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
-                val petDmg = ((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult).toInt().coerceAtLeast(20)
-                val petHeal = ((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult).toInt().coerceAtLeast(10)
+                val petDmg = (((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult) * 0.40f).toInt().coerceAtLeast(8)
+                val petHeal = (((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult) * 0.40f).toInt().coerceAtLeast(4)
 
                 updatedEnemyHp = maxOf(0, updatedEnemyHp - petDmg)
                 enemy.currentHp = updatedEnemyHp
@@ -1586,11 +2159,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
                 log += "\n🐾 [Mascota ${playerPet.name} Niv.${progress.petLevel}] ¡Ataca asestando +$petDmg de daño a ${enemy.name} y te cura +$petHeal HP!"
 
-                val progressWithSatiety = progress.copy(
+                working = working.copy(
                     currentHp = currentPlayerHp,
                     petSatiety = currentPetSatiety
                 )
-                repository.saveProgress(progressWithSatiety)
             }
 
             _combatState.value = currentCombat.copy(
@@ -1611,17 +2183,19 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 )
             }
 
-            // Sync player HP updates to database
+            // Sync player HP updates to database (una sola escritura por ataque)
             val latestHp = _combatState.value.playerCurrentHp
-            val progressAfterAttack = progress.copy(
+            val progressAfterAttack = working.copy(
                 currentHp = latestHp
             )
-            repository.saveProgress(progressAfterAttack)
+            saveProgressSynced(progressAfterAttack)
 
             kotlinx.coroutines.delay(1000)
             _combatState.value = _combatState.value.copy(damageFeedbackEnemy = null, activeAnimation = null)
 
-            if (newEnemyHp <= 0) {
+            // El golpe de la mascota también mata: hay que mirar la vida REAL del
+            // enemigo, no la que quedaba tras el golpe del héroe.
+            if (updatedEnemyHp <= 0) {
                 handleCombatVictory()
             } else {
                 executeEnemyTurn()
@@ -1683,7 +2257,9 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     progress.charRace == "Orco" -> 1.10
                     else -> 1.0
                 }
-                var finalSkillDmg = (baseSkillDmg * skill.damageMultiplier * spellMult * raceDmgMult).toInt()
+                // Ímpetu acumulado con las paradas: hasta un +50 % de daño.
+                val momentumMult = 1.0 + (currentCombat.momentum / 200.0)
+                var finalSkillDmg = (baseSkillDmg * skill.damageMultiplier * spellMult * raceDmgMult * momentumMult).toInt()
 
                 // Defense mitigation
                 val enemyDef = currentCombat.enemy?.defense ?: 0
@@ -1724,14 +2300,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val extraDmg = (petWpn?.dmgBonus ?: 0) + (petWpn?.strBonus ?: 0) + (petAcc?.strBonus ?: 0) + (petAcc?.intBonus ?: 0)
                 val extraHeal = (petArm?.defBonus ?: 0) + (petArm?.conBonus ?: 0) + (petAcc?.conBonus ?: 0) + (petAcc?.hpRegen ?: 0)
 
+                // Pasivo NERFEADO (×0.40): la mascota ya tiene órdenes activas propias.
                 val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
-                val petDmg = ((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult).toInt().coerceAtLeast(20)
-                val petHeal = ((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult).toInt().coerceAtLeast(10)
+                val petDmg = (((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult) * 0.40f).toInt().coerceAtLeast(8)
+                val petHeal = (((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult) * 0.40f).toInt().coerceAtLeast(4)
 
                 currentEnemyHp = maxOf(0, currentEnemyHp - petDmg)
                 enemyObj.currentHp = currentEnemyHp
 
-                val currentPetSatiety = maxOf(0, progress.petSatiety - 1)
                 currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + petHeal)
 
                 log += "\n🐾 [Mascota ${playerPet.name} Niv.${progress.petLevel}] ¡Ataca coordinadamente con tu habilidad asestando +$petDmg de daño y te cura +$petHeal HP!"
@@ -1742,7 +2318,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 currentHp = currentPlayerHp,
                 currentMp = newPlayerMp
             )
-            repository.saveProgress(progressAfterSkill)
+            saveProgressSynced(progressAfterSkill)
 
             _combatState.value = currentCombat.copy(
                 playerCurrentHp = currentPlayerHp,
@@ -1752,7 +2328,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 damageFeedbackEnemy = damageFeedbackEnemy,
                 damageFeedbackPlayer = damageFeedbackPlayer,
                 combatLogs = currentCombat.combatLogs + log,
-                activeAnimation = if (skill.healingMultiplier > 0.0) "PLAYER_HEAL" else "PLAYER_MAGIC"
+                activeAnimation = if (skill.healingMultiplier > 0.0) "PLAYER_HEAL" else "PLAYER_MAGIC",
+                lastSkillId = skill.id
             )
 
             kotlinx.coroutines.delay(1000)
@@ -1794,7 +2371,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 currentMp = newMp,
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
-            repository.saveProgress(updatedProgress)
+            saveProgressSynced(updatedProgress)
 
             _combatState.value = currentCombat.copy(
                 playerCurrentHp = newHp,
@@ -1812,13 +2389,278 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  E8 — INTENCIÓN ENEMIGA, VENTANA DE REACCIÓN Y ÓRDENES DE MASCOTA
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Movimiento que el enemigo ya tiene elegido para su turno actual. */
+    private var pendingEnemyMove: String = "BASIC"
+
+    /** 1f = daño íntegro, 0.5f = reacción buena, 0f = parada perfecta. */
+    private var pendingReactionMitigation: Float = 1f
+    private var pendingReactionCounter: Boolean = false
+    private var pendingMpDrainBlocked: Boolean = false
+
+    /** Guardia de la bestia: absorbe daño en el próximo golpe enemigo. */
+    private var petGuardAbsorb: Int = 0
+    private var petGuardFull: Boolean = false
+    private var petGuardianUsed: Boolean = false
+
+    /** Veneno de Embestida (rasgo Colmillo Venenoso). */
+    private var petPoisonTurns: Int = 0
+    private var petPoisonDamage: Int = 0
+
+    /** Deja el estado auxiliar de combate limpio al empezar una pelea nueva. */
+    private fun resetCombatAuxiliaries() {
+        pendingEnemyMove = "BASIC"
+        pendingReactionMitigation = 1f
+        pendingReactionCounter = false
+        pendingMpDrainBlocked = false
+        petGuardAbsorb = 0
+        petGuardFull = false
+        petGuardianUsed = false
+        petPoisonTurns = 0
+        petPoisonDamage = 0
+    }
+
+    private fun intentLabel(move: String): String = when (move) {
+        "ARMOR_PIERCE" -> "Perforación de Armadura"
+        "TRUE_STRIKE" -> "Golpe Certero"
+        "POISON" -> "Veneno Corrosivo"
+        "FREEZE" -> "Congelación Arcana"
+        "BLEED" -> "Hemorragia Mortal"
+        "BOSS_FURY" -> "Ira de Jefe"
+        "REGEN_SHIELD" -> "Escudo de Sangre"
+        else -> "Golpe Directo"
+    }
+
+    private fun intentIcon(move: String): String = when (move) {
+        "ARMOR_PIERCE" -> "🗡️"
+        "TRUE_STRIKE" -> "🎯"
+        "POISON" -> "🧪"
+        "FREEZE" -> "❄️"
+        "BLEED" -> "🩸"
+        "BOSS_FURY" -> "🔥"
+        "REGEN_SHIELD" -> "🖤"
+        else -> "💥"
+    }
+
+    /** Duración de la ventana de reacción; la asistencia la alarga a 1600 ms. */
+    private fun reactionWindowMillis(): Long =
+        if (systems.settings.value.reactionAssist) 1600L else 1100L
+
+    /**
+     * Elige el movimiento del enemigo AL TERMINAR el turno del jugador, lo publica
+     * como intención y abre la ventana de reacción. El turno enemigo posterior usa
+     * este movimiento tal cual: no se vuelve a sortear.
+     */
+    private fun rollEnemyIntent() {
+        val state = _combatState.value
+        val enemy = state.enemy ?: return
+        if (!state.active || state.victory != null) return
+
+        val skillTriggerChance = when {
+            enemy.isBoss || enemy.rarity == "UNIVERSAL" || enemy.rarity == "LEGENDARY" -> 85
+            enemy.rarity == "CHAMPION" || enemy.rarity == "ELITE" -> 65
+            else -> 40
+        }
+
+        val move = if (Random.nextInt(100) >= skillTriggerChance) {
+            "BASIC"
+        } else {
+            val pool = mutableListOf("ARMOR_PIERCE", "TRUE_STRIKE", "POISON", "FREEZE", "BLEED")
+            if (enemy.isBoss || enemy.rarity == "CHAMPION" || enemy.rarity == "ELITE" ||
+                enemy.rarity == "LEGENDARY" || enemy.rarity == "UNIVERSAL"
+            ) {
+                pool.add("BOSS_FURY")
+                pool.add("REGEN_SHIELD")
+            }
+            pool.random()
+        }
+
+        pendingEnemyMove = move
+        pendingReactionMitigation = 1f
+        pendingReactionCounter = false
+        pendingMpDrainBlocked = false
+
+        _combatState.value = _combatState.value.copy(
+            enemyIntent = intentLabel(move),
+            enemyIntentIcon = intentIcon(move),
+            reactionWindow = true,
+            reactionDeadline = System.currentTimeMillis() + reactionWindowMillis()
+        )
+    }
+
+    /** Daño del contraataque de una parada perfecta. */
+    private fun counterAttackDamage(progress: GameProgress, enemy: Combatant, momentum: Int): Int {
+        val weapon = GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)
+        val isRogue = progress.charClass == "Pícaro"
+        val modifierStat = if (isRogue) (progress.statDex + (weapon?.dexBonus ?: 0))
+        else (progress.statStr + (weapon?.strBonus ?: 0))
+        val base = (modifierStat * 0.6) + (weapon?.dmgBonus ?: 0) + Random.nextInt(3, 8)
+        val raw = (base * 0.75 * (1.0 + momentum / 200.0)).toInt()
+        return maxOf(5, raw - (enemy.defense / 2))
+    }
+
+    /**
+     * Resultado del anillo de parada: "PERFECTO" anula el golpe y contraataca,
+     * "BUENO" lo mitiga a la mitad, "FALLO" lo deja pasar entero.
+     */
+    fun executeReaction(quality: String) {
+        val state = _combatState.value
+        val progress = _progressState.value ?: return
+        val enemy = state.enemy ?: return
+        if (!state.active || state.victory != null || !state.reactionWindow) return
+
+        val grade = quality.trim().uppercase()
+        val log: String
+        var momentum = state.momentum
+        var counterDealt = 0
+
+        when (grade) {
+            "PERFECTO" -> {
+                pendingReactionMitigation = 0f
+                pendingReactionCounter = true
+                counterDealt = counterAttackDamage(progress, enemy, state.momentum)
+                enemy.currentHp = maxOf(0, enemy.currentHp - counterDealt)
+                momentum = (momentum + 25).coerceAtMost(100)
+                log = "🛡️ ¡PARADA PERFECTA! Desvías ${intentLabel(pendingEnemyMove).lowercase()} y contraatacas por $counterDealt de daño. (+25 de ímpetu)"
+                SoundManager.playCriticalHit()
+            }
+            "BUENO" -> {
+                pendingReactionMitigation = 0.5f
+                momentum = (momentum + 10).coerceAtMost(100)
+                log = "🛡️ Bloqueas a tiempo: el golpe pierde la mitad de su fuerza. (+10 de ímpetu)"
+                SoundManager.playSwordSlash()
+            }
+            else -> {
+                pendingReactionMitigation = 1f
+                log = "💢 Reaccionas tarde: el golpe entra limpio."
+            }
+        }
+
+        _combatState.value = _combatState.value.copy(
+            momentum = momentum,
+            reactionWindow = false,
+            combatLogs = _combatState.value.combatLogs + log,
+            damageFeedbackEnemy =
+                if (counterDealt > 0) "-$counterDealt HP ⚔️" else _combatState.value.damageFeedbackEnemy
+        )
+    }
+
+    /**
+     * Órdenes activas de la bestia: EMBESTIDA (daño), GUARDIA (absorción) y
+     * ALIENTO (curación). Consumen el enfriamiento del perfil de la mascota.
+     */
+    fun executePetCommand(commandId: String) {
+        val state = _combatState.value
+        val progress = _progressState.value ?: return
+        val enemy = state.enemy ?: return
+        if (!state.active || state.victory != null) return
+
+        if (state.petCooldown > 0) {
+            systems.showToast("🐾 Tu bestia aún recupera el aliento (${state.petCooldown} turnos).", "IRON")
+            return
+        }
+
+        val profile = systems.petCombatProfile()
+        if (profile.petId.isBlank()) {
+            systems.showToast("🐾 No llevas ninguna bestia al combate.", "IRON")
+            return
+        }
+
+        val command = commandId.trim().uppercase()
+        var log: String
+        var playerHp = state.playerCurrentHp
+        var enemyHp = enemy.currentHp
+        var damageDealt = 0
+        var healedAmount = 0
+        val maxHp = progress.maxHp.coerceAtLeast(1)
+
+        when (command) {
+            "EMBESTIDA" -> {
+                val raw = (profile.attack * 1.6f).toInt() + Random.nextInt(4, 14)
+                val damage = maxOf(6, raw - (enemy.defense / 3))
+                damageDealt = damage
+                enemyHp = maxOf(0, enemyHp - damage)
+                enemy.currentHp = enemyHp
+                log = "🐾 ¡${profile.name} embiste a ${enemy.name} por $damage de daño!"
+                if (profile.traits.contains(EldoriaPets.TRAIT_COLMILLO_VENENOSO)) {
+                    petPoisonTurns = 3
+                    petPoisonDamage = maxOf(3, damage / 6)
+                    log += " Sus colmillos dejan veneno por 3 turnos ($petPoisonDamage por turno)."
+                }
+                SoundManager.playSwordSlash()
+            }
+
+            "GUARDIA" -> {
+                petGuardAbsorb = (profile.guard * 2.2f).toInt().coerceAtLeast(10)
+                petGuardFull = profile.traits.contains(EldoriaPets.TRAIT_GUARDIAN_LEAL) && !petGuardianUsed
+                if (petGuardFull) {
+                    petGuardianUsed = true
+                    log = "🐾 ${profile.name} se planta delante de ti: como Guardián Leal, absorberá el próximo golpe ENTERO."
+                } else {
+                    log = "🐾 ${profile.name} monta guardia y absorberá hasta $petGuardAbsorb de daño del próximo golpe."
+                }
+                SoundManager.playButtonClick()
+            }
+
+            "ALIENTO" -> {
+                val healed = (profile.heal * 1.8f).toInt().coerceAtLeast(8)
+                val before = playerHp
+                playerHp = minOf(maxHp, playerHp + healed)
+                healedAmount = playerHp - before
+                log = "🐾 El aliento de ${profile.name} te restaura $healedAmount de vida."
+                if (profile.traits.contains(EldoriaPets.TRAIT_BENDICION_SERENA)) {
+                    pendingMpDrainBlocked = true
+                    log += " Su bendición serena disipa el drenaje de maná que venía en camino."
+                }
+                SoundManager.playHealPotion()
+            }
+
+            else -> {
+                systems.showToast("🐾 Esa orden no existe: usa EMBESTIDA, GUARDIA o ALIENTO.", "IRON")
+                return
+            }
+        }
+
+        _combatState.value = _combatState.value.copy(
+            playerCurrentHp = playerHp,
+            petCooldown = profile.commandCooldown,
+            combatLogs = _combatState.value.combatLogs + log,
+            damageFeedbackEnemy =
+                if (damageDealt > 0) "-$damageDealt HP 🐾" else _combatState.value.damageFeedbackEnemy,
+            damageFeedbackPlayer =
+                if (healedAmount > 0) "+$healedAmount HP 🐾" else _combatState.value.damageFeedbackPlayer
+        )
+
+        if (enemyHp <= 0) {
+            viewModelScope.launch { handleCombatVictory() }
+            return
+        }
+
+        viewModelScope.launch {
+            val updated = progress.copy(currentHp = playerHp)
+            saveProgressSynced(updated)
+            kotlinx.coroutines.delay(700)
+            _combatState.value = _combatState.value.copy(
+                damageFeedbackEnemy = null,
+                damageFeedbackPlayer = null
+            )
+        }
+    }
+
     private fun executeEnemyTurn() {
         val currentCombat = _combatState.value
         val progress = _progressState.value ?: return
         if (currentCombat.victory != null || currentCombat.enemy == null) return
 
+        // El movimiento se elige AQUÍ, al cerrar el turno del jugador, y se anuncia
+        // antes de resolverse: esa espera es la ventana de reacción.
+        rollEnemyIntent()
+
         viewModelScope.launch {
-            kotlinx.coroutines.delay(800)
+            kotlinx.coroutines.delay(reactionWindowMillis())
             SoundManager.playEnemyAttack()
 
             val enemy = currentCombat.enemy
@@ -1844,35 +2686,31 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 playerDefense += dwarfDefBonus
             }
 
+            // El contraataque de una parada perfecta puede haber bajado al enemigo
+            // mientras corría la ventana: si ya está muerto, no hay turno enemigo.
+            if (enemy.currentHp <= 0) {
+                _combatState.value = _combatState.value.copy(reactionWindow = false)
+                handleCombatVictory()
+                return@launch
+            }
+
+            // Estado VIVO: durante la ventana el jugador pudo reaccionar o dar una
+            // orden a su bestia, y ese HP/MP/ímpetu no puede perderse aquí.
+            val live = _combatState.value
+
             // Dodge check
             val dodgeChance = 3 + (progress.statDex * 0.3) + (getTalentRank("t_7") * 4)
             val dodged = Random.nextInt(100) < dodgeChance
 
-            val skillTriggerChance = when {
-                enemy.isBoss || enemy.rarity == "UNIVERSAL" || enemy.rarity == "LEGENDARY" -> 85
-                enemy.rarity == "CHAMPION" || enemy.rarity == "ELITE" -> 65
-                else -> 40
-            }
-
-            val isSkillUsed = Random.nextInt(100) < skillTriggerChance
+            // El movimiento ya venía elegido por `rollEnemyIntent()`: no se re-sortea.
+            val skillChosen = pendingEnemyMove
+            val isSkillUsed = skillChosen != "BASIC"
             var finalDmg = 0
             var feedbackText = ""
             var logMsg = ""
             var mpDrained = 0
 
             if (isSkillUsed) {
-                val availableSkills = mutableListOf<String>()
-                availableSkills.add("ARMOR_PIERCE")
-                availableSkills.add("TRUE_STRIKE")
-                availableSkills.add("POISON")
-                availableSkills.add("FREEZE")
-                availableSkills.add("BLEED")
-                if (enemy.isBoss || enemy.rarity == "CHAMPION" || enemy.rarity == "ELITE" || enemy.rarity == "LEGENDARY" || enemy.rarity == "UNIVERSAL") {
-                    availableSkills.add("BOSS_FURY")
-                    availableSkills.add("REGEN_SHIELD")
-                }
-
-                val skillChosen = availableSkills.random()
                 when (skillChosen) {
                     "ARMOR_PIERCE" -> {
                         val rawDmg = (baseDmg * 2.2).toInt()
@@ -1921,7 +2759,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         feedbackText = "-$finalDmg HP ⚡🔥"
                     }
                     "REGEN_SHIELD" -> {
-                        if (currentCombat.enemyAntiHealTurns > 0) {
+                        if (live.enemyAntiHealTurns > 0) {
                             val rawDmg = (baseDmg * 1.5).toInt()
                             finalDmg = maxOf(4, rawDmg - (playerDefense / 2))
                             if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
@@ -1959,9 +2797,43 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 }
             }
 
-            var newPlayerMp = maxOf(0, currentCombat.playerCurrentMp - mpDrained)
+            // ── Reacción del jugador: mitigación del golpe anunciado ──
+            if (finalDmg > 0 && pendingReactionMitigation < 1f) {
+                val mitigated = (finalDmg * pendingReactionMitigation).toInt()
+                logMsg += when {
+                    mitigated <= 0 -> " 🛡️ ¡Tu parada perfecta anula el golpe por completo!"
+                    else -> " 🛡️ Tu bloqueo recorta el golpe a $mitigated de daño."
+                }
+                finalDmg = mitigated
+                feedbackText = if (finalDmg <= 0) "¡PARADO!" else "-$finalDmg HP 🛡️"
+            }
 
-            val newHp = maxOf(0, currentCombat.playerCurrentHp - finalDmg)
+            // ── Guardia de la bestia: absorbe antes de que el daño te llegue ──
+            if (finalDmg > 0 && (petGuardFull || petGuardAbsorb > 0)) {
+                if (petGuardFull) {
+                    logMsg += " 🐾 Tu Guardián Leal encaja el golpe entero por ti."
+                    finalDmg = 0
+                    feedbackText = "¡ABSORBIDO! 🐾"
+                } else {
+                    val absorbed = minOf(finalDmg, petGuardAbsorb)
+                    finalDmg -= absorbed
+                    logMsg += " 🐾 Tu bestia absorbe $absorbed de daño con su guardia."
+                    feedbackText = if (finalDmg <= 0) "¡ABSORBIDO! 🐾" else "-$finalDmg HP 🐾"
+                }
+                petGuardFull = false
+                petGuardAbsorb = 0
+            }
+
+            // ── Bendición Serena: corta el drenaje de maná del movimiento anunciado ──
+            if (mpDrained > 0 && pendingMpDrainBlocked) {
+                logMsg += " 🐾 El aliento de tu bestia impide el drenaje de $mpDrained de maná."
+                mpDrained = 0
+            }
+            pendingMpDrainBlocked = false
+
+            var newPlayerMp = maxOf(0, live.playerCurrentMp - mpDrained)
+
+            val newHp = maxOf(0, live.playerCurrentHp - finalDmg)
 
             // Dwarf Level 20+ Reflect passive
             var enemyHpAfterReflect = enemy.currentHp
@@ -2015,27 +2887,33 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 updatedLogMsg += "\n🐾 [Mascota Enemiga: ${enemyPet.name} Niv.${enemyPet.level}] ¡Ataca embistiendo e inflige $enemyPetDmg de daño!"
             }
 
-            // Pet Combat Assistance Action
+            // Veneno de la Embestida (rasgo Colmillo Venenoso): 3 turnos de sangrado.
+            if (petPoisonTurns > 0 && enemyHpAfterReflect > 0) {
+                enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - petPoisonDamage)
+                enemy.currentHp = enemyHpAfterReflect
+                petPoisonTurns--
+                updatedLogMsg += "\n🧪 El veneno de tu bestia corroe a ${enemy.name} por $petPoisonDamage de daño ($petPoisonTurns turnos restantes)."
+                if (petPoisonTurns <= 0) petPoisonDamage = 0
+            }
+
+            // Pet Combat Assistance Action — pasivo NERFEADO (×0.40) y sin curación
+            // automática: la curación ahora es la orden ALIENTO, que el jugador decide.
             val pet = GameJsonParser.fromJson<Item>(progress.equippedPetJson)
             var currentPetSatiety = progress.petSatiety
             if (pet != null && enemyHpAfterReflect > 0 && finalPlayerHp > 0) {
                 val petWpn = GameJsonParser.fromJson<Item>(progress.petEquippedWeaponJson)
-                val petArm = GameJsonParser.fromJson<Item>(progress.petEquippedArmorJson)
                 val petAcc = GameJsonParser.fromJson<Item>(progress.petEquippedAccessoryJson)
 
                 val extraDmg = (petWpn?.dmgBonus ?: 0) + (petWpn?.strBonus ?: 0) + (petAcc?.strBonus ?: 0) + (petAcc?.intBonus ?: 0)
-                val extraHeal = (petArm?.defBonus ?: 0) + (petArm?.conBonus ?: 0) + (petAcc?.conBonus ?: 0) + (petAcc?.hpRegen ?: 0)
 
                 val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
-                val petDmg = ((pet.dmgBonus * 0.9 + progress.charLevel * 6 + progress.petLevel * 18 + pet.strBonus * 0.5 + extraDmg + Random.nextInt(15, 35)) * satietyMult).toInt().coerceAtLeast(35)
-                val petHeal = ((pet.hpRegen * 3 + progress.petLevel * 8 + pet.conBonus * 0.5 + extraHeal + Random.nextInt(10, 20)) * satietyMult).toInt().coerceAtLeast(15)
+                val petDmg = (((pet.dmgBonus * 0.9 + progress.charLevel * 6 + progress.petLevel * 18 + pet.strBonus * 0.5 + extraDmg + Random.nextInt(15, 35)) * satietyMult) * 0.40f).toInt().coerceAtLeast(14)
 
                 enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - petDmg)
                 enemy.currentHp = enemyHpAfterReflect
 
-                finalPlayerHp = minOf(progress.maxHp, finalPlayerHp + petHeal)
                 currentPetSatiety = maxOf(0, progress.petSatiety - 1)
-                updatedLogMsg += "\n🐾 [Mascota ${pet.name} Niv.${progress.petLevel}] ¡Ataca asestando $petDmg de daño a ${enemy.name} y te cura +$petHeal HP! (Saciedad: $currentPetSatiety%)"
+                updatedLogMsg += "\n🐾 [Mascota ${pet.name} Niv.${progress.petLevel}] Acosa a ${enemy.name} por $petDmg de daño. (Saciedad: $currentPetSatiety%)"
             }
 
             // Synchronize with database so stats screens and HUDs are updated
@@ -2044,19 +2922,41 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 currentMp = afterRegenMp,
                 petSatiety = currentPetSatiety
             )
-            repository.saveProgress(progressAfterEnemyTurn)
+            saveProgressSynced(progressAfterEnemyTurn)
 
-            val nextAntiHeal = maxOf(0, currentCombat.enemyAntiHealTurns - 1)
+            val nextAntiHeal = maxOf(0, live.enemyAntiHealTurns - 1)
+            val settled = _combatState.value
 
-            _combatState.value = currentCombat.copy(
+            _combatState.value = settled.copy(
                 playerCurrentHp = finalPlayerHp,
                 playerCurrentMp = afterRegenMp,
                 enemyAntiHealTurns = nextAntiHeal,
                 playerTurn = true,
                 damageFeedbackPlayer = feedbackText,
-                combatLogs = currentCombat.combatLogs + updatedLogMsg,
-                activeAnimation = if (isSkillUsed && !dodged) "ENEMY_SKILL" else "ENEMY_ATTACK"
+                combatLogs = settled.combatLogs + updatedLogMsg,
+                activeAnimation = when {
+                    pendingReactionCounter -> "PLAYER_ATTACK"
+                    isSkillUsed && !dodged -> "ENEMY_SKILL"
+                    else -> "ENEMY_ATTACK"
+                },
+                reactionWindow = false,
+                reactionDeadline = 0L,
+                enemyIntent = null,
+                enemyIntentIcon = "",
+                petCooldown = maxOf(0, settled.petCooldown - 1),
+                momentum = maxOf(0, settled.momentum - 5)
             )
+
+            // La reacción sólo vale para el golpe que se acaba de resolver.
+            pendingReactionMitigation = 1f
+            pendingReactionCounter = false
+
+            if (enemyHpAfterReflect <= 0 && finalPlayerHp > 0) {
+                kotlinx.coroutines.delay(600)
+                _combatState.value = _combatState.value.copy(damageFeedbackPlayer = null, activeAnimation = null)
+                handleCombatVictory()
+                return@launch
+            }
 
             kotlinx.coroutines.delay(1000)
             _combatState.value = _combatState.value.copy(damageFeedbackPlayer = null, activeAnimation = null)
@@ -2072,9 +2972,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val progress = _progressState.value ?: return
         val enemy = currentCombat.enemy ?: return
 
-        // Drop rates calibration
+        // Drop rates calibration. La ganancia NO se recorta: sólo se calcula en Long
+        // para que un héroe de nivel alto no desborde el Int y acabe con oro negativo.
         val pLvl = maxOf(1, progress.charLevel)
-        val baseGoldReward = 80 * pLvl * enemy.level + (if (enemy.isBoss) 400 * pLvl else 0)
+        val baseGoldReward = 80L * pLvl * enemy.level + (if (enemy.isBoss) 400L * pLvl else 0L)
         val baseExpReward = 15 * enemy.level + (enemy.level * enemy.level * 2) + (if (enemy.isBoss) 120 * enemy.level else 0)
 
         // Tier multipliers for rewards
@@ -2086,7 +2987,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             else -> 1.0
         }
 
-        val goldReward = (baseGoldReward * rewardMultiplier).toInt()
+        val goldReward = (baseGoldReward * rewardMultiplier)
         val expReward = (baseExpReward * rewardMultiplier).toInt()
 
         // Drop generation rate calibrator
@@ -2101,7 +3002,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             progress.charRace == "Humano" -> 1.10
             else -> 1.0
         }
-        val finalGoldReward = (goldReward * goldTalentMultiplier * raceGoldMultiplier).toInt()
+        val finalGoldReward = (goldReward * goldTalentMultiplier * raceGoldMultiplier)
+            .toLong()
+            .coerceIn(0L, Int.MAX_VALUE.toLong())
+            .toInt()
 
         // Calibrated drop rates
         val legendaryThreshold = 100 - _dropRateLegendary.value
@@ -2174,8 +3078,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             var pDex = progress.statDex
             var pInt = progress.statInt
             var pCon = progress.statCon
-            var pMaxHp = progress.maxHp
-            var pMaxMp = progress.maxMp
 
             while (currentExp >= nextLevelExp) {
                 currentExp -= nextLevelExp
@@ -2189,8 +3091,6 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 pDex += 1
                 pInt += 1
                 pCon += 1
-                pMaxHp = (pCon * 25) + (currentLevel * 20)
-                pMaxMp = pInt * 6
             }
 
             // Remove checkpoint if stage 10 completed
@@ -2203,15 +3103,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val updatedProgress = progress.copy(
                 charLevel = currentLevel,
                 charExp = currentExp,
-                charGold = progress.charGold + finalGoldReward,
+                charGold = (progress.charGold.toLong() + finalGoldReward)
+                    .coerceIn(0L, Int.MAX_VALUE.toLong())
+                    .toInt(),
                 statStr = pStr,
                 statDex = pDex,
                 statInt = pInt,
                 statCon = pCon,
-                maxHp = pMaxHp,
-                maxMp = pMaxMp,
-                currentHp = if (didLevelUp) pMaxHp else currentCombat.playerCurrentHp,
-                currentMp = if (didLevelUp) pMaxMp else currentCombat.playerCurrentMp,
+                currentHp = currentCombat.playerCurrentHp,
+                currentMp = currentCombat.playerCurrentMp,
                 statPointsAvailable = progress.statPointsAvailable + addedStatPoints,
                 talentPointsAvailable = progress.talentPointsAvailable + addedTalentPoints,
                 inventoryJson = GameJsonParser.listToJson(invList),
@@ -2228,14 +3128,26 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 } else progress.completedDungeonsJson
             )
 
-            val (finalProgress, equippedNames) = autoEquipProgress(updatedProgress)
-            repository.saveProgress(finalProgress)
+            val (equippedProgress, equippedNames) = autoEquipProgress(updatedProgress)
+
+            // E11 — `syncMaxHpAndMp` es la ÚNICA fuente de verdad del HP/MP máximo.
+            // Al subir de nivel se recupera el 35 %, no el total: subir no cura.
+            var finalProgress = syncMaxHpAndMp(equippedProgress)
+            if (didLevelUp) {
+                val restoredHp = (finalProgress.currentHp + finalProgress.maxHp * 35 / 100)
+                    .coerceIn(1, finalProgress.maxHp.coerceAtLeast(1))
+                val restoredMp = (finalProgress.currentMp + finalProgress.maxMp * 35 / 100)
+                    .coerceIn(0, finalProgress.maxMp.coerceAtLeast(1))
+                finalProgress = finalProgress.copy(currentHp = restoredHp, currentMp = restoredMp)
+            }
+            saveProgressSynced(finalProgress)
+            _progressState.value = finalProgress
 
             if (dungeonRun.inDungeonRun) {
                 val isFinalBoss = dungeonRun.currentStage == 10
                 _dungeonRunState.value = dungeonRun.copy(
-                    persistentHp = if (didLevelUp) finalProgress.maxHp else currentCombat.playerCurrentHp,
-                    persistentMp = if (didLevelUp) finalProgress.maxMp else currentCombat.playerCurrentMp,
+                    persistentHp = finalProgress.currentHp,
+                    persistentMp = finalProgress.currentMp,
                     stageVictoryPending = !isFinalBoss,
                     dungeonCompletedJustNow = isFinalBoss
                 )
@@ -2243,7 +3155,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             var victoryLogs = "¡Has derrotado a ${enemy.name}! Obtienes $expReward EXP y $finalGoldReward monedas de oro."
             if (didLevelUp) {
-                victoryLogs += " ¡¡SUBISTE AL NIVEL $currentLevel!! Tu salud máxima ahora es de $pMaxHp HP. Ganas +$addedStatPoints atributos y +$addedTalentPoints talentos."
+                victoryLogs += " ¡¡SUBISTE AL NIVEL $currentLevel!! Tu salud máxima ahora es de ${finalProgress.maxHp} HP y recuperas un 35 %. Ganas +$addedStatPoints atributos y +$addedTalentPoints talentos."
             }
             if (finalDroppedItem != null) {
                 victoryLogs += " Encontraste: ${finalDroppedItem.name} [${finalDroppedItem.rarity}]"
@@ -2254,21 +3166,36 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             _combatState.value = currentCombat.copy(
                 victory = true,
-                playerCurrentHp = if (didLevelUp) finalProgress.maxHp else currentCombat.playerCurrentHp,
-                playerCurrentMp = if (didLevelUp) finalProgress.maxMp else currentCombat.playerCurrentMp,
+                playerCurrentHp = finalProgress.currentHp,
+                playerCurrentMp = finalProgress.currentMp,
                 lootDropped = finalDroppedItem,
                 expGained = expReward,
                 goldGained = finalGoldReward,
-                combatLogs = currentCombat.combatLogs + victoryLogs
+                combatLogs = currentCombat.combatLogs + victoryLogs,
+                reactionWindow = false,
+                enemyIntent = null,
+                enemyIntentIcon = ""
             )
+
+            // E10 — Ganchos del controlador: bestiario, materiales, contratos y expedición.
+            systems.onCombatVictory(enemy.name, currentCombat.enemySpeciesId, enemy.isBoss, enemy.level)
+            systems.progressContracts("CAZA", currentCombat.enemyArchetype, 1)
+            // Los encargos del reino apuntan al NOMBRE de la bestia, no a su
+            // arquetipo: sin esta segunda emisión nunca avanzarían.
+            systems.progressContracts("CAZA", enemy.name, 1)
+            checkAndUnlockAchievements()
+            if (currentCombat.inExpedition) systems.onExpeditionCombatResolved(true)
 
             if (_isAutoCombat.value || _isAutoNavigation.value) {
                 kotlinx.coroutines.delay(2500)
                 if (_combatState.value.victory == true) {
-                    if (_dungeonRunState.value.stageVictoryPending) {
-                        advanceDungeonStage()
-                    } else {
-                        exitCombatScreen()
+                    when {
+                        currentCombat.inExpedition -> {
+                            _combatState.value = CombatState()
+                            systems.returnToExpeditionMap()
+                        }
+                        _dungeonRunState.value.stageVictoryPending -> advanceDungeonStage()
+                        else -> exitCombatScreen()
                     }
                 }
             }
@@ -2306,16 +3233,29 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 dungeonCheckpointsJson = newCheckpointsJson
             )
 
-            repository.saveProgress(updatedProgress)
+            saveProgressSynced(updatedProgress)
+            _progressState.value = updatedProgress
             _combatState.value = currentCombat.copy(
                 victory = false,
-                combatLogs = currentCombat.combatLogs + "Has caído en combate... Te retiras al cuadro anterior. Perdiste $penaltyGold monedas de oro de penalización."
+                combatLogs = currentCombat.combatLogs + "Has caído en combate... Te retiras al cuadro anterior. Perdiste $penaltyGold monedas de oro de penalización.",
+                reactionWindow = false,
+                enemyIntent = null,
+                enemyIntentIcon = ""
             )
+
+            // E10 — Ganchos de derrota.
+            systems.onCombatDefeat()
+            if (currentCombat.inExpedition) systems.onExpeditionCombatResolved(false)
 
             if (_isAutoCombat.value || _isAutoNavigation.value) {
                 kotlinx.coroutines.delay(2500)
                 if (_combatState.value.victory == false) {
-                    exitCombatScreen()
+                    if (currentCombat.inExpedition) {
+                        _combatState.value = CombatState()
+                        _screenState.value = GameScreen.DUNGEON
+                    } else {
+                        exitCombatScreen()
+                    }
                 }
             }
         }
@@ -2323,9 +3263,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
     fun exitCombatScreen() {
         _combatState.value = CombatState()
+        resetCombatAuxiliaries()
         val progress = _progressState.value
         if (progress != null) {
-            generateMapAround(progress.currentX, progress.currentY, progress.mapPointsExploredJson)
+            // E11 — El 4.º argumento faltaba: sin él el mapa perdía las casillas limpias.
+            generateMapAround(
+                progress.currentX,
+                progress.currentY,
+                progress.mapPointsExploredJson,
+                progress.mapPointsClearedJson
+            )
         }
         _screenState.value = GameScreen.WORLD_MAP
     }
@@ -2337,22 +3284,34 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         viewModelScope.launch {
             val progress = _progressState.value
             if (progress != null) {
-                repository.saveProgress(progress.copy(
+                val saved = progress.copy(
                     currentHp = maxOf(1, currentCombat.playerCurrentHp),
                     currentMp = currentCombat.playerCurrentMp
-                ))
+                )
+                saveProgressSynced(saved)
+                _progressState.value = saved
             }
             val isDungeon = _dungeonRunState.value.inDungeonRun
-            _combatState.value = currentCombat.copy(
-                active = false,
-                victory = false
-            )
-            showNotification("🏃 ¡Huiste del combate exitosamente!")
-            if (isDungeon) {
-                _dungeonRunState.value = DungeonRunState(inDungeonRun = false)
-                _screenState.value = GameScreen.DUNGEON
-            } else {
-                _screenState.value = GameScreen.WORLD_MAP
+            val fled = true
+            val wasExpedition = currentCombat.inExpedition
+
+            // E11 — Huir NO es una derrota: `victory` se queda en null para que ninguna
+            // pantalla dibuje la carta de "has caído" ni se apliquen penalizaciones.
+            _combatState.value = CombatState()
+            resetCombatAuxiliaries()
+
+            if (fled) systems.showToast("🏃 Escapas del combate con lo puesto.", "SILVER")
+
+            when {
+                wasExpedition -> {
+                    systems.abandonExpedition()
+                    _screenState.value = GameScreen.DUNGEON
+                }
+                isDungeon -> {
+                    _dungeonRunState.value = DungeonRunState(inDungeonRun = false)
+                    _screenState.value = GameScreen.DUNGEON
+                }
+                else -> _screenState.value = GameScreen.WORLD_MAP
             }
         }
     }
@@ -2463,12 +3422,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
             val synced = syncMaxHpAndMp(updated)
-            repository.saveProgress(synced)
+            saveProgressSynced(synced)
 
             if (leveledUp) {
-                showNotification("🍖 Alimentaste a ${equippedPet.name}. ¡Salió un destello divino y SUBIÓ AL NIVEL $newLevel!")
+                systems.showToast("🍖 Alimentas a ${equippedPet.name}: destello divino y ¡NIVEL $newLevel!", "VITAE")
             } else {
-                showNotification("🍖 Alimentaste a ${equippedPet.name}. +$satietyGained Saciedad, +$expGained EXP.")
+                systems.showToast("🍖 Alimentas a ${equippedPet.name}: +$satietyGained de saciedad y +$expGained de EXP.", "VITAE")
             }
         }
     }
@@ -2520,13 +3479,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 petLevel = newLevel
             )
             val synced = syncMaxHpAndMp(updated)
-            repository.saveProgress(synced)
+            saveProgressSynced(synced)
 
             if (leveledUp) {
                 SoundManager.playVictory()
-                showNotification("⚔️ $trainTitle completado. ¡${equippedPet.name} SUBIÓ AL NIVEL $newLevel!")
+                systems.showToast("⚔️ $trainTitle completado: ¡${equippedPet.name} sube al nivel $newLevel!", "EMBER")
             } else {
-                showNotification("⚔️ $trainTitle completado. +$expGained EXP, -10 Saciedad.")
+                systems.showToast("⚔️ $trainTitle completado: +$expGained de EXP y −10 de saciedad.", "EMBER")
             }
         }
     }
@@ -2593,8 +3552,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 petLevel = currentLevel
             )
             val synced = syncMaxHpAndMp(updated)
-            repository.saveProgress(synced)
-            showNotification("⚡ Auto-Entrenamiento ($trainTitle): ¡Entrenaste $totalTrainings veces! Nivel actual: $currentLevel. (Oro: -$totalGoldSpent 🪙)")
+            saveProgressSynced(synced)
+            systems.showToast("⚡ Auto-entrenamiento ($trainTitle): $totalTrainings sesiones, nivel $currentLevel, −$totalGoldSpent de oro.", "EMBER")
         }
     }
 
@@ -2629,7 +3588,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         viewModelScope.launch {
             SoundManager.playButtonClick()
             val finalProgress = syncMaxHpAndMp(updated.copy(inventoryJson = GameJsonParser.listToJson(invList)))
-            repository.saveProgress(finalProgress)
+            saveProgressSynced(finalProgress)
             showNotification("¡Equipaste ${item.name} a tu mascota!")
         }
     }
@@ -2660,7 +3619,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             viewModelScope.launch {
                 SoundManager.playButtonClick()
                 val finalProgress = syncMaxHpAndMp(updated.copy(inventoryJson = GameJsonParser.listToJson(invList)))
-                repository.saveProgress(finalProgress)
+                saveProgressSynced(finalProgress)
                 showNotification("¡Desequipaste ${itemToReturn.name} de tu mascota!")
             }
         }
@@ -2706,7 +3665,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 charGold = (progress.charGold - totalCost).toInt(),
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
-            repository.saveProgress(updatedProgress)
+            saveProgressSynced(updatedProgress)
             showNotification("¡Compraste $qty de ${spec.name} por $totalCost 🪙 de oro!")
         }
     }
@@ -2725,11 +3684,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val currentHpClamped = progress.currentHp.coerceAtMost(calculatedMaxHp)
         val currentMpClamped = progress.currentMp.coerceAtMost(calculatedMaxMp)
 
-        if (calculatedMaxHp != progress.maxHp || calculatedMaxMp != progress.maxMp || progress.highestUnlockedDungeon < 16) {
+        if (calculatedMaxHp != progress.maxHp || calculatedMaxMp != progress.maxMp) {
             val updated = progress.copy(
                 maxHp = calculatedMaxHp,
                 maxMp = calculatedMaxMp,
-                highestUnlockedDungeon = 16,
                 currentHp = if (progress.currentHp >= progress.maxHp || progress.currentHp <= 0) calculatedMaxHp else currentHpClamped,
                 currentMp = if (progress.currentMp >= progress.maxMp) calculatedMaxMp else currentMpClamped
             )
@@ -3012,11 +3970,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val (finalProgress, equippedNames) = autoEquipProgress(progress)
         if (equippedNames.isNotEmpty()) {
             viewModelScope.launch {
-                repository.saveProgress(finalProgress)
-                showNotification("Equipamiento Automático: Se equipó ${equippedNames.joinToString(", ")}")
+                saveProgressSynced(finalProgress)
+                systems.showToast("🛡️ Auto-equipo: ${equippedNames.joinToString(", ")}.", "SILVER")
             }
         } else {
-            showNotification("Ya tienes equipado el mejor equipamiento disponible para tu nivel.")
+            systems.showToast("🛡️ Ya llevas el mejor equipo disponible para tu nivel.", "IRON")
         }
     }
 
@@ -3093,7 +4051,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val finalProgress = syncMaxHpAndMp(updatedProgress.copy(
                 inventoryJson = GameJsonParser.listToJson(invList)
             ))
-            repository.saveProgress(finalProgress)
+            saveProgressSynced(finalProgress)
             showNotification("¡Equipaste exitosamente: ${item.name}!")
         }
     }
@@ -3156,7 +4114,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             if (itemToStore != null) {
                 invList.add(itemToStore)
                 val finalProgress = syncMaxHpAndMp(updated.copy(inventoryJson = GameJsonParser.listToJson(invList)))
-                repository.saveProgress(finalProgress)
+                saveProgressSynced(finalProgress)
                 showNotification("Desequipaste ${itemToStore.name} al inventario.")
             }
         }
@@ -3169,7 +4127,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         viewModelScope.launch {
             invList.remove(item)
             val updated = progress.copy(inventoryJson = GameJsonParser.listToJson(invList))
-            repository.saveProgress(updated)
+            saveProgressSynced(updated)
             showNotification("Descartaste el objeto: ${item.name}")
         }
     }
@@ -3206,7 +4164,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 charGold = (progress.charGold - totalCost).toInt(),
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
-            repository.saveProgress(updated)
+            saveProgressSynced(updated)
             showNotification("Compraste $qty Poción(es) por $totalCost monedas de oro.")
         }
     }
@@ -3243,7 +4201,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 talentPointsSpent = progress.talentPointsSpent + 1,
                 talentsJson = GameJsonParser.listToJson(talentList)
             )
-            repository.saveProgress(updatedProgress)
+            saveProgressSynced(updatedProgress)
             showNotification("¡Asignaste un punto al talento: ${talent.name}! (Niv.${updatedTalent.currentRank})")
         }
     }
@@ -3285,7 +4243,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     talentPointsSpent = progress.talentPointsSpent + allocatedCount,
                     talentsJson = GameJsonParser.listToJson(talentList)
                 )
-                repository.saveProgress(updatedProgress)
+                saveProgressSynced(updatedProgress)
                 showNotification("⚡ ¡Se auto-asignaron $allocatedCount puntos de talento!")
             }
         }
@@ -3342,7 +4300,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 currentMp = newMaxMp,
                 skillsJson = GameJsonParser.listToJson(currentSkills)
             )
-            repository.saveProgress(updated)
+            saveProgressSynced(updated)
             SoundManager.playVictory()
             _showClassAdvancementCutscene.value = progress.charClass
             showNotification("✨ ¡AVANCE DE CLASE COMPLETADO! ¡Ahora eres $advName! Estadísticas duplicadas y habilidad X5 desbloqueada.")
@@ -3431,7 +4389,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 )
             }
             val updated = syncMaxHpAndMp(baseUpdated)
-            repository.saveProgress(updated)
+            saveProgressSynced(updated)
             showNotification("¡Aumentaste tu ${stat} en +1!")
         }
     }
@@ -3494,7 +4452,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             val updated = syncMaxHpAndMp(baseUpdated)
 
-            repository.saveProgress(updated)
+            saveProgressSynced(updated)
             
             val summary = buildString {
                 append("¡Asignados automáticamente: ")
@@ -3513,12 +4471,19 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     // --- GAME RESET / DELETION ---
     fun deleteCharacterAndReset() {
         viewModelScope.launch {
-            repository.deleteProgress()
-            _screenState.value = GameScreen.CREATING_CHARACTER
+            // Sólo el héroe ACTIVO, como promete la pantalla de ajustes: el resto del
+            // Salón de Héroes se queda donde estaba.
+            val activeId = _progressState.value?.id ?: repository.getActiveProgressSync()?.id
+            if (activeId == null) {
+                showNotification("No hay ningún héroe activo que borrar.")
+                return@launch
+            }
+            repository.deleteCharacter(activeId)
+            _screenState.value = GameScreen.MAIN_MENU
             _creatorName.value = ""
             _creatorPointsAvailable.value = 15
             recalculateCreatorBaseStats()
-            showNotification("Tu partida ha sido borrada. ¡Crea un nuevo héroe!")
+            showNotification("Tu héroe activo ha sido borrado. El resto de tu Salón sigue intacto.")
         }
     }
 
@@ -3669,6 +4634,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         playerHp: Int,
         playerMp: Int
     ) {
+        resetCombatAuxiliaries()
         val progress = _progressState.value
         val heroLevel = progress?.charLevel ?: 1
         val monsterLevel = maxOf(dungeon.levelReq + (stage / 2), heroLevel + (stage / 3))
@@ -3730,6 +4696,92 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         )
 
         _screenState.value = GameScreen.COMBAT
+    }
+
+    // === NUEVOS SISTEMAS: LOGROS, RECOMPENSAS DIARIAS, FORJA ===
+
+    private val _achievementState = MutableStateFlow(AchievementDefinitions.ALL_ACHIEVEMENTS)
+    val achievementState: StateFlow<List<Achievement>> = _achievementState.asStateFlow()
+
+    private val _dailyRewardState = MutableStateFlow(DailyRewardState())
+    val dailyRewardState: StateFlow<DailyRewardState> = _dailyRewardState.asStateFlow()
+
+    fun checkAndUnlockAchievements() {
+        val progress = _progressState.value ?: return
+        val current = _achievementState.value.toMutableList()
+        var changed = false
+
+        current.forEachIndexed { index, achievement ->
+            if (achievement.isUnlocked) return@forEachIndexed
+
+            val newProgress = when (achievement.id) {
+                "first_blood", "beast_hunter", "exterminator", "elite_warrior" ->
+                    progress.mapPointsClearedJson.count { it == ',' || it == '"' } + 1
+                "dragon_slayer" -> GameJsonParser.listFromJson<String>(progress.completedQuestsJson).size
+                "novice_explorer", "cartographer", "world_traveler" ->
+                    GameJsonParser.listFromJson<String>(progress.mapPointsExploredJson).size
+                "adventurer", "hero_of_eldoria", "legend_alive" -> progress.charLevel
+                "collector" -> GameJsonParser.listFromJson<Item>(progress.inventoryJson).size
+                "millionaire" -> progress.charGold.toInt()
+                "beast_tamer" -> progress.petLevel
+                "dungeon_king", "dungeon_conqueror" ->
+                    GameJsonParser.listFromJson<Int>(progress.completedDungeonsJson).size
+                "ascended" -> if (progress.hasAdvancedClass) 1 else 0
+                else -> achievement.currentProgress
+            }
+
+            val unlocked = newProgress >= achievement.requirement
+            if (newProgress != achievement.currentProgress || unlocked != achievement.isUnlocked) {
+                current[index] = achievement.copy(currentProgress = newProgress, isUnlocked = unlocked)
+                changed = true
+                if (unlocked && !achievement.isUnlocked) {
+                    showNotification("🏆 ¡Logro Desbloqueado: ${achievement.title}! (+${achievement.rewardGold}🪙 +${achievement.rewardXp}XP)")
+                }
+            }
+        }
+
+        if (changed) {
+            _achievementState.value = current
+        }
+    }
+
+    fun canClaimDailyRewardNow(): Boolean {
+        return canClaimDailyReward(_dailyRewardState.value)
+    }
+
+    fun claimDailyRewardNow() {
+        val state = _dailyRewardState.value
+        if (!canClaimDailyReward(state)) return
+
+        val newState = claimDailyReward(state)
+        _dailyRewardState.value = newState
+
+        val currentReward = state.cycleRewards.getOrNull(state.currentDay - 1)
+        if (currentReward != null) {
+            val progress = _progressState.value ?: return
+            var goldBonus = 0
+            var xpBonus = 0
+            currentReward.rewards.forEach { item ->
+                when (item.type) {
+                    "gold" -> goldBonus += item.amount
+                    "xp" -> xpBonus += item.amount
+                }
+            }
+            if (goldBonus > 0 || xpBonus > 0) {
+                viewModelScope.launch {
+                    val updated = progress.copy(
+                        charGold = progress.charGold + goldBonus,
+                        charExp = progress.charExp + xpBonus
+                    )
+                    saveProgressSynced(updated)
+                    showNotification("🎁 ¡Recompensa del Día ${state.currentDay} reclamada! +${goldBonus}🪙 +${xpBonus}XP")
+                }
+            }
+        }
+    }
+
+    fun resetDailyCycle() {
+        _dailyRewardState.value = DailyRewardState()
     }
 }
 
@@ -4219,3 +5271,4 @@ val DUNGEONS_LIST = listOf(
         description = "La cúspide suprema de toda la existencia. Enfrenta a Ouroboros para dominar el multiverso."
     )
 )
+

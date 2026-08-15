@@ -76,6 +76,23 @@ object GameBackupManager {
         return null
     }
 
+    /**
+     * Borra la copia automática. Necesario al eliminar un personaje: mientras el
+     * fichero exista, [GameProgressRepository.getProgress] lo reinsertaría en la
+     * base de datos y el borrado sería imposible.
+     */
+    fun clearBackup(context: Context): Boolean {
+        var removed = false
+        for (file in getBackupFiles(context)) {
+            try {
+                if (file.exists() && file.delete()) removed = true
+            } catch (e: Exception) {
+                Log.e(TAG, "Error deleting backup at ${file.absolutePath}", e)
+            }
+        }
+        return removed
+    }
+
     fun getBackupInfo(context: Context): String {
         val files = getBackupFiles(context)
         for (file in files) {

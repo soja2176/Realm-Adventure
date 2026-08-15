@@ -56,7 +56,10 @@ class QuestSystem {
                     // Simulado: cualquier item cuenta si no hay especificación
                     quest.targetEntity == null || targetEntity.contains(quest.targetEntity, ignoreCase = true)
                 }
-                QuestType.EXPLORE -> false // Se maneja manualmente
+                QuestType.EXPLORE -> {
+                    // Progresión por exploración: targetEntity es el nombre del reino explorado
+                    quest.targetEntity != null && targetEntity.contains(quest.targetEntity, ignoreCase = true)
+                }
                 QuestType.SURVIVAL -> false // Se maneja por turnos
             }
             
@@ -112,6 +115,24 @@ class QuestSystem {
     fun abandonQuest(questId: String) {
         _activeQuests.value = _activeQuests.value.filter { it.id != questId }
         questProgress.remove(questId)
+    }
+
+    /**
+     * Restaura misiones activas persistidas (con su progreso parcial)
+     */
+    fun restoreQuests(persisted: List<Pair<Quest, Int>>) {
+        _activeQuests.value = persisted.map { it.first }
+        questProgress.clear()
+        persisted.forEach { (quest, progress) -> questProgress[quest.id] = progress }
+    }
+
+    /**
+     * Snapshot de misiones activas con su progreso para persistencia
+     */
+    fun snapshotActiveQuests(): List<Pair<Quest, Int>> {
+        return _activeQuests.value.map { quest ->
+            Pair(quest, questProgress[quest.id] ?: 0)
+        }
     }
     
     /**

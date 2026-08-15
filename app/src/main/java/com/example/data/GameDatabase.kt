@@ -9,7 +9,9 @@ import androidx.room.Query
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.RoomDatabase
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 
 import androidx.room.Ignore
 
@@ -63,7 +65,21 @@ data class GameProgress(
     val currentX: Int = 0,
     val currentY: Int = 0,
     val hasAdvancedClass: Boolean = false,
-    val advancedClassName: String = ""
+    val advancedClassName: String = "",
+    val activeQuestsJson: String = "[]",
+    val petRosterJson: String = "[]",
+    val activePetId: String = "",
+    val bestiaryJson: String = "{}",
+    val materialsJson: String = "{}",
+    val expeditionJson: String = "",
+    val minigameStatsJson: String = "{}",
+    val settingsJson: String = "",
+    val contractsJson: String = "[]",
+    val torchStock: Int = 3,
+    val totalKills: Int = 0,
+    val bossKills: Int = 0,
+    val dungeonsCleared: Int = 0,
+    val deepestDepth: Int = 0
 ) {
     @get:Ignore
     val hasActiveChar: Boolean get() = isActiveChar && charName.isNotBlank()
@@ -99,9 +115,35 @@ interface GameProgressDao {
     suspend fun clearGameProgress()
 }
 
-@Database(entities = [GameProgress::class], version = 7, exportSchema = false)
+@Database(entities = [GameProgress::class], version = 9, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun gameProgressDao(): GameProgressDao
+
+    companion object {
+        val MIGRATION_7_8 = object : androidx.room.migration.Migration(7, 8) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN activeQuestsJson TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
+        val MIGRATION_8_9 = object : androidx.room.migration.Migration(8, 9) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN petRosterJson TEXT NOT NULL DEFAULT '[]'")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN activePetId TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN bestiaryJson TEXT NOT NULL DEFAULT '{}'")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN materialsJson TEXT NOT NULL DEFAULT '{}'")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN expeditionJson TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN minigameStatsJson TEXT NOT NULL DEFAULT '{}'")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN settingsJson TEXT NOT NULL DEFAULT ''")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN contractsJson TEXT NOT NULL DEFAULT '[]'")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN torchStock INTEGER NOT NULL DEFAULT 3")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN totalKills INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN bossKills INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN dungeonsCleared INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE game_progress ADD COLUMN deepestDepth INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+    }
 }
 
 class GameProgressRepository(
@@ -110,6 +152,17 @@ class GameProgressRepository(
 ) {
     val progressFlow: Flow<GameProgress?> = dao.getActiveGameProgress()
     val allCharactersFlow: Flow<List<GameProgress>> = dao.getAllGameProgress()
+
+    /**
+     * Lectura PURA de la fila activa: no restaura la copia de seguridad ni escribe
+     * nada. Quien necesite saber "qué queda" tras un borrado debe usar esta y no
+     * [getProgress], que resucita al personaje desde el backup automático.
+     */
+    suspend fun getActiveProgressSync(): GameProgress? = try {
+        dao.getActiveGameProgressSync()
+    } catch (e: Exception) {
+        null
+    }
 
     suspend fun getProgress(): GameProgress? {
         val current = try {
@@ -141,7 +194,8 @@ class GameProgressRepository(
         }
         context?.let { ctx ->
             if (progress.hasActiveChar) {
-                GameBackupManager.saveBackup(ctx, progress)
+                // La copia escribe dos ficheros completos: nunca en el hilo principal.
+                withContext(Dispatchers.IO) { GameBackupManager.saveBackup(ctx, progress) }
             }
         }
         return id
@@ -165,8 +219,9 @@ class GameProgressRepository(
         }
     }
 
-    fun getBackupStatusText(): String {
-        return context?.let { GameBackupManager.getBackupInfo(it) } ?: "Copia de seguridad deshabilitada"
+    suspend fun getBackupStatusText(): String {
+        val ctx = context ?: return "Copia de seguridad deshabilitada"
+        return withContext(Dispatchers.IO) { GameBackupManager.getBackupInfo(ctx) }
     }
 
     suspend fun deactivateAll() {
@@ -182,10 +237,21 @@ class GameProgressRepository(
 
     suspend fun deleteCharacter(id: Int) {
         try { dao.deleteCharacterById(id) } catch (_: Exception) {}
+        // El backup automático conserva la fila borrada con su id original: si no se
+        // invalida, la siguiente lectura de `getProgress()` la reinsertaría entera.
+        context?.let { ctx ->
+            withContext(Dispatchers.IO) {
+                val backup = GameBackupManager.loadBackup(ctx)
+                if (backup != null && backup.id == id) GameBackupManager.clearBackup(ctx)
+            }
+        }
     }
 
     suspend fun deleteProgress() {
         try { dao.clearGameProgress() } catch (_: Exception) {}
+        context?.let { ctx ->
+            withContext(Dispatchers.IO) { GameBackupManager.clearBackup(ctx) }
+        }
     }
 }
 

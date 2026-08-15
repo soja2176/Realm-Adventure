@@ -14,6 +14,7 @@ import com.example.data.AppDatabase
 import com.example.data.GameProgressRepository
 import com.example.data.GameViewModel
 import com.example.ui.EldoriaMainContainer
+import com.example.ui.design.Eldoria
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -23,6 +24,7 @@ class MainActivity : ComponentActivity() {
       AppDatabase::class.java,
       "eldoria_rpg.db"
     )
+    .addMigrations(AppDatabase.MIGRATION_7_8, AppDatabase.MIGRATION_8_9)
     .fallbackToDestructiveMigrationOnDowngrade()
     .fallbackToDestructiveMigration()
     .build()
@@ -50,7 +52,7 @@ class MainActivity : ComponentActivity() {
       MyApplicationTheme {
         Surface(
           modifier = Modifier.fillMaxSize(),
-          color = androidx.compose.ui.graphics.Color(0xFF0F111A)
+          color = Eldoria.Abyss
         ) {
           EldoriaMainContainer(viewModel = viewModel)
         }
