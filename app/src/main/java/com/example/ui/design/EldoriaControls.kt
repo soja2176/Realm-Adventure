@@ -1099,6 +1099,7 @@ fun EldoriaToastCard(
 }
 
 /** Tarjeta de objeto reutilizable en tienda/inventario/botín/forja. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun EldoriaItemCard(
     name: String,
@@ -1109,6 +1110,12 @@ fun EldoriaItemCard(
     modifier: Modifier = Modifier,
     subtitle: String? = null,
     onClick: (() -> Unit)? = null,
+    /**
+     * Pulsación larga: abre la ficha completa. Las estadísticas de la tarjeta se
+     * cortan a dos líneas por espacio, así que ésta es la vía para verlas enteras
+     * —y la única para enterarse de las pasivas de una pieza legendaria—.
+     */
+    onLongClick: (() -> Unit)? = null,
     trailing: (@Composable () -> Unit)? = null,
     testTag: String? = null
 ) {
@@ -1121,7 +1128,17 @@ fun EldoriaItemCard(
             .fillMaxWidth()
             .clip(shape)
             .background(Brush.horizontalGradient(listOf(rarityColor.copy(alpha = 0.10f), Eldoria.Panel, Eldoria.PanelSunken)))
-            .then(if (onClick != null) Modifier.eldoriaPressable(onClick = onClick) else Modifier)
+            .then(
+                if (onClick != null || onLongClick != null) {
+                    Modifier.combinedClickable(
+                        onLongClick = onLongClick?.let { { SoundManager.playButtonClick(); it() } },
+                        onClick = {
+                            SoundManager.playButtonClick()
+                            onClick?.invoke()
+                        }
+                    )
+                } else Modifier
+            )
             .border(Eldoria.StrokeThin, edge.brush(), shape)
             .padding(9.dp)
             .then(if (testTag != null) Modifier.testTag(testTag) else Modifier),

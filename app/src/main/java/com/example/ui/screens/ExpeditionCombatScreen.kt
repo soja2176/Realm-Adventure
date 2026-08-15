@@ -92,6 +92,7 @@ import com.example.ui.design.eldoriaPressable
 import com.example.ui.design.eldoriaPulse
 import com.example.ui.design.eldoriaShake
 import com.example.ui.getCharacterPortrait
+import com.example.ui.getEnemyArtRes
 import com.example.ui.getEnemyPortraitRes
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -271,7 +272,7 @@ fun ExpeditionCombatScreen(viewModel: GameViewModel) {
                         glowPulse = combat.reactionWindow || enemy.isBoss
                     ) {
                         Image(
-                            painter = painterResource(id = getEnemyPortraitRes(enemy.name, enemy.isBoss)),
+                            painter = painterResource(id = getEnemyArtRes(enemy.artKey, enemy.name, enemy.isBoss)),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()

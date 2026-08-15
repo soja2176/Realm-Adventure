@@ -21,6 +21,8 @@ import com.example.eldoria.systems.canClaimDailyReward
 import com.example.eldoria.systems.claimDailyReward
 import com.example.data.content.EldoriaBestiary
 import com.example.data.content.KingdomAtlas
+import com.example.data.engine.EldoriaBalance
+import com.example.data.engine.EldoriaPassives
 import com.example.data.content.EldoriaExpeditions
 import com.example.data.content.EldoriaPets
 import com.example.data.engine.EldoriaHost
@@ -79,7 +81,14 @@ data class Combatant(
     val level: Int,
     val isBoss: Boolean = false,
     val rarity: String = "NORMAL", // "NORMAL", "ELITE", "BOSS"
-    val pet: EnemyPet? = null
+    val pet: EnemyPet? = null,
+    /**
+     * Drawable exacto de la especie, tal y como lo declara el bestiario.
+     * Sin esto la UI tenía que adivinar el retrato buscando palabras dentro del
+     * nombre ya decorado ("⭐ Musgoso Devorador Feroz Élite"), y acababa
+     * enseñando el ogro genérico para media docena de criaturas.
+     */
+    val artKey: String = ""
 )
 
 data class CombatState(
@@ -115,7 +124,25 @@ data class CombatState(
      * el efecto visual (fuego, veneno, sagrado…): sin esto, todas las habilidades
      * se verían igual, y con auto-combate la pantalla no tendría forma de saberlo.
      */
-    val lastSkillId: String = ""
+    val lastSkillId: String = "",
+
+    // ─── Pasivas de objeto: estado que sólo vive dentro del combate ───
+    /** Daño que aún absorbe el Escudo Rúnico antes de que te toquen. */
+    val runeShieldLeft: Int = 0,
+    /** El Segundo Aliento sólo salva una vez por combate. */
+    val secondWindUsed: Boolean = false,
+    /** Turnos peleados: alimenta la Furia Creciente. */
+    val turnsFought: Int = 0,
+    /** Nombres de las pasivas activas, para enseñarlas en el HUD de combate. */
+    val activePassives: List<String> = emptyList(),
+
+    // ─── Mecánicas de jefe ───
+    /** Fase actual del jefe (1..3). Sube al bajarle la vida. */
+    val bossPhase: Int = 1,
+    /** Turnos que al jefe le queda el enfurecimiento activo. */
+    val enrageTurns: Int = 0,
+    /** Acumulación de sangrado sobre el héroe: daña al inicio de su turno. */
+    val bleedStacks: Int = 0
 )
 
 data class SpecialMerchantItem(
@@ -1990,14 +2017,26 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             else -> baseName
         }
 
-        // Balanced linear-quadratic formula (replaces brutal exponential Math.pow(1.2, level) & 81x)
-        val baseHp = 55.0 + (monsterLevel * 38.0) + (monsterLevel * monsterLevel * 0.85)
-        val baseAtk = 8.0 + (monsterLevel * 3.5) + (monsterLevel * 0.1)
-        val baseDef = 3.0 + (monsterLevel * 1.8)
+        // El enemigo se calibra contra el PODER REAL del héroe (equipo incluido),
+        // no contra su nivel: el nivel no mide nada cuando la mitad de la fuerza
+        // del jugador viene del equipo. `EldoriaBalance` fija cuántos turnos debe
+        // durar el combate y despeja vida y ataque desde ahí.
+        val hero = EldoriaBalance.measureHero(progress) { id -> getTalentRank(id) }
+        val stats = EldoriaBalance.buildEnemy(
+            hero = hero,
+            rarity = rarity,
+            enemyLevel = monsterLevel,
+            isBoss = isBoss,
+            // Los multiplicadores de rareza y del bestiario se combinan y entran
+            // como modificadores; el grueso ya lo pone la forma del combate.
+            hpMult = hpMult * deco.hpMult,
+            atkMult = atkMult * deco.atkMult,
+            defMult = defMult * deco.defMult
+        )
 
-        val hp = (baseHp * hpMult * (if (isBoss) 1.5 else 1.0) * deco.hpMult).toInt().coerceAtLeast(1)
-        val attack = (baseAtk * atkMult * (if (isBoss) 1.25 else 1.0) * deco.atkMult).toInt().coerceAtLeast(1)
-        val defense = (baseDef * defMult * (if (isBoss) 1.2 else 1.0) * deco.defMult).toInt().coerceAtLeast(0)
+        val hp = stats.hp
+        val attack = stats.attack
+        val defense = stats.defense
 
         val enemyPet = generateEnemyPetIfNeeded(monsterLevel, rarity, isBoss)
 
@@ -2012,7 +2051,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             level = monsterLevel,
             isBoss = isBoss,
             rarity = rarity,
-            pet = enemyPet
+            pet = enemyPet,
+            artKey = deco.artKey
         )
 
         val tierLabel = when (rarity) {
@@ -2030,6 +2070,17 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         )
         if (affixNames.isNotEmpty()) logs.add("☠️ Afijos: ${affixNames.joinToString(" · ")}")
 
+        // Pasivas del equipo legendario o superior: se resuelven una vez, al
+        // entrar. Son lo que equilibra que el enemigo pegue por encima de ti.
+        val loadout = EldoriaPassives.loadoutOf(progress, getAllEquippedItems(progress))
+        val shield = (progress.maxHp * loadout.runeShield).toInt()
+        if (loadout.hasAny) {
+            logs.add("✨ Pasivas activas: ${loadout.names.joinToString(" · ")}")
+        }
+        if (shield > 0) {
+            logs.add("🛡️ El Escudo Rúnico te envuelve: absorbe los próximos $shield de daño.")
+        }
+
         _combatState.value = CombatState(
             active = true,
             enemy = enemy,
@@ -2042,7 +2093,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             enemyAffixes = deco.affixes,
             enemySpeciesId = deco.speciesId,
             petCooldown = 0,
-            momentum = 0
+            momentum = 0,
+            runeShieldLeft = shield,
+            activePassives = loadout.names,
+            bossPhase = 1
         )
 
         _screenState.value = GameScreen.COMBAT
@@ -2083,9 +2137,27 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val momentumMult = 1.0 + (currentCombat.momentum / 200.0)
             finalDmg = (finalDmg * momentumMult).toInt()
 
-            // Armor mitigation of enemy
+            // ─── Pasivas ofensivas del equipo legendario ───
+            val loadout = EldoriaPassives.loadoutOf(progress, getAllEquippedItems(progress))
+            // Furia Creciente: premia aguantar. Se corta a los ocho turnos para
+            // que no convierta un combate largo en una bola de nieve infinita.
+            if (loadout.risingFury > 0.0) {
+                val stacks = currentCombat.turnsFought.coerceAtMost(8)
+                finalDmg = (finalDmg * (1.0 + loadout.risingFury * stacks)).toInt()
+            }
+            // Verdugo: el daño extra va donde hace falta, contra los grandes.
+            val target = currentCombat.enemy
+            val isBigTarget = target?.isBoss == true ||
+                target?.rarity == "LEGENDARY" || target?.rarity == "CHAMPION"
+            if (loadout.executioner > 0.0 && isBigTarget) {
+                finalDmg = (finalDmg * (1.0 + loadout.executioner)).toInt()
+            }
+
+            // Armadura del enemigo: misma curva de rendimientos decrecientes que
+            // se aplica al héroe, para que las dos mitades del combate midan igual.
             val enemyDef = currentCombat.enemy?.defense ?: 0
-            finalDmg = maxOf(3, finalDmg - (enemyDef / 2))
+            finalDmg = EldoriaBalance.mitigate(finalDmg, enemyDef, progress.charLevel)
+                .coerceAtLeast(3)
 
             // Critical strike chance
             val baseCrit = 5 + (progress.statDex * 0.4) + (getTalentRank("t_8") * 3)
@@ -2119,6 +2191,23 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             // Orc Devastador Berserker healing (Lvl 20+)
             var currentPlayerHp = currentCombat.playerCurrentHp
+            var currentPlayerMp = currentCombat.playerCurrentMp
+
+            // ─── Pasivas que se cobran al golpear ───
+            if (loadout.lifesteal > 0.0) {
+                val drained = (finalDmg * loadout.lifesteal).toInt()
+                if (drained > 0) {
+                    currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + drained)
+                    log += " 🩸 Sed de Sangre te devuelve $drained HP."
+                }
+            }
+            if (loadout.manaLeech > 0.0) {
+                val siphoned = (finalDmg * loadout.manaLeech).toInt()
+                if (siphoned > 0) {
+                    currentPlayerMp = minOf(progress.maxMp, currentPlayerMp + siphoned)
+                    log += " 🔮 Sanguijuela Arcana te devuelve $siphoned MP."
+                }
+            }
             if (progress.charRace == "Orco" && progress.charLevel >= 20) {
                 val lifestealPct = when {
                     progress.charLevel >= 100 -> 0.35
@@ -2167,10 +2256,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             _combatState.value = currentCombat.copy(
                 playerCurrentHp = currentPlayerHp,
+                playerCurrentMp = currentPlayerMp,
                 playerTurn = false,
                 damageFeedbackEnemy = "-$finalDmg HP$critLabel",
                 combatLogs = currentCombat.combatLogs + log,
-                activeAnimation = "PLAYER_ATTACK"
+                activeAnimation = "PLAYER_ATTACK",
+                turnsFought = currentCombat.turnsFought + 1
             )
 
             // Bloodlust talent trigger (t_3)
@@ -2261,9 +2352,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val momentumMult = 1.0 + (currentCombat.momentum / 200.0)
                 var finalSkillDmg = (baseSkillDmg * skill.damageMultiplier * spellMult * raceDmgMult * momentumMult).toInt()
 
-                // Defense mitigation
+                // Defense mitigation — misma curva que el ataque básico.
                 val enemyDef = currentCombat.enemy?.defense ?: 0
-                finalSkillDmg = maxOf(4, finalSkillDmg - (enemyDef / 2))
+                finalSkillDmg = EldoriaBalance.mitigate(finalSkillDmg, enemyDef, progress.charLevel)
+                    .coerceAtLeast(4)
 
                 currentEnemyHp = maxOf(0, currentEnemyHp - finalSkillDmg)
                 currentCombat.enemy?.currentHp = currentEnemyHp
@@ -2710,74 +2802,85 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             var logMsg = ""
             var mpDrained = 0
 
+            // La mitigación ya no resta plano (`daño − def/2`), que permitía llegar
+            // a la inmunidad acumulando defensa: ahora la armadura tiene
+            // rendimientos decrecientes y la PENETRACIÓN es el porcentaje del
+            // golpe que se salta esa curva. Cada movimiento tiene el suyo.
+            val loadout = EldoriaPassives.loadoutOf(progress, getAllEquippedItems(progress))
+            // La Égida es la respuesta directa a los golpes perforantes: les
+            // recorta la penetración a la mitad, además de rebajar todo el daño.
+            val armorPen = EldoriaBalance.armorPenOf(skillChosen) *
+                (if (loadout.aegis > 0.0) 0.5 else 1.0)
+            val talentGuard = if (getTalentRank("t_6") > 0) 0.85 else 1.0
+            val aegisGuard = 1.0 - loadout.aegis
+            // El jefe enfurecido pega más fuerte mientras le dura la fase.
+            val enrageMult = if (live.enrageTurns > 0) 1.35 else 1.0
+
+            fun resolve(multiplier: Double, floorHp: Double = 0.0, pen: Double = armorPen): Int {
+                val raw = ((baseDmg * multiplier * enrageMult).toInt() + (progress.maxHp * floorHp).toInt())
+                val hit = EldoriaBalance.mitigate(raw, playerDefense, enemy.level, pen)
+                // Techo: ningún golpe se lleva más de lo que su rareza permite.
+                return EldoriaBalance.capHit((hit * talentGuard * aegisGuard).toInt(), progress.maxHp, enemy.rarity)
+                    .coerceAtLeast(1)
+            }
+
             if (isSkillUsed) {
                 when (skillChosen) {
                     "ARMOR_PIERCE" -> {
-                        val rawDmg = (baseDmg * 2.2).toInt()
-                        finalDmg = maxOf(12, rawDmg) // DAÑO PURO: Ignores 100% armor!
-                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "${enemy.name} lanza [Perforación de Armadura] 🗡️💥 ¡DAÑO PURO! Atraviesa el 100% de tu armadura por $finalDmg de daño directo."
+                        finalDmg = resolve(1.75)
+                        logMsg = "${enemy.name} lanza [Perforación de Armadura] 🗡️💥 e inflige $finalDmg" +
+                            EldoriaBalance.penLabel(armorPen) + "."
                         feedbackText = "-$finalDmg HP 🛡️❌"
                     }
                     "TRUE_STRIKE" -> {
-                        val rawDmg = (baseDmg * 2.0).toInt()
-                        finalDmg = maxOf(10, rawDmg) // DAÑO PURO e inesquivable!
-                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "${enemy.name} ejecuta [Golpe Certero Implacable] 👁️🎯 ¡DAÑO PURO inesquivable! Atraviesa tu defensa e inflige $finalDmg de daño certero."
+                        finalDmg = resolve(1.65)
+                        logMsg = "${enemy.name} ejecuta [Golpe Certero Implacable] 👁️🎯 ¡inesquivable! " +
+                            "Inflige $finalDmg" + EldoriaBalance.penLabel(armorPen) + "."
                         feedbackText = "-$finalDmg HP 🎯"
                     }
                     "POISON" -> {
-                        val rawDmg = (baseDmg * 1.6).toInt() + (progress.maxHp * 0.05).toInt()
-                        finalDmg = maxOf(6, rawDmg - (playerDefense / 4))
-                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                        finalDmg = resolve(1.45, floorHp = 0.02)
                         mpDrained = 15
-                        logMsg = "${enemy.name} escupe [Veneno Corrosivo] 🧪 e inflige $finalDmg de daño tóxico penetrante y drena 15 MP."
+                        logMsg = "${enemy.name} escupe [Veneno Corrosivo] 🧪 e inflige $finalDmg de daño tóxico" +
+                            EldoriaBalance.penLabel(armorPen) + " y drena 15 MP."
                         feedbackText = "-$finalDmg HP 🧪"
                     }
                     "FREEZE" -> {
-                        val rawDmg = (baseDmg * 1.7).toInt() + (progress.maxHp * 0.06).toInt()
-                        finalDmg = maxOf(6, rawDmg - (playerDefense / 3))
-                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                        finalDmg = resolve(1.5, floorHp = 0.02)
                         mpDrained = 25
-                        logMsg = "${enemy.name} conjura [Congelación Arcana] ❄️ hiela tus venas por $finalDmg de daño y -25 MP."
+                        logMsg = "${enemy.name} conjura [Congelación Arcana] ❄️ hiela tus venas por $finalDmg" +
+                            EldoriaBalance.penLabel(armorPen) + " y drena 25 MP."
                         feedbackText = "-$finalDmg HP ❄️"
                     }
                     "BLEED" -> {
-                        val extraBleed = (progress.maxHp * 0.10).toInt()
-                        val rawDmg = (baseDmg * 2.2).toInt() + extraBleed
-                        finalDmg = maxOf(15, rawDmg - (playerDefense / 4))
-                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "${enemy.name} asesta un tajo de [Hemorragia Mortal] 🩸 infligiendo $finalDmg de daño profundo que atraviesa armadura!"
+                        finalDmg = resolve(1.7, floorHp = 0.03)
+                        logMsg = "${enemy.name} asesta un tajo de [Hemorragia Mortal] 🩸 por $finalDmg" +
+                            EldoriaBalance.penLabel(armorPen) + "."
                         feedbackText = "-$finalDmg HP 🩸"
                     }
                     "BOSS_FURY" -> {
-                        val trueDamagePart = (progress.maxHp * 0.18).toInt()
-                        val rawDmg = (baseDmg * 3.2).toInt() + trueDamagePart
-                        finalDmg = maxOf(30, rawDmg) // DAÑO PURO DE JEFE!
-                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                        logMsg = "🔥 ${enemy.name} desata su [IRA PURO DE JEFE] 💥 ¡Atraviesa tu armadura por $finalDmg de DAÑO PURO devastador!"
+                        finalDmg = resolve(1.95, floorHp = 0.04)
+                        logMsg = "🔥 ${enemy.name} desata su [IRA DE JEFE] 💥 por $finalDmg" +
+                            EldoriaBalance.penLabel(armorPen) + "."
                         feedbackText = "-$finalDmg HP ⚡🔥"
                     }
                     "REGEN_SHIELD" -> {
                         if (live.enemyAntiHealTurns > 0) {
-                            val rawDmg = (baseDmg * 1.5).toInt()
-                            finalDmg = maxOf(4, rawDmg - (playerDefense / 2))
-                            if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                            logMsg = "🖤 ${enemy.name} intenta curarse con [Escudo de Sangre], pero 🚫 ¡la [Maldición Anti-Curación] anula su regeneración! Te golpea por $finalDmg daño."
+                            finalDmg = resolve(1.3)
+                            logMsg = "🖤 ${enemy.name} intenta curarse con [Escudo de Sangre], pero 🚫 ¡la " +
+                                "[Maldición Anti-Curación] anula su regeneración! Te golpea por $finalDmg."
                             feedbackText = "-$finalDmg HP 🚫🖤"
                         } else {
-                            val healVal = (enemy.maxHp * 0.18).toInt()
+                            val healVal = (enemy.maxHp * 0.14).toInt()
                             enemy.currentHp = minOf(enemy.maxHp, enemy.currentHp + healVal)
-                            val rawDmg = (baseDmg * 1.5).toInt()
-                            finalDmg = maxOf(2, rawDmg - (playerDefense / 2))
-                            if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
-                            logMsg = "🖤 ${enemy.name} invoca [Escudo de Sangre], regenerando +$healVal HP y golpeando por $finalDmg de daño!"
+                            finalDmg = resolve(1.3)
+                            logMsg = "🖤 ${enemy.name} invoca [Escudo de Sangre], regenerando +$healVal HP " +
+                                "y golpeando por $finalDmg."
                             feedbackText = "-$finalDmg HP 🛡️🖤"
                         }
                     }
                     else -> {
-                        finalDmg = maxOf(1, baseDmg - (playerDefense / 2))
-                        if (getTalentRank("t_6") > 0) finalDmg = (finalDmg * 0.85).toInt()
+                        finalDmg = resolve(1.0, pen = 0.0)
                         feedbackText = "-$finalDmg HP"
                         logMsg = "${enemy.name} te ataca e inflige $finalDmg puntos de daño físico."
                     }
@@ -2788,10 +2891,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     feedbackText = "¡ESQUIVADO!"
                     logMsg = "¡Esquivas con agilidad el ataque de ${enemy.name}!"
                 } else {
-                    finalDmg = maxOf(1, baseDmg - (playerDefense / 2))
-                    if (getTalentRank("t_6") > 0) {
-                        finalDmg = (finalDmg * 0.85).toInt()
-                    }
+                    finalDmg = resolve(1.0, pen = 0.0)
                     feedbackText = "-$finalDmg HP"
                     logMsg = "${enemy.name} te ataca e inflige $finalDmg puntos de daño físico."
                 }
@@ -2833,11 +2933,38 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
             var newPlayerMp = maxOf(0, live.playerCurrentMp - mpDrained)
 
-            val newHp = maxOf(0, live.playerCurrentHp - finalDmg)
+            // ─── Escudo Rúnico: se come el golpe antes que la carne ───
+            var shieldLeft = live.runeShieldLeft
+            var damageToHp = finalDmg
+            if (shieldLeft > 0 && damageToHp > 0) {
+                val absorbed = minOf(shieldLeft, damageToHp)
+                shieldLeft -= absorbed
+                damageToHp -= absorbed
+                logMsg += " 🛡️ El Escudo Rúnico absorbe $absorbed" +
+                    (if (shieldLeft <= 0) " y se quiebra." else " (le quedan $shieldLeft).")
+            }
+
+            var newHp = maxOf(0, live.playerCurrentHp - damageToHp)
+
+            // ─── Segundo Aliento: una vez por combate, no mueres ───
+            var secondWindUsed = live.secondWindUsed
+            if (newHp <= 0 && !secondWindUsed && loadout.secondWind > 0.0) {
+                newHp = (progress.maxHp * loadout.secondWind).toInt().coerceAtLeast(1)
+                secondWindUsed = true
+                logMsg += " ✨ ¡SEGUNDO ALIENTO! Te levantas con $newHp HP."
+            }
 
             // Dwarf Level 20+ Reflect passive
             var enemyHpAfterReflect = enemy.currentHp
             var reflectLog = ""
+
+            // ─── Espinas: el golpe recibido vuelve al que lo dio ───
+            if (loadout.thorns > 0.0 && finalDmg > 0 && !dodged) {
+                val thornsDmg = (finalDmg * loadout.thorns).toInt().coerceAtLeast(1)
+                enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - thornsDmg)
+                enemy.currentHp = enemyHpAfterReflect
+                logMsg += " 🌵 Las Espinas de Hierro devuelven $thornsDmg de daño."
+            }
             if (progress.charRace == "Enano" && progress.charLevel >= 20 && finalDmg > 0 && !dodged) {
                 val reflectPct = when {
                     progress.charLevel >= 100 -> 0.35
@@ -2927,13 +3054,48 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val nextAntiHeal = maxOf(0, live.enemyAntiHealTurns - 1)
             val settled = _combatState.value
 
+            // ═══ MECÁNICAS DE JEFE ═══
+            // Un jefe no es un saco de vida con números grandes: cambia de fase
+            // según cómo va el combate, y cada fase le da una herramienta nueva.
+            var bossPhase = settled.bossPhase
+            var enrageTurns = maxOf(0, settled.enrageTurns - 1)
+            var phaseLog = ""
+            if (enemy.isBoss && enemyHpAfterReflect > 0) {
+                val hpRatio = enemyHpAfterReflect.toDouble() / enemy.maxHp.coerceAtLeast(1)
+                val newPhase = when {
+                    hpRatio <= 0.30 -> 3
+                    hpRatio <= 0.65 -> 2
+                    else -> 1
+                }
+                if (newPhase > bossPhase) {
+                    bossPhase = newPhase
+                    // Al cambiar de fase se enfurece: tres turnos pegando un 35 % más.
+                    enrageTurns = 3
+                    phaseLog = when (newPhase) {
+                        2 -> "\n🔥 ${enemy.name} entra en FASE 2: se enfurece y su guardia se abre. ¡Tres turnos de golpes más duros!"
+                        else -> "\n💀 ${enemy.name} entra en FASE 3: pelea como si no tuviera nada que perder. ¡Acaba con él ya!"
+                    }
+                    // La fase 3 le devuelve algo de aire: castiga alargar el combate.
+                    if (newPhase == 3) {
+                        val desperate = (enemy.maxHp * 0.10).toInt()
+                        enemy.currentHp = minOf(enemy.maxHp, enemyHpAfterReflect + desperate)
+                        enemyHpAfterReflect = enemy.currentHp
+                        phaseLog += " Recupera $desperate HP en un último arranque."
+                    }
+                }
+            }
+
             _combatState.value = settled.copy(
                 playerCurrentHp = finalPlayerHp,
                 playerCurrentMp = afterRegenMp,
                 enemyAntiHealTurns = nextAntiHeal,
                 playerTurn = true,
                 damageFeedbackPlayer = feedbackText,
-                combatLogs = settled.combatLogs + updatedLogMsg,
+                runeShieldLeft = shieldLeft,
+                secondWindUsed = secondWindUsed,
+                bossPhase = bossPhase,
+                enrageTurns = enrageTurns,
+                combatLogs = settled.combatLogs + updatedLogMsg + phaseLog,
                 activeAnimation = when {
                     pendingReactionCounter -> "PLAYER_ATTACK"
                     isSkillUsed && !dodged -> "ENEMY_SKILL"

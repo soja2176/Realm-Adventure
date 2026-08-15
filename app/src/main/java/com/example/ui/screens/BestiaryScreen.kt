@@ -81,6 +81,7 @@ import com.example.ui.design.EldoriaTone
 import com.example.ui.design.EldoriaType
 import com.example.ui.design.eldoriaFloat
 import com.example.ui.design.eldoriaPressable
+import com.example.ui.getEnemyArtRes
 import com.example.ui.getEnemyPortraitRes
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -394,7 +395,7 @@ private fun BestiaryTile(entry: BestiaryEntry, onClick: () -> Unit) {
     ) {
         if (entry.discovered) {
             Image(
-                painter = painterResource(id = getEnemyPortraitRes(species.name, false)),
+                painter = painterResource(id = getEnemyArtRes(species.artKey, species.name, false)),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.matchParentSize()
@@ -554,7 +555,7 @@ private fun BestiaryDetail(entry: BestiaryEntry) {
                 glowPulse = true
             ) {
                 Image(
-                    painter = painterResource(id = getEnemyPortraitRes(species.name, false)),
+                    painter = painterResource(id = getEnemyArtRes(species.artKey, species.name, false)),
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize()

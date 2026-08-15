@@ -60,6 +60,7 @@ import com.example.R
 import com.example.eldoria.ui.components.MedievalStatBar
 import com.example.eldoria.ui.components.OrnateDivider
 import com.example.data.*
+import com.example.data.engine.EldoriaPassives
 // ─── Cascarón Eldoria (com.example.ui.shell) ───
 import com.example.ui.shell.EldoriaTopHud
 import com.example.ui.shell.EldoriaBottomNav
@@ -671,414 +672,7 @@ fun EldoriaMainContainer(viewModel: GameViewModel) {
     }
 }
 
-/** HUD superior clásico. Sustituido por [EldoriaTopHud]; se conserva como respaldo. */
-@Suppress("unused")
-@Composable
-fun GameTopHeader(progress: GameProgress, onHelpClick: () -> Unit) {
-    Surface(
-        color = Color(0xFF0D0E16),
-        border = BorderStroke(width = 1.dp, color = MedievalGold.copy(alpha = 0.4f)),
-        tonalElevation = 4.dp
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color(0xFF0D0E16), Color(0xFF111320))
-                    )
-                )
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 10.dp, vertical = 6.dp)
-                    .statusBarsPadding(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.weight(1f, fill = false)
-                ) {
-                    Image(
-                        painter = painterResource(id = getCharacterPortrait(progress.charRace, progress.charClass, progress.hasAdvancedClass, progress.charLevel)),
-                        contentDescription = "Portrait",
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .border(2.dp, MedievalGold, CircleShape),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column {
-                        Text(
-                            text = progress.charName,
-                            color = Color.White,
-                            fontWeight = FontWeight.ExtraBold,
-                            fontSize = 14.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = "Lvl ${progress.charLevel} ${if (progress.hasAdvancedClass && progress.advancedClassName.isNotBlank()) progress.advancedClassName else progress.charClass}",
-                            color = MedievalGold,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Medium,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Stats Quick Bars - Enhanced
-                Column(
-                    modifier = Modifier.width(120.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    // HP Bar
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("HP", color = MedievalCrimson, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.Black.copy(alpha = 0.8f))
-                                .border(0.5.dp, MedievalCrimson.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-                        ) {
-                            val hpPercent = if (progress.maxHp > 0) progress.currentHp.toFloat() / progress.maxHp else 0f
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(hpPercent)
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(MedievalCrimson, MedievalCrimson.copy(alpha = 0.7f))
-                                        )
-                                    )
-                            )
-                            // Shine
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(hpPercent)
-                                    .height(2.dp)
-                                    .background(Color.White.copy(alpha = 0.2f))
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text("${formatGameNumber(progress.currentHp)}/${formatGameNumber(progress.maxHp)}", color = Color.White.copy(alpha = 0.8f), fontSize = 7.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-
-                    // MP Bar
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("MP", color = MedievalManaBlue, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(8.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Color.Black.copy(alpha = 0.8f))
-                                .border(0.5.dp, MedievalManaBlue.copy(alpha = 0.3f), RoundedCornerShape(4.dp))
-                        ) {
-                            val mpPercent = if (progress.maxMp > 0) progress.currentMp.toFloat() / progress.maxMp else 0f
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(mpPercent)
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(MedievalManaBlue, MedievalManaBlue.copy(alpha = 0.7f))
-                                        )
-                                    )
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth(mpPercent)
-                                    .height(2.dp)
-                                    .background(Color.White.copy(alpha = 0.2f))
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text("${formatGameNumber(progress.currentMp)}/${formatGameNumber(progress.maxMp)}", color = Color.White.copy(alpha = 0.8f), fontSize = 7.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-
-                    // XP Bar
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("XP", color = MedievalXpGreen, fontSize = 8.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(16.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(Color.Black.copy(alpha = 0.8f))
-                                .border(0.5.dp, MedievalXpGreen.copy(alpha = 0.3f), RoundedCornerShape(3.dp))
-                        ) {
-                            val xpRequired = getRequiredExpForLevel(progress.charLevel)
-                            val xpPercent = if (xpRequired > 0) (progress.charExp.toFloat() / xpRequired).coerceIn(0f, 1f) else 0f
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxHeight()
-                                    .fillMaxWidth(xpPercent)
-                                    .background(
-                                        Brush.horizontalGradient(
-                                            listOf(MedievalXpGreen, MedievalXpGreen.copy(alpha = 0.7f))
-                                        )
-                                    )
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(3.dp))
-                        Text("${formatGameNumber(progress.charExp)}/${formatGameNumber(getRequiredExpForLevel(progress.charLevel))}", color = Color.White.copy(alpha = 0.8f), fontSize = 7.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    }
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Gold counter
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(2.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MonetizationOn,
-                        contentDescription = "Oro",
-                        tint = MedievalGold,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Text(
-                        text = formatGameNumber(progress.charGold),
-                        color = MedievalGold,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 13.sp,
-                        maxLines = 1
-                    )
-                IconButton(
-                    onClick = onHelpClick,
-                    modifier = Modifier.size(22.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.Help,
-                        contentDescription = "Ayuda",
-                        tint = Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-}
-
-/** Barra inferior clásica. Sustituida por [EldoriaBottomNav]; se conserva como respaldo. */
-@Suppress("unused")
-@Composable
-fun GameBottomNav(currentScreen: GameScreen, onTabSelect: (GameScreen) -> Unit) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Color(0xFF08090C))
-            .border(
-                BorderStroke(
-                    2.dp,
-                    Brush.verticalGradient(listOf(Color(0xFF8A98A8), Color(0xFF3A424C), Color(0xFF1E2228)))
-                )
-            )
-    ) {
-        // Warcraft 3 Reign of Chaos Wood & Metal Riveted Panel Background
-        Image(
-            painter = painterResource(id = R.drawable.warcraft3_hud_panel_1784669998817),
-            contentDescription = null,
-            modifier = Modifier.matchParentSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.65f
-        )
-
-        // Dark Vignette Overlay
-        Box(
-            modifier = Modifier
-                .matchParentSize()
-                .background(
-                    Brush.verticalGradient(
-                        listOf(
-                            Color.Black.copy(alpha = 0.35f),
-                            Color(0xFF0A0C12).copy(alpha = 0.7f)
-                        )
-                    )
-                )
-        )
-
-        // Top Riveted Iron Strip Accent
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(3.dp)
-                .background(
-                    Brush.horizontalGradient(
-                        listOf(Color(0xFF2A303A), Color(0xFF8A9AAB), Color(0xFFFFD700), Color(0xFF8A9AAB), Color(0xFF2A303A))
-                    )
-                )
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .navigationBarsPadding()
-                .padding(horizontal = 4.dp, vertical = 5.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            val tabs = listOf(
-                Triple(GameScreen.CHARACTER_SCREEN, "Héroe", Icons.Default.Person),
-                Triple(GameScreen.PET_SCREEN, "Mascota", Icons.Default.Pets),
-                Triple(GameScreen.WORLD_MAP, "Mapa", Icons.Default.Map),
-                Triple(GameScreen.DUNGEON, "Dungeon", Icons.Default.Castle),
-                Triple(GameScreen.INVENTORY, "Inventario", Icons.Default.ShoppingBag),
-                Triple(GameScreen.SHOP, "Tienda", Icons.Default.ShoppingCart),
-                Triple(GameScreen.CRAFTING, "Forja", Icons.Default.Build),
-                Triple(GameScreen.ACHIEVEMENTS, "Logros", Icons.Default.EmojiEvents),
-                Triple(GameScreen.DAILY_REWARDS, "Diario", Icons.Default.CardGiftcard)
-            )
-
-            tabs.forEach { (tab, label, icon) ->
-                val active = currentScreen == tab
-
-                // Warcraft 3 Beveled Metallic Blue Button Styling
-                val buttonBgGradient = if (active) {
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF00388A),
-                            Color(0xFF001F52),
-                            Color(0xFF000F2E)
-                        )
-                    )
-                } else {
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF1C222D),
-                            Color(0xFF0D111A),
-                            Color(0xFF05070C)
-                        )
-                    )
-                }
-
-                val frameBorderBrush = if (active) {
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFFFFF1A8),
-                            Color(0xFFFFD700),
-                            Color(0xFFB8860B)
-                        )
-                    )
-                } else {
-                    Brush.verticalGradient(
-                        listOf(
-                            Color(0xFF7A8A9B),
-                            Color(0xFF3A4552),
-                            Color(0xFF1A2028)
-                        )
-                    )
-                }
-
-                Box(
-                    modifier = Modifier
-                        .testTag("nav_tab_${label.lowercase()}")
-                        .width(64.dp)
-                        .height(48.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                        .background(buttonBgGradient)
-                        .border(
-                            width = if (active) 2.dp else 1.5.dp,
-                            brush = frameBorderBrush,
-                            shape = RoundedCornerShape(6.dp)
-                        )
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = ripple(),
-                            onClick = {
-                                SoundManager.playButtonClick()
-                                onTabSelect(tab)
-                            }
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Beveled Inner Highlight Shadow Box (Warcraft 3 3D Button Inset)
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(1.5.dp)
-                            .border(
-                                width = 1.dp,
-                                color = if (active) Color(0xFF64B5F6).copy(alpha = 0.5f) else Color.White.copy(alpha = 0.08f),
-                                shape = RoundedCornerShape(4.dp)
-                            )
-                    )
-
-                    // Warcraft 3 Metal Rivet Accents on Button Corners
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .size(3.dp)
-                            .offset(x = 3.dp, y = 3.dp)
-                            .background(if (active) MedievalGold else Color(0xFF8A9AAB), CircleShape)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .size(3.dp)
-                            .offset(x = (-3).dp, y = 3.dp)
-                            .background(if (active) MedievalGold else Color(0xFF8A9AAB), CircleShape)
-                    )
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.Center,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 2.dp, vertical = 2.dp)
-                    ) {
-                        if (tab == GameScreen.DUNGEON) {
-                            Image(
-                                painter = painterResource(id = R.drawable.img_dungeon_door_1784674104372),
-                                contentDescription = label,
-                                modifier = Modifier
-                                    .size(16.dp)
-                                    .clip(RoundedCornerShape(3.dp)),
-                                contentScale = ContentScale.Crop,
-                                colorFilter = if (!active) ColorFilter.tint(Color(0xFFB0C4DE), androidx.compose.ui.graphics.BlendMode.Modulate) else null
-                            )
-                        } else {
-                            Icon(
-                                imageVector = icon,
-                                contentDescription = label,
-                                tint = if (active) Color(0xFFFFEA7A) else Color(0xFFB0C4DE),
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(1.dp))
-                        Text(
-                            text = label,
-                            color = if (active) Color(0xFFFFEA7A) else Color(0xFFCCCCCC),
-                            fontSize = 8.sp,
-                            fontWeight = if (active) FontWeight.ExtraBold else FontWeight.Bold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            style = androidx.compose.ui.text.TextStyle(
-                                shadow = if (active) androidx.compose.ui.graphics.Shadow(
-                                    color = Color.Black,
-                                    blurRadius = 4f
-                                ) else null
-                            )
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 
 // --- CHARACTER CREATOR ---
 @Composable
@@ -1698,6 +1292,18 @@ fun KingdomLandmarkDialog(state: LandmarkState, viewModel: GameViewModel) {
 fun SpecialMerchantDialog(merchantState: SpecialMerchantState, viewModel: GameViewModel, playerGold: Int) {
     if (!merchantState.active) return
 
+    // Ficha completa por pulsación larga: la mercancía rara suele llevar
+    // pasivas, y en la tarjeta no caben.
+    var inspecting by remember { mutableStateOf<Item?>(null) }
+    inspecting?.let { item ->
+        InventoryItemDialog(
+            item = item,
+            playerLevel = 999,
+            sellPrice = 0,
+            onDismiss = { inspecting = null }
+        )
+    }
+
     Dialog(onDismissRequest = { viewModel.closeSpecialMerchantDialog() }) {
         EldoriaPanel(
             modifier = Modifier
@@ -1795,6 +1401,7 @@ fun SpecialMerchantDialog(merchantState: SpecialMerchantState, viewModel: GameVi
                             stats = itemSpec.item.getStatDescription(),
                             imageRes = getItemImageRes(itemSpec.item.imageResName, itemSpec.item.type),
                             subtitle = itemSpec.item.rarity.uppercase(),
+                            onLongClick = { inspecting = itemSpec.item },
                             testTag = "merchant_item_${itemSpec.item.id}",
                             trailing = {
                                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -2657,6 +2264,18 @@ fun ShopScreen(viewModel: GameViewModel) {
     // columna infinita: cada uno tiene su pestaña.
     var shopTab by rememberSaveable { mutableIntStateOf(0) }
 
+    // Ficha de objeto abierta con pulsación larga: las tarjetas cortan las
+    // estadísticas a dos líneas y no caben las pasivas.
+    var inspecting by remember { mutableStateOf<Item?>(null) }
+    inspecting?.let { item ->
+        InventoryItemDialog(
+            item = item,
+            playerLevel = p.charLevel,
+            sellPrice = viewModel.calculateSellPrice(item),
+            onDismiss = { inspecting = null }
+        )
+    }
+
     EldoriaScreen(
         depth = 0,
         embers = false,
@@ -2925,6 +2544,7 @@ fun ShopScreen(viewModel: GameViewModel) {
                         stats = stats.take(3).joinToString(" · ").ifEmpty { "Sin bonificaciones" },
                         imageRes = getItemImageRes(item.imageResName, item.type),
                         subtitle = item.rarity.uppercase(),
+                        onLongClick = { inspecting = item },
                         testTag = "shop_item_${item.name}",
                         trailing = {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -3036,6 +2656,7 @@ fun ShopScreen(viewModel: GameViewModel) {
                         stats = "Te pagan ${formatGameNumber(sellPrice)} de oro",
                         imageRes = getItemImageRes(item.imageResName, item.type),
                         subtitle = item.rarity.uppercase(),
+                        onLongClick = { inspecting = item },
                         testTag = "sell_item_${item.name}",
                         trailing = {
                             EldoriaButton(
@@ -3274,56 +2895,6 @@ fun ShopScreen(viewModel: GameViewModel) {
 
 
 
-// --- COMBAT TEXTURED BUTTON ---
-@Composable
-fun CombatTexturedButton(
-    onClick: () -> Unit,
-    enabled: Boolean,
-    backgroundImageId: Int,
-    testTag: String,
-    modifier: Modifier = Modifier,
-    borderColor: Color = MedievalGold,
-    content: @Composable () -> Unit
-) {
-    val alpha = if (enabled) 1f else 0.45f
-    Box(
-        modifier = modifier
-            .alpha(alpha)
-            .clip(RoundedCornerShape(8.dp))
-            .background(Color.Black)
-            .border(1.dp, if (enabled) borderColor.copy(alpha = 0.8f) else Color.Gray.copy(alpha = 0.25f), RoundedCornerShape(8.dp))
-            .clickable(enabled = enabled, onClick = onClick)
-            .testTag(testTag),
-        contentAlignment = Alignment.Center
-    ) {
-        Image(
-            painter = painterResource(id = backgroundImageId),
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop,
-            alpha = if (enabled) 0.6f else 0.2f
-        )
-        // Semi-transparent overlay to ensure text readability
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            Color.Black.copy(alpha = 0.15f),
-                            Color.Black.copy(alpha = 0.55f)
-                        )
-                    )
-                )
-        )
-        Box(
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            content()
-        }
-    }
-}
 
 enum class SkillGlassTheme(
     val glowColor: Color,
@@ -4064,7 +3635,7 @@ fun CombatScreen(viewModel: GameViewModel) {
                                 glowPulse = !combatState.playerTurn
                             ) {
                                 Image(
-                                    painter = painterResource(id = getEnemyPortraitRes(enemy.name, enemy.isBoss)),
+                                    painter = painterResource(id = getEnemyArtRes(enemy.artKey, enemy.name, enemy.isBoss)),
                                     contentDescription = "Enemy Portrait",
                                     modifier = Modifier.fillMaxSize(),
                                     contentScale = ContentScale.Crop
@@ -6436,6 +6007,9 @@ fun InventoryScreen(viewModel: GameViewModel) {
                             level = item.itemLevel,
                             size = 200.dp,
                             onClick = { expandedDetail = true },
+                            // La pulsación larga lleva a la misma ficha: en la
+                            // rejilla sólo cabe el nombre, ni stats ni pasivas.
+                            onLongClick = { expandedDetail = true },
                             testTag = "inv_item_${item.id}"
                         ) {
                             Image(
@@ -6508,13 +6082,13 @@ fun InventoryScreen(viewModel: GameViewModel) {
 
 /** Ficha de objeto: descripción, atributos y las tres acciones posibles. */
 @Composable
-private fun InventoryItemDialog(
+fun InventoryItemDialog(
     item: Item,
     playerLevel: Int,
     sellPrice: Int,
-    onEquip: () -> Unit,
-    onSell: () -> Unit,
-    onDiscard: () -> Unit,
+    onEquip: (() -> Unit)? = null,
+    onSell: (() -> Unit)? = null,
+    onDiscard: (() -> Unit)? = null,
     onDismiss: () -> Unit
 ) {
     val canEquip = item.itemLevel <= playerLevel
@@ -6584,10 +6158,55 @@ private fun InventoryItemDialog(
             if (item.conBonus > 0) EldoriaKeyValueRow("Constitución", "+${item.conBonus}", icon = Icons.Default.Favorite, valueColor = Eldoria.EmberCore)
             if (item.dmgBonus > 0) EldoriaKeyValueRow("Daño", "+${item.dmgBonus}", icon = Icons.Default.Whatshot)
             if (item.defBonus > 0) EldoriaKeyValueRow("Defensa", "+${item.defBonus}", icon = Icons.Default.Shield)
+            if (item.hpRegen > 0) EldoriaKeyValueRow("Regeneración", "+${item.hpRegen}", icon = Icons.Default.Favorite, valueColor = Eldoria.VitaeBright)
+
+            // ─── Pasivas: sólo desde legendario ───
+            // Se deducen del objeto, así que sin enseñarlas aquí el jugador no
+            // tendría forma de saber que su reliquia refleja daño.
+            val passives = remember(item.id, item.rarity, item.type) { EldoriaPassives.forItem(item) }
+            if (passives.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(Eldoria.S12))
+                EldoriaDivider(color = Eldoria.ArcaneBright.copy(alpha = 0.7f))
+                Spacer(modifier = Modifier.height(Eldoria.S8))
+                EldoriaSectionTitle(
+                    text = "PASIVAS",
+                    icon = Icons.Default.AutoAwesome,
+                    accent = Eldoria.ArcaneBright
+                )
+                Spacer(modifier = Modifier.height(Eldoria.S6))
+                passives.forEach { passive ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 3.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Icon(
+                            Icons.Default.AutoAwesome,
+                            contentDescription = null,
+                            tint = Eldoria.ArcaneBright,
+                            modifier = Modifier.size(15.dp)
+                        )
+                        Spacer(modifier = Modifier.width(Eldoria.S6))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                passive.name,
+                                style = EldoriaType.label,
+                                color = Eldoria.ArcaneBright
+                            )
+                            Text(
+                                passive.description,
+                                style = EldoriaType.small,
+                                color = Eldoria.TextMid
+                            )
+                        }
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(Eldoria.S16))
 
-            if (item.type != "POTION") {
+            if (item.type != "POTION" && onEquip != null) {
                 EldoriaButton(
                     text = if (canEquip) "EQUIPAR" else "NIVEL INSUFICIENTE",
                     onClick = onEquip,
@@ -6601,33 +6220,39 @@ private fun InventoryItemDialog(
                 Spacer(modifier = Modifier.height(Eldoria.S8))
             }
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(Eldoria.S8)
-            ) {
-                EldoriaButton(
-                    text = "VENDER ${formatGameNumber(sellPrice)}",
-                    onClick = onSell,
-                    modifier = Modifier.weight(1.3f),
-                    tone = EldoriaTone.Blood,
-                    size = EldoriaButtonSize.Small,
-                    icon = Icons.Default.Sell,
-                    fullWidth = true,
-                    testTag = "sell_item_btn"
-                )
-                EldoriaButton(
-                    text = "TIRAR",
-                    onClick = onDiscard,
-                    modifier = Modifier.weight(1f),
-                    tone = EldoriaTone.Iron,
-                    size = EldoriaButtonSize.Small,
-                    icon = Icons.Default.Delete,
-                    fullWidth = true,
-                    testTag = "discard_item_btn"
-                )
-            }
+            if (onSell != null || onDiscard != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(Eldoria.S8)
+                ) {
+                    if (onSell != null) {
+                        EldoriaButton(
+                            text = "VENDER ${formatGameNumber(sellPrice)}",
+                            onClick = onSell,
+                            modifier = Modifier.weight(1.3f),
+                            tone = EldoriaTone.Blood,
+                            size = EldoriaButtonSize.Small,
+                            icon = Icons.Default.Sell,
+                            fullWidth = true,
+                            testTag = "sell_item_btn"
+                        )
+                    }
+                    if (onDiscard != null) {
+                        EldoriaButton(
+                            text = "TIRAR",
+                            onClick = onDiscard,
+                            modifier = Modifier.weight(1f),
+                            tone = EldoriaTone.Iron,
+                            size = EldoriaButtonSize.Small,
+                            icon = Icons.Default.Delete,
+                            fullWidth = true,
+                            testTag = "discard_item_btn"
+                        )
+                    }
+                }
 
-            Spacer(modifier = Modifier.height(Eldoria.S8))
+                Spacer(modifier = Modifier.height(Eldoria.S8))
+            }
 
             EldoriaButton(
                 text = "CERRAR",
@@ -6753,6 +6378,47 @@ fun HelpGuideScreen(onBack: () -> Unit) {
 // Kotlin helper classes for data structures
 data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
+/**
+ * Retrato exacto de una especie a partir de su `artKey` del bestiario.
+ *
+ * Es la vía correcta: el bestiario ya declara qué dibujo le toca a cada
+ * criatura. [getEnemyPortraitRes] adivina por palabras dentro del nombre, y con
+ * un nombre decorado ("⭐ Musgoso Devorador Feroz Élite") acertaba de casualidad
+ * o caía en el ogro genérico. Sólo se recurre a adivinar si no hay artKey —
+ * los jefes de reino, que no salen del bestiario.
+ */
+fun getEnemyArtRes(artKey: String, name: String, isBoss: Boolean): Int = when (artKey) {
+    "enemy_anubis_1784850895657" -> R.drawable.enemy_anubis_1784850895657
+    "enemy_archangel_1784850912318" -> R.drawable.enemy_archangel_1784850912318
+    "enemy_automaton_1784850938702" -> R.drawable.enemy_automaton_1784850938702
+    "enemy_bandit_1784850826788" -> R.drawable.enemy_bandit_1784850826788
+    "enemy_basilisk_1784850958621" -> R.drawable.enemy_basilisk_1784850958621
+    "enemy_cultist_1784850844974" -> R.drawable.enemy_cultist_1784850844974
+    "enemy_demon_1784903246195" -> R.drawable.enemy_demon_1784903246195
+    "enemy_dragon_1784850948333" -> R.drawable.enemy_dragon_1784850948333
+    "enemy_elemental_1784850835033" -> R.drawable.enemy_elemental_1784850835033
+    "enemy_goblin_1784850794614" -> R.drawable.enemy_goblin_1784850794614
+    "enemy_kraken_1784903268006" -> R.drawable.enemy_kraken_1784903268006
+    "enemy_lich_1784850885522" -> R.drawable.enemy_lich_1784850885522
+    "enemy_minotaur_1784903256639" -> R.drawable.enemy_minotaur_1784903256639
+    "enemy_mummy_1784850903429" -> R.drawable.enemy_mummy_1784850903429
+    "enemy_naga_1784850928739" -> R.drawable.enemy_naga_1784850928739
+    "enemy_scorpion_1784850968611" -> R.drawable.enemy_scorpion_1784850968611
+    "enemy_spectre_1784850809472" -> R.drawable.enemy_spectre_1784850809472
+    "enemy_treant_1784850817186" -> R.drawable.enemy_treant_1784850817186
+    "enemy_witch_1784850877826" -> R.drawable.enemy_witch_1784850877826
+    "enemy_wolf_1784850801847" -> R.drawable.enemy_wolf_1784850801847
+    "enemy_yeti_1784850855217" -> R.drawable.enemy_yeti_1784850855217
+    "enemy_zombie_1784850868957" -> R.drawable.enemy_zombie_1784850868957
+    "img_boss_yggdrasil_machine_1784674150126" -> R.drawable.img_boss_yggdrasil_machine_1784674150126
+    "img_enemy_boss_1784386985144" -> R.drawable.img_enemy_boss_1784386985144
+    "img_enemy_mud_golem_1784386930907" -> R.drawable.img_enemy_mud_golem_1784386930907
+    "img_enemy_ogre_1784386944311" -> R.drawable.img_enemy_ogre_1784386944311
+    "img_enemy_spectre_1784386971041" -> R.drawable.img_enemy_spectre_1784386971041
+    "img_enemy_spider_1784386956688" -> R.drawable.img_enemy_spider_1784386956688
+    else -> getEnemyPortraitRes(name, isBoss)
+}
+
 fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {
     val cleanName = name.lowercase()
     return when {
@@ -6869,356 +6535,6 @@ fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {
     }
 }
 
-// --- DUNGEON SCREEN ---
-/** Calabozo clásico. GameScreen.DUNGEON enruta ahora a [ExpeditionHubScreen]; se conserva íntegro. */
-@Suppress("unused")
-@Composable
-fun DungeonScreen(viewModel: GameViewModel) {
-    val progress by viewModel.progressState.collectAsState()
-    val p = progress ?: return
-
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Color(0xFF0D0F14))
-    ) {
-        Image(
-            painter = painterResource(id = R.drawable.img_talents_bg_1784603912942),
-            contentDescription = null,
-            modifier = Modifier.matchParentSize(),
-            contentScale = ContentScale.Crop,
-            alpha = 0.35f
-        )
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            item {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color(0xFF2A1508), Color(0xFF140B04), Color(0xFF090402))
-                            )
-                        )
-                        .border(
-                            BorderStroke(2.dp, Brush.horizontalGradient(listOf(Color(0xFFFFD700), Color(0xFF8B6508)))),
-                            shape = RoundedCornerShape(12.dp)
-                        )
-                        .padding(14.dp)
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Image(
-                                painter = painterResource(id = R.drawable.img_dungeon_door_1784674104372),
-                                contentDescription = "Dungeon Door",
-                                modifier = Modifier
-                                    .size(36.dp)
-                                    .clip(RoundedCornerShape(6.dp)),
-                                contentScale = ContentScale.Crop
-                            )
-                            Spacer(modifier = Modifier.width(10.dp))
-                            Text(
-                                text = "🏛️ CALABOZOS DE ELDORIA",
-                                color = MedievalGold,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.ExtraBold
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "10 Calabozos Ancestrales • 9 Subjefes • 1 Jefe Final • Tesoros Únicos Inmortales",
-                            color = Color(0xFFFFD54F),
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF0D2818))
-                                .border(1.dp, Color(0xFF4CAF50), RoundedCornerShape(8.dp))
-                                .padding(vertical = 6.dp, horizontal = 10.dp)
-                        ) {
-                            Text(
-                                text = "🔓 10/10 CALABOZOS DESBLOQUEADOS: ¡Acceso libre a todos los calabozos!",
-                                color = Color(0xFF81C784),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(6.dp))
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF330B0B))
-                                .border(1.dp, Color(0xFFE53935), RoundedCornerShape(8.dp))
-                                .padding(8.dp)
-                        ) {
-                            Text(
-                                text = "⚠️ VIDA PERSISTENTE: Tu salud y maná NO se regeneran entre combates. Permaneces con la vida restante tras derrotar a cada subjefe.",
-                                color = Color(0xFFFFCDD2),
-                                fontSize = 11.sp,
-                                textAlign = TextAlign.Center,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                        }
-                    }
-                }
-            }
-
-            items(com.example.data.DUNGEONS_LIST) { dungeon ->
-                val isUnlocked = true
-                val hasLevelReq = true
-                val isAvailable = true
-
-                val completedList = com.example.data.GameJsonParser.listFromJson<Int>(p.completedDungeonsJson)
-                val isCompleted = completedList.contains(dungeon.id)
-
-                val cardBorderBrush = if (isCompleted) {
-                    Brush.verticalGradient(listOf(Color(0xFF4CAF50), Color(0xFF1B5E20)))
-                } else {
-                    Brush.verticalGradient(listOf(Color(0xFFFFD700), Color(0xFFB8860B)))
-                }
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color(0xFF1B1E28), Color(0xFF11131B), Color(0xFF0A0C11))
-                            )
-                        )
-                        .border(BorderStroke(1.5.dp, cardBorderBrush), RoundedCornerShape(12.dp))
-                        .padding(12.dp)
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = "CALABOZO ${dungeon.id}: ${dungeon.species.uppercase()}",
-                                    color = MedievalGold,
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                                Text(
-                                    text = dungeon.name,
-                                    color = Color.White,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0xFF0D2818))
-                                        .border(1.dp, Color(0xFF4CAF50), RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "🔓 DESBLOQUEADO",
-                                        color = Color(0xFF81C784),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                                Box(
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color(0xFF2E2413))
-                                        .border(1.dp, MedievalGold, RoundedCornerShape(6.dp))
-                                        .padding(horizontal = 6.dp, vertical = 4.dp)
-                                ) {
-                                    Text(
-                                        text = "Nivel: ${dungeon.levelReq}",
-                                        color = Color(0xFFFFE082),
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            }
-                        }
-
-                        val imageRes = getEnemyPortraitRes(dungeon.finalBossName, true)
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(90.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .border(1.dp, Color(0xFF3A424C), RoundedCornerShape(8.dp))
-                        ) {
-                            Image(
-                                painter = painterResource(id = imageRes),
-                                contentDescription = dungeon.finalBossName,
-                                modifier = Modifier.matchParentSize(),
-                                contentScale = ContentScale.Crop,
-                                alpha = 0.9f
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(
-                                        Brush.verticalGradient(
-                                            listOf(Color.Transparent, Color.Black.copy(alpha = 0.85f))
-                                        )
-                                    )
-                            )
-                            Column(
-                                modifier = Modifier
-                                    .align(Alignment.BottomStart)
-                                    .padding(8.dp)
-                            ) {
-                                Text(
-                                    text = "👑 JEFE FINAL: ${dungeon.finalBossName}",
-                                    color = Color(0xFFFFD54F),
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                                Text(
-                                    text = dungeon.finalBossTitle,
-                                    color = Color.LightGray,
-                                    fontSize = 10.sp
-                                )
-                            }
-                        }
-
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Color(0xFF14101A))
-                                .border(1.dp, Color(0xFFBA68C8), RoundedCornerShape(8.dp))
-                                .padding(8.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text("🏆", fontSize = 16.sp)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            text = dungeon.uniqueTreasure.name,
-                                            color = Color(0xFFE1BEE7),
-                                            fontSize = 11.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "[${dungeon.uniqueTreasure.rarity}]",
-                                            color = MedievalGold,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-                                    }
-                                    Text(
-                                        text = dungeon.uniqueTreasure.description,
-                                        color = Color.Gray,
-                                        fontSize = 9.sp,
-                                        maxLines = 2
-                                    )
-                                }
-                            }
-                        }
-
-                        Text(
-                            text = "⚔️ 9 Subjefes: ${dungeon.subBosses.take(3).joinToString(", ")} ... y 6 más.",
-                            color = Color.LightGray,
-                            fontSize = 10.sp
-                        )
-
-                        val checkpointsMap = com.example.data.GameJsonParser.mapFromJson<String, Int>(p.dungeonCheckpointsJson)
-                        val savedStage = checkpointsMap[dungeon.id.toString()] ?: 1
-
-                            if (savedStage > 1) {
-                                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                    Button(
-                                        onClick = {
-                                            SoundManager.playButtonClick()
-                                            viewModel.startDungeonRun(dungeon.id, startFromStage = savedStage)
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE65100)),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("resume_dungeon_${dungeon.id}_button")
-                                    ) {
-                                        Text(
-                                            text = "⚔️ CONTINUAR DESDE ETAPA $savedStage/10 (CHECKPOINT)",
-                                            color = Color.White,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-
-                                    OutlinedButton(
-                                        onClick = {
-                                            SoundManager.playButtonClick()
-                                            viewModel.startDungeonRun(dungeon.id, startFromStage = 1)
-                                        },
-                                        border = BorderStroke(1.dp, Color.Gray),
-                                        shape = RoundedCornerShape(8.dp),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .testTag("restart_dungeon_${dungeon.id}_button")
-                                    ) {
-                                        Text(
-                                            text = "🔄 REINICIAR DESDE ETAPA 1",
-                                            color = Color.LightGray,
-                                            fontSize = 10.sp
-                                        )
-                                    }
-                                }
-                            } else {
-                                Button(
-                                    onClick = {
-                                        SoundManager.playButtonClick()
-                                        viewModel.startDungeonRun(dungeon.id, startFromStage = 1)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = if (isCompleted) Color(0xFF2E7D32) else MedievalGold
-                                    ),
-                                    shape = RoundedCornerShape(8.dp),
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("start_dungeon_${dungeon.id}_button")
-                                ) {
-                                    Text(
-                                        text = if (isCompleted) "✨ DESAFIAR DE NUEVO (Calabozo Conquistado)" else "⚔️ ENTRAR AL CALABOZO (Etapa 1/10)",
-                                        color = if (isCompleted) Color.White else Color.Black,
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 11.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
 
 @Composable
 fun PetScreen(viewModel: GameViewModel) {
@@ -7254,6 +6570,18 @@ fun PetScreen(viewModel: GameViewModel) {
     }
 
     var showEquipDialogForSlot by remember { mutableStateOf<String?>(null) }
+
+    // Ficha de objeto por pulsación larga, compartida por las dos listas de
+    // esta pantalla (bestias del inventario y equipo de bestia).
+    var inspectingPet by remember { mutableStateOf<Item?>(null) }
+    inspectingPet?.let { item ->
+        InventoryItemDialog(
+            item = item,
+            playerLevel = p.charLevel,
+            sellPrice = 0,
+            onDismiss = { inspectingPet = null }
+        )
+    }
 
     val petLevel = p.petLevel
     val petExp = p.petExp
@@ -7645,6 +6973,7 @@ fun PetScreen(viewModel: GameViewModel) {
                             stats = petItem.getStatDescription(),
                             imageRes = getItemImageRes(petItem.imageResName, "PET"),
                             subtitle = petItem.rarity.uppercase(),
+                            onLongClick = { inspectingPet = petItem },
                             testTag = "owned_pet_${petItem.id}",
                             trailing = {
                                 EldoriaButton(
@@ -7715,6 +7044,7 @@ fun PetScreen(viewModel: GameViewModel) {
                                 level = item.itemLevel,
                                 stats = item.getStatDescription(),
                                 imageRes = getItemImageRes(item.imageResName, item.type),
+                                onLongClick = { inspectingPet = item },
                                 testTag = "pet_gear_${item.id}",
                                 trailing = {
                                     EldoriaButton(
