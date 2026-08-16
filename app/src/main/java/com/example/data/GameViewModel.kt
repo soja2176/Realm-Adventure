@@ -2121,7 +2121,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val talentDmgMultiplier = 1.0 + (getTalentRank("t_1") * 0.04)
 
             val baseDmg = (modifierStat * 0.6) + weaponDmg + Random.nextInt(3, 8)
-            var finalDmg = (baseDmg * talentDmgMultiplier).toInt()
+            // El daño del héroe crece en centenas mientras su vida crece en
+            // decenas de miles; este factor pone las dos en la misma escala.
+            // Es el mismo que usa `measureHero` para calibrar al enemigo, así
+            // que golpe y vida enemiga siempre se miden con la misma regla.
+            val outputScale = EldoriaBalance.measureHero(progress) { id -> getTalentRank(id) }.outputScale
+            var finalDmg = EldoriaBalance.scaleHeroDamage(
+                (baseDmg * talentDmgMultiplier).toInt(), outputScale
+            )
 
             // Racial damage bonus (Orco)
             val raceDmgMult = when {
@@ -2237,7 +2244,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
                 // Pasivo NERFEADO (×0.40): la mascota ya tiene órdenes activas propias.
                 val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
-                val petDmg = (((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult) * 0.40f).toInt().coerceAtLeast(8)
+                // La mascota entra en la medida del héroe, así que se reescala
+                // con él: si no, dejaría de aportar nada al subir el factor.
+                val petDmg = EldoriaBalance.scaleHeroDamage(
+                    (((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult) * 0.40f).toInt().coerceAtLeast(8),
+                    outputScale
+                )
                 val petHeal = (((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult) * 0.40f).toInt().coerceAtLeast(4)
 
                 updatedEnemyHp = maxOf(0, updatedEnemyHp - petDmg)
@@ -2324,6 +2336,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             // Spells power talent
             val spellMult = 1.0 + (getTalentRank("t_4") * 0.04)
 
+            // Mismo reescalado que el golpe básico: si sólo se aplicara a uno de
+            // los dos, las habilidades se volverían inútiles. Lo comparten el
+            // daño de la habilidad y el acoso de la mascota que la acompaña.
+            val outputScale = EldoriaBalance.measureHero(progress) { id -> getTalentRank(id) }.outputScale
+
             var log = ""
             var damageFeedbackEnemy: String? = null
             var damageFeedbackPlayer: String? = null
@@ -2350,7 +2367,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 }
                 // Ímpetu acumulado con las paradas: hasta un +50 % de daño.
                 val momentumMult = 1.0 + (currentCombat.momentum / 200.0)
-                var finalSkillDmg = (baseSkillDmg * skill.damageMultiplier * spellMult * raceDmgMult * momentumMult).toInt()
+                var finalSkillDmg = EldoriaBalance.scaleHeroDamage(
+                    (baseSkillDmg * skill.damageMultiplier * spellMult * raceDmgMult * momentumMult).toInt(),
+                    outputScale
+                )
 
                 // Defense mitigation — misma curva que el ataque básico.
                 val enemyDef = currentCombat.enemy?.defense ?: 0
@@ -2394,7 +2414,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
                 // Pasivo NERFEADO (×0.40): la mascota ya tiene órdenes activas propias.
                 val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
-                val petDmg = (((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult) * 0.40f).toInt().coerceAtLeast(8)
+                val petDmg = EldoriaBalance.scaleHeroDamage(
+                    (((playerPet.dmgBonus * 0.9 + progress.charLevel * 4 + progress.petLevel * 14 + playerPet.strBonus * 0.5 + extraDmg + Random.nextInt(10, 25)) * satietyMult) * 0.40f).toInt().coerceAtLeast(8),
+                    outputScale
+                )
                 val petHeal = (((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult) * 0.40f).toInt().coerceAtLeast(4)
 
                 currentEnemyHp = maxOf(0, currentEnemyHp - petDmg)
@@ -3034,7 +3057,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val extraDmg = (petWpn?.dmgBonus ?: 0) + (petWpn?.strBonus ?: 0) + (petAcc?.strBonus ?: 0) + (petAcc?.intBonus ?: 0)
 
                 val satietyMult = if (progress.petSatiety >= 50) 1.25f else if (progress.petSatiety > 0) 1.0f else 0.6f
-                val petDmg = (((pet.dmgBonus * 0.9 + progress.charLevel * 6 + progress.petLevel * 18 + pet.strBonus * 0.5 + extraDmg + Random.nextInt(15, 35)) * satietyMult) * 0.40f).toInt().coerceAtLeast(14)
+                // Acoso de la mascota en el turno enemigo: mismo reescalado que
+                // el resto de la ofensiva del héroe.
+                val petDmg = EldoriaBalance.scaleHeroDamage(
+                    (((pet.dmgBonus * 0.9 + progress.charLevel * 6 + progress.petLevel * 18 + pet.strBonus * 0.5 + extraDmg + Random.nextInt(15, 35)) * satietyMult) * 0.40f).toInt().coerceAtLeast(14),
+                    EldoriaBalance.measureHero(progress) { id -> getTalentRank(id) }.outputScale
+                )
 
                 enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - petDmg)
                 enemy.currentHp = enemyHpAfterReflect

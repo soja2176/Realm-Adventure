@@ -18,14 +18,27 @@ import kotlin.math.roundToInt
 //  pegaba 98 por turno; un enemigo de nivel 16 tenía 881 de vida y pegaba 19.
 //  Lo mataba en 9 turnos y perdía el 4 % de la vida. No había combate.
 //
-//  LA SOLUCIÓN: CADA COSA DE DONDE DEBE SALIR
+//  LA SEGUNDA MITAD DEL PROBLEMA: DOS ESCALAS QUE NO SE HABLAN
+//  El ancla al nivel arreglaba la forma de la curva pero no su escala. La vida
+//  del héroe es `CON × 30`, y hay objetos con 350 de CON: a nivel 12 se llega a
+//  12 000 de vida. Su DAÑO, en cambio, es lineal (`FUE × 0,6 + arma`): unos 250
+//  por turno. Un héroe tardaría CINCUENTA turnos en matarse a sí mismo, así que
+//  cualquier enemigo que dure 2-3 turnos tiene que tener ~500 de vida — de ahí
+//  el "nivel 12 con 200 de vida" al lado de un héroe con 12 000. El número no
+//  estaba mal calculado: estaba medido en otra unidad.
 //
-//  · La VIDA del enemigo sale de su NIVEL. Es el número que el jugador lee al
-//    lado del nombre, y tiene que crecer de forma visible con él: un enemigo de
-//    nivel 18 no puede tener la misma vida que uno de nivel 5 sólo porque el
-//    héroe pegue igual. Se reparte por rareza (`hpShare`) y se recorta a una
-//    banda de turnos para que ni un jugador sobrado lo trivialice ni uno mal
-//    equipado se eternice.
+//  LA SOLUCIÓN: TODO SE MIDE CONTRA LA MISMA REGLA — LA VIDA DEL HÉROE
+//
+//  · El DAÑO del héroe se reescala (`outputScale`) para que un espejo de sí
+//    mismo cayera en [MIRROR_TURNS] turnos. Es un factor, no una fórmula nueva:
+//    el equipo, los atributos y los críticos siguen decidiendo quién pega más;
+//    sólo se corrige que el daño creciera en centenas mientras la vida crecía
+//    en decenas de miles. Nunca reduce el daño, sólo lo pone a escala.
+//
+//  · La VIDA del enemigo es una FRACCIÓN DE LA TUYA (`heroHpShare`), corregida
+//    por la diferencia de nivel: un común ronda un quinto de tu vida, un jefe la
+//    supera. Así los dos números de la pantalla de combate son comparables, que
+//    es lo único que el jugador puede juzgar de un vistazo.
 //
 //  · El ATAQUE del enemigo sale del PODER REAL del héroe, equipo incluido. Es
 //    lo que arregla el fallo de partida: el daño que recibes tiene que medirse
@@ -53,14 +66,26 @@ import kotlin.math.roundToInt
 
 /** Lo que el héroe rinde de verdad en combate, con el equipo puesto. */
 data class HeroPower(
-    /** Daño esperado por turno: golpe básico + mascota + esperanza de crítico. */
+    /**
+     * Daño esperado por turno YA REESCALADO: golpe básico + mascota + esperanza
+     * de crítico, multiplicado por [outputScale]. Es el número con el que hay
+     * que calibrar al enemigo, porque es el que el combate va a producir.
+     */
     val damagePerTurn: Double,
     /** Vida máxima real. */
     val maxHp: Int,
     /** Defensa efectiva que se opone al golpe enemigo. */
     val defense: Int,
     /** Nivel del héroe: sólo se usa como suelo, no como medida de poder. */
-    val level: Int
+    val level: Int,
+    /**
+     * Factor que el motor de combate debe aplicar a TODO el daño del héroe
+     * (básico, habilidad y mascota) para que su ofensiva viva en la misma
+     * escala que su vida. Nunca baja de 1,0: corrige hacia arriba o no corrige.
+     */
+    val outputScale: Double = 1.0,
+    /** Daño por turno tal y como sale de las fórmulas, sin reescalar. */
+    val rawDamagePerTurn: Double = damagePerTurn
 )
 
 /** Objetivos de duración de un combate, por rareza del enemigo. */
@@ -71,13 +96,21 @@ private data class CombatShape(
     val turnsToDie: Double,
     /** Tope de daño por turno como fracción de la vida máxima del héroe. */
     val maxHitFraction: Double,
+    /**
+     * Suelo de daño por turno. Los comunes lo tienen más bajo que el resto:
+     * ahora cuestan dos o tres turnos, y con el suelo general del 4 % farmear
+     * habría costado más de un 10 % de vida por bicho.
+     */
+    val minHitFraction: Double,
     /** Fracción del daño del héroe que absorbe la armadura del enemigo. */
     val armorSoak: Double,
     /**
-     * Cuánta vida le toca a esta rareza sobre la referencia de su nivel.
-     * Un común es una fracción de lo que "pesa" su nivel; un jefe, varias veces.
+     * Vida de esta rareza como FRACCIÓN DE LA VIDA DEL HÉROE, a igualdad de
+     * nivel. Es lo que hace que los dos números de la pantalla de combate se
+     * puedan comparar: un común ronda un quinto de tu vida, un jefe la supera.
+     * La diferencia de nivel lo corrige después ([levelFactor]).
      */
-    val hpShare: Double,
+    val heroHpShare: Double,
     /** Banda de turnos aceptable. La vida anclada al nivel se recorta a ella. */
     val minTurns: Double,
     val maxTurns: Double
@@ -88,37 +121,54 @@ object EldoriaBalance {
     // ─── Objetivos de diseño ───
     // Coste en vida del combate = turnsToKill / turnsToDie.
     private val SHAPES: Map<String, CombatShape> = mapOf(
-        // Los comunes son FARMEO: caen de un golpe o dos y apenas te rozan.
+        // Los comunes ya no caen de un golpe: cuestan dos o tres turnos, lo justo
+        // para que su barra de vida signifique algo. Siguen siendo baratos en
+        // vida (`minHitFraction` bajo): el farmeo no puede arruinarte.
         "NORMAL" to CombatShape(
-            turnsToKill = 1.0, turnsToDie = 30.0, maxHitFraction = 0.06, armorSoak = 0.05,
-            hpShare = 0.35, minTurns = 0.8, maxTurns = 2.2
+            turnsToKill = 2.5, turnsToDie = 30.0,
+            maxHitFraction = 0.05, minHitFraction = 0.015, armorSoak = 0.08,
+            heroHpShare = 0.22, minTurns = 2.0, maxTurns = 3.2
         ),
         // Aquí empieza el juego de verdad: cuesta gran parte de la vida.
         "ELITE" to CombatShape(
-            turnsToKill = 5.0, turnsToDie = 6.5, maxHitFraction = 0.24, armorSoak = 0.22,
-            hpShare = 1.0, minTurns = 3.5, maxTurns = 6.5
+            turnsToKill = 6.0, turnsToDie = 6.5,
+            maxHitFraction = 0.24, minHitFraction = 0.04, armorSoak = 0.22,
+            heroHpShare = 0.55, minTurns = 5.0, maxTurns = 7.0
         ),
         // Por encima de ti: sin pasivas ni pociones, no sales.
         "CHAMPION" to CombatShape(
-            turnsToKill = 7.0, turnsToDie = 5.5, maxHitFraction = 0.30, armorSoak = 0.26,
-            hpShare = 1.15, minTurns = 5.0, maxTurns = 8.5
+            turnsToKill = 8.5, turnsToDie = 5.5,
+            maxHitFraction = 0.30, minHitFraction = 0.04, armorSoak = 0.26,
+            heroHpShare = 0.80, minTurns = 7.0, maxTurns = 10.0
         ),
         // Un jefe DEBE poder matarte. Las pasivas son las que te dan la vuelta.
         "LEGENDARY" to CombatShape(
-            turnsToKill = 11.0, turnsToDie = 5.0, maxHitFraction = 0.34, armorSoak = 0.30,
-            hpShare = 1.8, minTurns = 8.0, maxTurns = 13.0
+            turnsToKill = 12.0, turnsToDie = 5.0,
+            maxHitFraction = 0.34, minHitFraction = 0.04, armorSoak = 0.30,
+            heroHpShare = 1.15, minTurns = 10.0, maxTurns = 14.0
         ),
         // El jefe de calabozo: lo más duro del juego.
         "UNIVERSAL" to CombatShape(
-            turnsToKill = 13.0, turnsToDie = 4.5, maxHitFraction = 0.36, armorSoak = 0.32,
-            hpShare = 2.3, minTurns = 9.0, maxTurns = 14.5
+            turnsToKill = 14.5, turnsToDie = 4.5,
+            maxHitFraction = 0.36, minHitFraction = 0.04, armorSoak = 0.32,
+            heroHpShare = 1.45, minTurns = 12.0, maxTurns = 17.0
         )
     )
 
     private val DEFAULT_SHAPE = SHAPES.getValue("NORMAL")
 
-    /** Ningún golpe baja de esta fracción de la vida: ningún combate es gratis. */
-    private const val MIN_HIT_FRACTION = 0.04
+    /**
+     * Turnos que tardaría el héroe en matar a un espejo exacto de sí mismo.
+     * Es la regla que pone en la misma escala su vida y su daño: `outputScale`
+     * es justo el factor que hace cierta esta igualdad.
+     */
+    private const val MIRROR_TURNS = 12.0
+
+    /**
+     * Tope del reescalado. Sin él, un personaje con muchísimo CON y un arma de
+     * madera se convertiría en un cañón por el mero hecho de tener vida.
+     */
+    private const val MAX_OUTPUT_SCALE = 15.0
 
     /**
      * El enemigo no pega siempre igual: alterna golpe básico y habilidades, que
@@ -142,17 +192,34 @@ object EldoriaBalance {
         55.0 + 11.0 * attackerLevel.coerceAtLeast(1)
 
     /**
-     * Vida de referencia de un enemigo por su nivel: lo que "pesa" ese nivel
-     * antes de repartirlo por rareza. Lineal más un término cuadrático suave,
-     * para que suba de forma visible sin dispararse en niveles altos.
+     * Corrector de la vida enemiga por diferencia de nivel. A igualdad de nivel
+     * vale 1: el enemigo pesa exactamente la fracción que le toca por rareza.
+     * Por encima pesa más y por debajo menos, pero con exponente < 1 y acotado,
+     * para que un bicho muy superior sea duro sin volverse un muro infinito.
      *
-     *   nivel  5 →   198      nivel 30 → 1 810
-     *   nivel 18 →   864      nivel 50 → 4 090
+     *   héroe nivel 12 →  enemigo  6 → 0,56    enemigo 24 → 1,80
+     *                     enemigo 12 → 1,00    enemigo 60 → 2,20 (tope)
      */
-    fun levelAnchorHp(level: Int): Double {
-        val l = level.coerceAtLeast(1)
-        return 40.0 + 26.0 * l + 1.1 * l * l
+    fun levelFactor(enemyLevel: Int, heroLevel: Int): Double {
+        val e = enemyLevel.coerceAtLeast(1).toDouble()
+        val h = heroLevel.coerceAtLeast(1).toDouble()
+        return Math.pow(e / h, 0.85).coerceIn(0.45, 2.2)
     }
+
+    /**
+     * Factor de corrección de la ofensiva del héroe. Se despeja de [MIRROR_TURNS]:
+     * el daño que produce de verdad debe vaciar su propia vida en esos turnos.
+     * Sólo corrige hacia arriba — si alguien ya pega en su escala, se le deja.
+     */
+    fun outputScaleFor(rawDamagePerTurn: Double, maxHp: Int): Double {
+        val target = maxHp.coerceAtLeast(1) / MIRROR_TURNS
+        val raw = rawDamagePerTurn.coerceAtLeast(1.0)
+        return (target / raw).coerceIn(1.0, MAX_OUTPUT_SCALE)
+    }
+
+    /** Aplica [HeroPower.outputScale] a un golpe del héroe. */
+    fun scaleHeroDamage(damage: Int, scale: Double): Int =
+        max(1, (damage * scale).roundToInt())
 
     /**
      * Fracción del golpe que ATRAVIESA la defensa, entre 0 y 1.
@@ -272,11 +339,20 @@ object EldoriaBalance {
             }
         }
 
+        val rawDpt = dpt.coerceAtLeast(1.0)
+        val maxHp = progress.maxHp.coerceAtLeast(1)
+        val scale = outputScaleFor(rawDpt, maxHp)
+
         return HeroPower(
-            damagePerTurn = dpt.coerceAtLeast(1.0),
-            maxHp = progress.maxHp.coerceAtLeast(1),
+            // El enemigo se calibra contra el daño REESCALADO, que es el que el
+            // combate va a producir de verdad. Medirlo sin el factor sería
+            // repetir el fallo original con el signo cambiado.
+            damagePerTurn = rawDpt * scale,
+            maxHp = maxHp,
             defense = defense.coerceAtLeast(0),
-            level = progress.charLevel.coerceAtLeast(1)
+            level = progress.charLevel.coerceAtLeast(1),
+            outputScale = scale,
+            rawDamagePerTurn = rawDpt
         )
     }
 
@@ -312,23 +388,23 @@ object EldoriaBalance {
         val kHero = defenseConstant(hero.level)
         val rawDefense = (kHero * soak / (1.0 - soak)).roundToInt().coerceAtLeast(0)
 
-        // ── Vida: anclada al NIVEL, recortada a la banda de turnos ──
+        // ── Vida: una FRACCIÓN DE LA VIDA DEL HÉROE, corregida por nivel ──
         //
-        // Derivarla sólo del daño del héroe cumplía el objetivo de combate pero
-        // producía cifras que no se sostenían: un enemigo de nivel 18 y otro de
-        // nivel 5 tenían la misma vida si pegabas igual, y un "nivel 18" con 220
-        // de vida al lado de un héroe con 4000 no se lo cree nadie.
+        // Anclarla al nivel con una fórmula propia (`40 + 26·L + 1,1·L²`) daba
+        // una curva correcta en una escala equivocada: 510 de vida para un nivel
+        // 12 que se enfrenta a un héroe de 12 000. El jugador no compara al
+        // enemigo con una tabla, lo compara con SU barra de vida — así que la
+        // vida enemiga se expresa justamente en esa unidad.
         //
-        // Así que la vida sale del nivel (crece a la vista, como debe) y la
-        // banda de turnos actúa de corrector: si el jugador va sobrado o muy
-        // corto de equipo, se recorta para que el combate no se vuelva ni
-        // trivial ni eterno. Nivel y equipo suben juntos, así que en la práctica
-        // el ancla manda y el recorte sólo salta en los extremos.
+        // Sigue creciendo con el nivel, que era el arreglo anterior y no se
+        // pierde: `levelFactor` es lo que hace que un bicho de nivel 24 pese el
+        // triple que uno de nivel 6 delante del mismo héroe.
         val hpFactor = 1.0 + (hpMult - 1.0) * 0.5
         val soakedThrough = damageThrough(rawDefense, hero.level, 0.0)
         val effectiveDpt = (hero.damagePerTurn * soakedThrough).coerceAtLeast(1.0)
 
-        val anchored = levelAnchorHp(enemyLevel) * shape.hpShare * hpFactor *
+        val anchored = hero.maxHp * shape.heroHpShare *
+            levelFactor(enemyLevel, hero.level) * hpFactor *
             (if (isBoss) 1.10 else 1.0)
 
         // El techo de turnos cede cuando el enemigo te saca niveles: si no, a
@@ -346,7 +422,7 @@ object EldoriaBalance {
         // ── Ataque: el que vacía la vida del héroe en los turnos previstos ──
         val wantedPerTurn = hero.maxHp / shape.turnsToDie
         val cappedPerTurn = wantedPerTurn.coerceIn(
-            hero.maxHp * MIN_HIT_FRACTION,
+            hero.maxHp * shape.minHitFraction,
             hero.maxHp * shape.maxHitFraction
         )
         val atkFactor = 1.0 + (atkMult - 1.0) * 0.5

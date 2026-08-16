@@ -61,7 +61,7 @@ class EldoriaBalanceTest {
     }
 
     @Test
-    fun `los comunes se farmean en uno o dos golpes`() {
+    fun `los comunes cuestan dos o tres turnos y poca vida`() {
         val hero = EldoriaBalance.measureHero(reportedHero())
         val enemy = EldoriaBalance.buildEnemy(hero, "NORMAL", enemyLevel = 16)
         val ttk = EldoriaBalance.expectedTurnsToKill(hero, enemy)
@@ -69,11 +69,30 @@ class EldoriaBalanceTest {
 
         report("CASO DEL REPORTE (nivel 7, equipo épico)", reportedHero())
 
-        // La basura del camino no cobra peaje. Con el enemigo nueve niveles por
-        // encima del héroe puede pedir un segundo golpe; contra uno de su nivel
-        // cae del primero.
-        assertTrue("un común debe caer rápido, tardó $ttk turnos", ttk <= 2.3)
+        // Ya no caen de un golpe: su barra de vida tiene que significar algo.
+        // Pero siguen siendo farmeo, así que el peaje en vida es mínimo.
+        assertTrue("un común debe costar más de un golpe, tardó $ttk turnos", ttk >= 1.8)
+        assertTrue("un común no debe eternizarse, tardó $ttk turnos", ttk <= 5.0)
         assertTrue("un común no debe costar casi vida, costó ${(cost * 100).toInt()} %", cost < 0.15)
+    }
+
+    /**
+     * El fallo reportado: "enemigos de nivel 12 con 200 de vida y yo con 12 000".
+     * La vida del enemigo tiene que leerse en la misma unidad que la del héroe.
+     */
+    @Test
+    fun `la vida del enemigo es comparable con la del heroe`() {
+        val hero = EldoriaBalance.measureHero(heroOfLevel(12))
+        listOf("NORMAL" to 0.12, "ELITE" to 0.35, "LEGENDARY" to 0.70).forEach { (rarity, floor) ->
+            val e = EldoriaBalance.buildEnemy(hero, rarity, enemyLevel = 12, isBoss = rarity == "LEGENDARY")
+            val ratio = e.hp.toDouble() / hero.maxHp
+            println("  $rarity nivel 12: ${e.hp} de vida frente a ${hero.maxHp} del héroe (${(ratio * 100).toInt()} %)")
+            assertTrue(
+                "$rarity de tu nivel debe rondar al menos el ${(floor * 100).toInt()} % de tu vida, " +
+                    "fue el ${(ratio * 100).toInt()} % (${e.hp} vs ${hero.maxHp})",
+                ratio >= floor
+            )
+        }
     }
 
     /**
