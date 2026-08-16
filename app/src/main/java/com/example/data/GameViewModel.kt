@@ -21,9 +21,13 @@ import com.example.eldoria.systems.canClaimDailyReward
 import com.example.eldoria.systems.claimDailyReward
 import com.example.data.content.EldoriaBestiary
 import com.example.data.content.KingdomAtlas
+import com.example.ui.art.EldoriaArt
 import com.example.data.engine.EldoriaBalance
+import com.example.data.engine.EldoriaDungeonBalance
 import com.example.data.engine.EldoriaPassives
 import com.example.data.content.EldoriaExpeditions
+import com.example.data.content.EldoriaPotions
+import com.example.data.content.PotionEffect
 import com.example.data.content.EldoriaPets
 import com.example.data.engine.EldoriaHost
 import com.example.data.engine.EldoriaSystemsController
@@ -142,7 +146,25 @@ data class CombatState(
     /** Turnos que al jefe le queda el enfurecimiento activo. */
     val enrageTurns: Int = 0,
     /** Acumulación de sangrado sobre el héroe: daña al inicio de su turno. */
-    val bleedStacks: Int = 0
+    val bleedStacks: Int = 0,
+
+    // ─── Efectos de poción ───
+    //
+    // Cada uno lleva turnos restantes y magnitud por separado: la magnitud la
+    // fija el frasco que bebiste, así que un Filtro de Furia épico y uno
+    // legendario pueden durar lo mismo y pegar distinto sin tocar el motor.
+    /** Turnos y fracción de vida máxima que cura la regeneración por turno. */
+    val regenTurns: Int = 0,
+    val regenPotency: Double = 0.0,
+    /** Turnos y fracción de daño extra que hace el héroe. */
+    val damageBuffTurns: Int = 0,
+    val damageBuffPotency: Double = 0.0,
+    /** Turnos y probabilidad de esquivar por completo el golpe enemigo. */
+    val evasionTurns: Int = 0,
+    val evasionPotency: Double = 0.0,
+    /** Turnos y fracción en que se reduce el daño recibido. */
+    val wardTurns: Int = 0,
+    val wardPotency: Double = 0.0
 )
 
 data class SpecialMerchantItem(
@@ -2144,6 +2166,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val momentumMult = 1.0 + (currentCombat.momentum / 200.0)
             finalDmg = (finalDmg * momentumMult).toInt()
 
+            // Filtro de Furia: multiplica igual que el ímpetu, así que las dos
+            // cosas se combinan y beberlo tras una parada compensa de verdad.
+            if (currentCombat.damageBuffTurns > 0) {
+                finalDmg = (finalDmg * (1.0 + currentCombat.damageBuffPotency)).toInt()
+            }
+
             // ─── Pasivas ofensivas del equipo legendario ───
             val loadout = EldoriaPassives.loadoutOf(progress, getAllEquippedItems(progress))
             // Furia Creciente: premia aguantar. Se corta a los ocho turnos para
@@ -2367,8 +2395,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 }
                 // Ímpetu acumulado con las paradas: hasta un +50 % de daño.
                 val momentumMult = 1.0 + (currentCombat.momentum / 200.0)
+                val furyMult = if (currentCombat.damageBuffTurns > 0)
+                    1.0 + currentCombat.damageBuffPotency else 1.0
                 var finalSkillDmg = EldoriaBalance.scaleHeroDamage(
-                    (baseSkillDmg * skill.damageMultiplier * spellMult * raceDmgMult * momentumMult).toInt(),
+                    (baseSkillDmg * skill.damageMultiplier * spellMult * raceDmgMult *
+                        momentumMult * furyMult).toInt(),
                     outputScale
                 )
 
@@ -2458,29 +2489,93 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
     }
 
-    fun usePotionCombat() {
+    /**
+     * Bebe un frasco del inventario.
+     *
+     * @param potionId id del frasco concreto. Vacío = el primero que haya, que
+     *        es lo que hacía el botón único de antes y lo que sigue haciendo el
+     *        auto-combate.
+     */
+    fun usePotionCombat(potionId: String = "") {
         val currentCombat = _combatState.value
         val progress = _progressState.value ?: return
         if (!currentCombat.active || !currentCombat.playerTurn || currentCombat.victory != null) return
 
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
-        val potionIndex = invList.indexOfFirst { it.type == "POTION" }
+        val potionIndex = if (potionId.isBlank()) {
+            invList.indexOfFirst { it.type == "POTION" }
+        } else {
+            invList.indexOfFirst { it.type == "POTION" && it.id.startsWith(potionId) }
+        }
 
         if (potionIndex == -1) {
-            showNotification("¡No tienes pociones en tu inventario!")
+            showNotification("¡No tienes esa poción en tu inventario!")
             return
         }
+
+        val item = invList[potionIndex]
+        val spec = EldoriaPotions.fromItem(item.id, item.name)
 
         viewModelScope.launch {
             SoundManager.playHealPotion()
             invList.removeAt(potionIndex)
-            val healAmount = (progress.maxHp * 0.5).toInt()
-            val manaAmount = (progress.maxMp * 0.5).toInt()
 
-            val newHp = minOf(progress.maxHp, currentCombat.playerCurrentHp + healAmount)
-            val newMp = minOf(progress.maxMp, currentCombat.playerCurrentMp + manaAmount)
+            var newHp = currentCombat.playerCurrentHp
+            var newMp = currentCombat.playerCurrentMp
+            var feedback = ""
+            var log: String
 
-            // Save inventory reduction and restored HP/MP
+            // Los buffs NO se acumulan consigo mismos: beber dos frascos del
+            // mismo tipo renueva la duración y se queda con la mayor potencia.
+            // Sin esta regla la jugada óptima seria encadenar el mismo frasco.
+            var regenT = currentCombat.regenTurns
+            var regenP = currentCombat.regenPotency
+            var dmgT = currentCombat.damageBuffTurns
+            var dmgP = currentCombat.damageBuffPotency
+            var evaT = currentCombat.evasionTurns
+            var evaP = currentCombat.evasionPotency
+            var wardT = currentCombat.wardTurns
+            var wardP = currentCombat.wardPotency
+
+            when (spec.effect) {
+                PotionEffect.RESTORE -> {
+                    val heal = (progress.maxHp * spec.healPct).toInt()
+                    val mana = (progress.maxMp * spec.manaPct).toInt()
+                    newHp = minOf(progress.maxHp, newHp + heal)
+                    newMp = minOf(progress.maxMp, newMp + mana)
+                    feedback = "+$heal HP / +$mana MP"
+                    log = "Bebes ${spec.name}: recuperas $heal de salud y $mana de maná."
+                }
+                PotionEffect.REGEN -> {
+                    regenT = maxOf(regenT, spec.turns)
+                    regenP = maxOf(regenP, spec.potency)
+                    feedback = "REGENERACIÓN"
+                    log = "Bebes ${spec.name}: te curarás un ${(spec.potency * 100).toInt()} % " +
+                        "al principio de cada turno durante ${spec.turns} turnos."
+                }
+                PotionEffect.DAMAGE -> {
+                    dmgT = maxOf(dmgT, spec.turns)
+                    dmgP = maxOf(dmgP, spec.potency)
+                    feedback = "+${(spec.potency * 100).toInt()} % DAÑO"
+                    log = "Bebes ${spec.name}: tus golpes hacen un ${(spec.potency * 100).toInt()} % " +
+                        "más de daño durante ${spec.turns} turnos."
+                }
+                PotionEffect.EVASION -> {
+                    evaT = maxOf(evaT, spec.turns)
+                    evaP = maxOf(evaP, spec.potency)
+                    feedback = "+${(spec.potency * 100).toInt()} % EVASIÓN"
+                    log = "Bebes ${spec.name}: esquivarás por completo un ${(spec.potency * 100).toInt()} % " +
+                        "de los golpes durante ${spec.turns} turnos."
+                }
+                PotionEffect.DEFENSE -> {
+                    wardT = maxOf(wardT, spec.turns)
+                    wardP = maxOf(wardP, spec.potency)
+                    feedback = "-${(spec.potency * 100).toInt()} % DAÑO RECIBIDO"
+                    log = "Bebes ${spec.name}: recibes un ${(spec.potency * 100).toInt()} % menos " +
+                        "de daño durante ${spec.turns} turnos."
+                }
+            }
+
             val updatedProgress = progress.copy(
                 currentHp = newHp,
                 currentMp = newMp,
@@ -2492,9 +2587,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 playerCurrentHp = newHp,
                 playerCurrentMp = newMp,
                 playerTurn = false,
-                damageFeedbackPlayer = "+$healAmount HP / +$manaAmount MP",
-                combatLogs = currentCombat.combatLogs + "Bebes una poción rejuvenecedora: recuperas salud y maná.",
-                activeAnimation = "PLAYER_POTION"
+                damageFeedbackPlayer = feedback,
+                combatLogs = currentCombat.combatLogs + log,
+                activeAnimation = "PLAYER_POTION",
+                regenTurns = regenT, regenPotency = regenP,
+                damageBuffTurns = dmgT, damageBuffPotency = dmgP,
+                evasionTurns = evaT, evasionPotency = evaP,
+                wardTurns = wardT, wardPotency = wardP
             )
 
             kotlinx.coroutines.delay(1000)
@@ -2814,7 +2913,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val live = _combatState.value
 
             // Dodge check
-            val dodgeChance = 3 + (progress.statDex * 0.3) + (getTalentRank("t_7") * 4)
+            val dodgeChance = 3 + (progress.statDex * 0.3) + (getTalentRank("t_7") * 4) +
+                // Tónico de Sombras: se SUMA a tu esquiva en vez de sustituirla,
+                // para que el Pícaro siga siendo el que mejor lo aprovecha.
+                (if (live.evasionTurns > 0) live.evasionPotency * 100.0 else 0.0)
             val dodged = Random.nextInt(100) < dodgeChance
 
             // El movimiento ya venía elegido por `rollEnemyIntent()`: no se re-sortea.
@@ -2955,6 +3057,17 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             pendingMpDrainBlocked = false
 
             var newPlayerMp = maxOf(0, live.playerCurrentMp - mpDrained)
+
+            // ─── Bálsamo de Piedra: recorta el golpe antes de repartirlo ───
+            // Va ANTES del escudo rúnico a propósito: así el escudo dura más,
+            // que es lo que uno espera al beberse las dos cosas.
+            if (live.wardTurns > 0 && finalDmg > 0) {
+                val blocked = (finalDmg * live.wardPotency).toInt()
+                if (blocked > 0) {
+                    finalDmg -= blocked
+                    logMsg += " 🪨 El Bálsamo de Piedra absorbe $blocked."
+                }
+            }
 
             // ─── Escudo Rúnico: se come el golpe antes que la carne ───
             var shieldLeft = live.runeShieldLeft
@@ -3113,17 +3226,37 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 }
             }
 
+            // ─── Elixir de Regeneración y caducidad de los frascos ───
+            //
+            // Todo esto ocurre al DEVOLVER el turno, que es el unico punto por el
+            // que pasan todas las ramas del turno enemigo. Ponerlo en el turno
+            // del jugador habria dejado fuera los combates que terminan aqui.
+            var regenLog = ""
+            var healedHp = finalPlayerHp
+            if (settled.regenTurns > 0 && healedHp > 0) {
+                val healed = (progress.maxHp * settled.regenPotency).toInt()
+                if (healed > 0) {
+                    healedHp = minOf(progress.maxHp, healedHp + healed)
+                    regenLog = "\n🌿 El Elixir de Regeneración te devuelve $healed HP " +
+                        "(${settled.regenTurns - 1} turnos restantes)."
+                }
+            }
+
             _combatState.value = settled.copy(
-                playerCurrentHp = finalPlayerHp,
+                playerCurrentHp = healedHp,
                 playerCurrentMp = afterRegenMp,
                 enemyAntiHealTurns = nextAntiHeal,
+                regenTurns = (settled.regenTurns - 1).coerceAtLeast(0),
+                damageBuffTurns = (settled.damageBuffTurns - 1).coerceAtLeast(0),
+                evasionTurns = (settled.evasionTurns - 1).coerceAtLeast(0),
+                wardTurns = (settled.wardTurns - 1).coerceAtLeast(0),
                 playerTurn = true,
                 damageFeedbackPlayer = feedbackText,
                 runeShieldLeft = shieldLeft,
                 secondWindUsed = secondWindUsed,
                 bossPhase = bossPhase,
                 enrageTurns = enrageTurns,
-                combatLogs = settled.combatLogs + updatedLogMsg + phaseLog,
+                combatLogs = settled.combatLogs + updatedLogMsg + phaseLog + regenLog,
                 activeAnimation = when {
                     pendingReactionCounter -> "PLAYER_ATTACK"
                     isSkillUsed && !dodged -> "ENEMY_SKILL"
@@ -4322,12 +4455,26 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         }
     }
 
-    fun buyPotion(quantity: Int = 1) {
+    /**
+     * Compra frascos del catálogo.
+     *
+     * @param potionId id del frasco. Vacío = Poción Menor, que es lo que
+     *        compraba el botón único de antes y lo que siguen llamando las
+     *        pantallas que aún no ofrecen el catálogo.
+     */
+    fun buyPotion(quantity: Int = 1, potionId: String = "pot_menor") {
         val progress = _progressState.value ?: return
         val qty = quantity.coerceAtLeast(1)
-        val totalCost = 40L * qty
+        val spec = EldoriaPotions.spec(potionId) ?: EldoriaPotions.spec("pot_menor")!!
+
+        if (progress.charLevel < spec.unlockLevel) {
+            showNotification("${spec.name} se desbloquea a nivel ${spec.unlockLevel}.")
+            return
+        }
+
+        val totalCost = spec.price.toLong() * qty
         if (progress.charGold < totalCost) {
-            showNotification("¡No tienes suficiente oro! $qty pociones cuestan $totalCost monedas.")
+            showNotification("¡No tienes suficiente oro! $qty × ${spec.name} cuestan $totalCost monedas.")
             return
         }
 
@@ -4337,13 +4484,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         for (i in 0 until qty) {
             invList.add(
                 Item(
-                    id = "potion_${now}_${i}_${Random.nextInt(1000)}",
-                    name = "Poción Rejuvenecedora",
+                    // El id EMPIEZA por el del catálogo: así `usePotionCombat`
+                    // reconoce el frasco sin guardar un campo nuevo en la ficha.
+                    id = "${spec.id}_${now}_${i}_${Random.nextInt(1000)}",
+                    name = spec.name,
                     type = "POTION",
-                    rarity = "COMÚN",
-                    description = "Restaura instantáneamente el 50% de HP y Maná en combate.",
-                    itemLevel = 1,
-                    imageResName = "img_item_potion_1784593618142"
+                    rarity = spec.rarity,
+                    description = spec.description,
+                    itemLevel = spec.unlockLevel,
+                    imageResName = spec.artKey
                 )
             )
         }
@@ -4355,7 +4504,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 inventoryJson = GameJsonParser.listToJson(invList)
             )
             saveProgressSynced(updated)
-            showNotification("Compraste $qty Poción(es) por $totalCost monedas de oro.")
+            showNotification("Compraste $qty × ${spec.name} por $totalCost monedas de oro.")
         }
     }
 
@@ -4826,32 +4975,39 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     ) {
         resetCombatAuxiliaries()
         val progress = _progressState.value
-        val heroLevel = progress?.charLevel ?: 1
-        val monsterLevel = maxOf(dungeon.levelReq + (stage / 2), heroLevel + (stage / 3))
+        // El nivel del enemigo sale del CALABOZO y la planta, no de tu ficha:
+        // atarlo al héroe hacía que volver con más nivel subiese también al
+        // enemigo, así que el calabozo no se superaba nunca.
+        val monsterLevel = EldoriaDungeonBalance.enemyLevel(dungeon.levelReq, stage)
 
         val isFinalBoss = stage == 10
-        val rarity = if (isFinalBoss) "UNIVERSAL" else if (stage >= 7) "LEGENDARY" else if (stage >= 4) "CHAMPION" else "ELITE"
+        val rarity = EldoriaDungeonBalance.rarityForStage(stage)
 
-        val (hpMult, atkMult, defMult) = when (rarity) {
-            "UNIVERSAL" -> Triple(3.8, 1.8, 1.55)
-            "LEGENDARY" -> Triple(2.6, 1.55, 1.4)
-            "CHAMPION" -> Triple(1.8, 1.35, 1.25)
-            else -> Triple(1.3, 1.15, 1.15)
-        }
-
-        val enemyName = if (isFinalBoss) {
-            "🔥 ${dungeon.finalBossName}"
+        // El nombre sin decorar es la clave del arte: con el emoji delante no
+        // hay forma de encontrarlo en el índice.
+        val rawEnemyName = if (isFinalBoss) {
+            dungeon.finalBossName
         } else {
-            "⚔️ ${dungeon.subBosses.getOrElse(stage - 1) { "Subjefe de ${dungeon.species}" }}"
+            dungeon.subBosses.getOrElse(stage - 1) { "Subjefe de ${dungeon.species}" }
         }
+        val enemyName = if (isFinalBoss) "🔥 $rawEnemyName" else "⚔️ $rawEnemyName"
 
-        val baseHp = 65.0 + (monsterLevel * 42.0) + (monsterLevel * monsterLevel * 0.95)
-        val baseAtk = 9.0 + (monsterLevel * 3.8) + (monsterLevel * 0.1)
-        val baseDef = 4.0 + (monsterLevel * 2.0)
+        // Hasta ahora los enemigos de calabozo no declaraban artKey, así que la
+        // UI adivinaba por palabras del nombre y los NUEVE subjefes goblin
+        // salían con el mismo goblin. Cada uno tiene ya su propia lámina.
+        val dungeonArtKey = EldoriaArt.dungeonKey(dungeon.id, rawEnemyName, isFinalBoss)
 
-        val enemyHp = (baseHp * hpMult * (if (isFinalBoss) 1.6 else 1.1)).toInt()
-        val enemyAtk = (baseAtk * atkMult * (if (isFinalBoss) 1.3 else 1.05)).toInt()
-        val enemyDef = (baseDef * defMult * (if (isFinalBoss) 1.25 else 1.05)).toInt()
+        // Balance ABSOLUTO: la vara es el héroe de referencia del nivel del
+        // calabozo, no el tuyo. Tu vida entra sólo como retoque acotado a ±15 %
+        // y para que ningún golpe pase del 30 % de tu salud real.
+        val dungeonStats = EldoriaDungeonBalance.buildEnemy(
+            dungeonLevelReq = dungeon.levelReq,
+            stage = stage,
+            actualHeroHp = progress?.maxHp ?: 1000
+        )
+        val enemyHp = dungeonStats.hp
+        val enemyAtk = dungeonStats.attack
+        val enemyDef = dungeonStats.defense
 
         val enemyPet = generateEnemyPetIfNeeded(monsterLevel, rarity, isFinalBoss)
 
@@ -4866,7 +5022,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             level = monsterLevel,
             isBoss = isFinalBoss,
             rarity = rarity,
-            pet = enemyPet
+            pet = enemyPet,
+            artKey = dungeonArtKey
         )
 
         val stageTitle = if (isFinalBoss) "¡¡JEFE FINAL: ${dungeon.finalBossName.uppercase()}!!" else "Subjefe $stage/9 de ${dungeon.species}"

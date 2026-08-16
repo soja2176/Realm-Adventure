@@ -123,6 +123,9 @@ private class VigilRun(seedValue: Int) {
 @Composable
 fun MinigameVigilia(request: MinigameRequest, onFinish: (MinigameResult) -> Unit) {
     val difficulty = request.difficulty.coerceIn(1, 5)
+    val combo = rememberComboState()
+    val gameFeel = rememberMinigameFeedback()
+
     var started by remember { mutableStateOf(false) }
 
     if (!started) {
@@ -251,14 +254,31 @@ fun MinigameVigilia(request: MinigameRequest, onFinish: (MinigameResult) -> Unit
     LaunchedEffect(health) {
         if (health <= 0 && !finished) closeRun()
     }
-    LaunchedEffect(lost) { if (lost > 0) SoundManager.playEnemyAttack() }
-    LaunchedEffect(saved) { if (saved > 0) SoundManager.playMagicSpell() }
+    // La racha se lleva por marcador, no por toque: en Vigilia una chispa
+    // apagada cuenta como fallo aunque el jugador no llegase a tocarla.
+    LaunchedEffect(lost) {
+        if (lost > 0) {
+            combo.miss()
+            gameFeel.miss()
+            SoundManager.playEnemyAttack()
+        }
+    }
+    LaunchedEffect(saved) {
+        if (saved > 0) {
+            val before = combo.multiplier
+            combo.hit()
+            gameFeel.hit(combo.streak)
+            if (combo.multiplier > before) gameFeel.step()
+            SoundManager.playMagicSpell()
+        }
+    }
 
     MinigameShell(
         title = "VIGILIA DEL CAMPAMENTO",
         subtitle = "Amenazas repelidas $saved  ·  ${MinigameClockText(secondsLeft)}",
         tone = EldoriaTone.Ember,
         scoreLabel = "$health %",
+        combo = combo,
         onQuit = {
             if (!finished) {
                 finished = true

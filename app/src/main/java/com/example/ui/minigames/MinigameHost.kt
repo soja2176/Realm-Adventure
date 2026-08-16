@@ -132,6 +132,12 @@ fun MinigameShell(
     scoreLabel: String,
     onQuit: () -> Unit,
     modifier: Modifier = Modifier,
+    /**
+     * Racha en curso. Va en la cabecera compartida y no en cada juego: los seis
+     * la usan igual, y puesta aqui aparece siempre en el mismo sitio — que es
+     * media utilidad de un medidor.
+     */
+    combo: ComboState? = null,
     content: @Composable BoxScope.() -> Unit
 ) {
     val accent = Eldoria.toneColor(tone)
@@ -182,6 +188,15 @@ fun MinigameShell(
                     value = scoreLabel,
                     icon = Icons.Filled.Star,
                     accent = accent
+                )
+            }
+
+            if (combo != null) {
+                Spacer(Modifier.height(Eldoria.S8))
+                MinigameComboMeter(
+                    combo = combo,
+                    accent = accent,
+                    modifier = Modifier.align(Alignment.End)
                 )
             }
 

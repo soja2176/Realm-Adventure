@@ -67,6 +67,7 @@ import com.example.data.content.EldoriaPets
 import com.example.data.model.PetRecord
 import com.example.data.model.PetSpecies
 import com.example.data.model.PetTrait
+import com.example.ui.art.EldoriaArt
 import com.example.ui.design.Eldoria
 import com.example.ui.design.EldoriaBanner
 import com.example.ui.design.EldoriaBarTone
@@ -145,9 +146,14 @@ fun PetSanctuaryScreen(viewModel: GameViewModel) {
     val petArmor = remember(armorJson) { GameJsonParser.fromJson<Item>(armorJson) }
     val petAccessory = remember(accessoryJson) { GameJsonParser.fromJson<Item>(accessoryJson) }
 
-    val bannerArt = remember(focus?.imageResName) {
-        val art = focus?.imageResName ?: ""
-        if (art.isNotBlank()) getItemImageRes(art, "PET") else null
+    // El retrato sigue la ETAPA, no solo la especie. Las tres evoluciones ya
+    // existian en los datos (Fenix Cosmico -> Fenix de Nova -> Fenix del
+    // Amanecer Eterno) pero las tres ensenaban el mismo dibujo, asi que
+    // evolucionar no se veia. Se cae al arte antiguo si falta la lamina.
+    val bannerArt = remember(focus?.speciesId, focus?.stage, focus?.imageResName) {
+        val stage = (focus?.stage ?: 1).coerceIn(1, 3)
+        EldoriaArt.of("${focus?.speciesId.orEmpty()}_s$stage")
+            ?: focus?.imageResName?.takeIf { it.isNotBlank() }?.let { getItemImageRes(it, "PET") }
     }
 
     EldoriaScreen(
@@ -393,6 +399,7 @@ fun PetSanctuaryScreen(viewModel: GameViewModel) {
         ) {
             if (candidates.isEmpty()) {
                 EldoriaEmptyState(
+                    artKey = "empty_pets",
                     title = "Nada que ceder",
                     message = "No tienes objetos de esta categoría en la mochila. " +
                         "Sácalos de un calabozo o cómpralos en la tienda.",
@@ -678,6 +685,7 @@ private fun PetCompanionTab(
         Spacer(Modifier.height(Eldoria.S8))
         if (foods.isEmpty()) {
             EldoriaEmptyState(
+                artKey = "empty_pets",
                 title = "El comedero está vacío",
                 message = "No te queda ninguna ración de mascota en la mochila. " +
                     "Compra raciones bestiales, místicas, de dragón o celestiales en la tienda.",
@@ -1281,6 +1289,7 @@ private fun PetAltarTab(
 
             if (candidates.isEmpty()) {
                 EldoriaEmptyState(
+                    artKey = "empty_pets",
                     title = "No hay a quién fundir",
                     message = "Necesitas al menos dos bestias en el establo. " +
                         "Doma más criaturas en expediciones y contratos de doma.",
@@ -1381,6 +1390,7 @@ private fun PetEmptySanctuary(onExplore: () -> Unit) {
         verticalArrangement = Arrangement.Center
     ) {
         EldoriaEmptyState(
+            artKey = "empty_pets",
             title = "El santuario está en silencio",
             message = "Todavía no has vinculado ninguna bestia. Las criaturas se doman en las expediciones, " +
                 "en los contratos de doma y en los altares de los calabozos profundos.",

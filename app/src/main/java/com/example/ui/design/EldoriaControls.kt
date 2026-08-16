@@ -52,6 +52,9 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -1187,5 +1190,58 @@ fun EldoriaItemCard(
             Spacer(Modifier.width(Eldoria.S8))
             trailing()
         }
+    }
+}
+
+/**
+ * Retrato que se REVELA en vez de recortarse.
+ *
+ * El arte del bestiario es apaisado y los marcos de combate son casi cuadrados,
+ * así que `ContentScale.Crop` se comía los laterales: la criatura aparecía
+ * cortada por la mitad y no se veía nunca entera. Recuadrarla con barras negras
+ * habría sido peor.
+ *
+ * La solución es temporal en vez de espacial: se dibuja con `Fit` — a escala 1
+ * la imagen entra COMPLETA — y se parte de un zoom por encima de esa escala,
+ * que llena el marco. La animación va del acercamiento al encuadre completo y
+ * vuelve, así que el ojo recibe primero el impacto de la criatura a sangre y un
+ * momento después la lámina entera. Nunca se pierde nada, sólo se retrasa.
+ *
+ * [maxZoom] 1.55 es el factor que llena un marco cuadrado con arte 16:9; subirlo
+ * recorta más al principio, bajarlo deja ver bordes del contenedor.
+ */
+@Composable
+fun EldoriaRevealImage(
+    painter: Painter,
+    contentDescription: String?,
+    modifier: Modifier = Modifier,
+    maxZoom: Float = 1.55f,
+    periodMillis: Int = 6500,
+    animated: Boolean = true
+) {
+    val transition = rememberInfiniteTransition(label = "reveal")
+    val zoom by transition.animateFloat(
+        initialValue = maxZoom,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(periodMillis, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "revealZoom"
+    )
+    val scale = if (animated) zoom else 1f
+
+    Box(modifier = modifier.clipToBounds(), contentAlignment = Alignment.Center) {
+        Image(
+            painter = painter,
+            contentDescription = contentDescription,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                },
+            contentScale = ContentScale.Fit
+        )
     }
 }

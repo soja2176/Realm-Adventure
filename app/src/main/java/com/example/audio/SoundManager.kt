@@ -55,6 +55,36 @@ object SoundManager {
         }
     }
 
+    /**
+     * Repique de racha: el tono SUBE con la cadena de aciertos.
+     *
+     * Los minijuegos sonaban igual en el acierto uno que en el diez, asi que la
+     * racha no se oia — y una racha que no se oye no se siente. Cada eslabon
+     * sube un semitono sobre una pentatonica, que es lo que hace que encadenar
+     * suene a que algo va bien y no a un pitido repetido.
+     */
+    fun playComboTick(streak: Int) {
+        val step = (streak - 1).coerceIn(0, 11)
+        val base = 523.25 // do5
+        val freq = base * Math.pow(2.0, step / 12.0)
+        playPcm(sampleRate = 22050, durationMs = 90) { i, total ->
+            val t = i / 22050.0
+            val decay = (1.0 - i.toDouble() / total).toFloat()
+            (sin(2 * PI * freq * t).toFloat() * 0.35f +
+                sin(2 * PI * freq * 2 * t).toFloat() * 0.12f) * decay * decay
+        }
+    }
+
+    /** La racha se rompe: caida de tono, corta y seca. */
+    fun playComboBreak() {
+        playPcm(sampleRate = 22050, durationMs = 220) { i, total ->
+            val p = i.toDouble() / total
+            val freq = 420.0 * (1.0 - p * 0.55)
+            val decay = (1.0 - p).toFloat()
+            sin(2 * PI * freq * (i / 22050.0)).toFloat() * decay * 0.4f
+        }
+    }
+
     // 1. Sword Physical Attack Slash
     fun playSwordSlash() {
         playPcm(sampleRate = 22050, durationMs = 200) { i, total ->

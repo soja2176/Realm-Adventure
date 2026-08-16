@@ -59,6 +59,7 @@ import com.example.data.GameScreen
 import com.example.data.GameViewModel
 import com.example.data.content.EldoriaBestiary
 import com.example.data.model.BestiaryEntry
+import com.example.ui.design.EldoriaRevealImage
 import com.example.ui.design.Eldoria
 import com.example.ui.design.EldoriaBanner
 import com.example.ui.design.EldoriaBeastSigil
@@ -329,6 +330,7 @@ fun BestiaryScreen(viewModel: GameViewModel) {
             if (filtered.isEmpty()) {
                 item(span = { GridItemSpan(maxLineSpan) }) {
                     EldoriaEmptyState(
+                        artKey = "empty_bestiary",
                         title = "Ninguna ficha coincide",
                         message = "Ese cruce de reino y arquetipo aún no tiene entradas en tu códice. " +
                             "Afloja los filtros o sal a cazar: el pergamino se escribe con sangre ajena.",
@@ -394,10 +396,11 @@ private fun BestiaryTile(entry: BestiaryEntry, onClick: () -> Unit) {
         glowPulse = false
     ) {
         if (entry.discovered) {
-            Image(
+            // La ficha en cuadricula es pequena: sin animacion, encaja entera.
+            EldoriaRevealImage(
                 painter = painterResource(id = getEnemyArtRes(species.artKey, species.name, false)),
                 contentDescription = null,
-                contentScale = ContentScale.Crop,
+                animated = false,
                 modifier = Modifier.matchParentSize()
             )
             Box(
@@ -554,10 +557,10 @@ private fun BestiaryDetail(entry: BestiaryEntry) {
                 rivets = true,
                 glowPulse = true
             ) {
-                Image(
+                // Ficha grande: aqui si se revela con zoom inverso.
+                EldoriaRevealImage(
                     painter = painterResource(id = getEnemyArtRes(species.artKey, species.name, false)),
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize()
                 )
                 Box(

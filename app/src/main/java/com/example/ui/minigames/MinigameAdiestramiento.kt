@@ -116,6 +116,9 @@ private class TrainRun(seedValue: Int) {
 @Composable
 fun MinigameAdiestramiento(request: MinigameRequest, onFinish: (MinigameResult) -> Unit) {
     val difficulty = request.difficulty.coerceIn(1, 5)
+    val combo = rememberComboState()
+    val gameFeel = rememberMinigameFeedback()
+
     var started by remember { mutableStateOf(false) }
 
     if (!started) {
@@ -266,8 +269,22 @@ fun MinigameAdiestramiento(request: MinigameRequest, onFinish: (MinigameResult) 
     }
 
     // Sonidos fuera del bucle de dibujo, disparados por el marcador.
-    LaunchedEffect(cleared) { if (cleared > 0) SoundManager.playButtonClick() }
-    LaunchedEffect(faults) { if (faults > 0) SoundManager.playEnemyAttack() }
+    LaunchedEffect(cleared) {
+        if (cleared > 0) {
+            val before = combo.multiplier
+            combo.hit()
+            gameFeel.hit(combo.streak)
+            if (combo.multiplier > before) gameFeel.step()
+            SoundManager.playButtonClick()
+        }
+    }
+    LaunchedEffect(faults) {
+        if (faults > 0) {
+            combo.miss()
+            gameFeel.miss()
+            SoundManager.playEnemyAttack()
+        }
+    }
 
     val act: (Int) -> Unit = act@{ code ->
         if (finished) return@act
@@ -291,6 +308,7 @@ fun MinigameAdiestramiento(request: MinigameRequest, onFinish: (MinigameResult) 
         subtitle = "Racha $streak  ·  ${MinigameClockText(secondsLeft)}",
         tone = EldoriaTone.Vitae,
         scoreLabel = "$cleared/${cleared + faults}",
+        combo = combo,
         onQuit = {
             if (!finished) {
                 finished = true

@@ -70,6 +70,9 @@ private const val LOCK_TOTAL_MS = 25_000
 @Composable
 fun MinigameGanzua(request: MinigameRequest, onFinish: (MinigameResult) -> Unit) {
     val difficulty = request.difficulty.coerceIn(1, 5)
+    val combo = rememberComboState()
+    val gameFeel = rememberMinigameFeedback()
+
     var started by remember { mutableStateOf(false) }
 
     if (!started) {
@@ -178,11 +181,17 @@ fun MinigameGanzua(request: MinigameRequest, onFinish: (MinigameResult) -> Unit)
             if (diff <= tol * 0.38f) clean += 1
             feedback = 1
             burst += 1
+            val before = combo.multiplier
+            combo.hit()
+            gameFeel.hit(combo.streak)
+            if (combo.multiplier > before) gameFeel.step()
             SoundManager.playHealPotion()
         } else {
             picks -= 1
             feedback = -1
             shakeTrigger += 1
+            combo.miss()
+            gameFeel.miss()
             SoundManager.playEnemyAttack()
         }
     }
@@ -192,6 +201,7 @@ fun MinigameGanzua(request: MinigameRequest, onFinish: (MinigameResult) -> Unit)
         subtitle = "Pasador ${(solved + 1).coerceAtMost(pinCount)}/$pinCount  ·  ${MinigameClockText(secondsLeft)}",
         tone = EldoriaTone.Silver,
         scoreLabel = "$solved/$pinCount",
+        combo = combo,
         onQuit = {
             if (!finished) {
                 finished = true

@@ -62,6 +62,7 @@ import com.example.data.Item
 import com.example.data.Skill
 import com.example.data.content.EldoriaBestiary
 import com.example.data.content.EldoriaExpeditions
+import com.example.ui.design.EldoriaRevealImage
 import com.example.ui.design.Eldoria
 import com.example.ui.design.EldoriaBarTone
 import com.example.ui.design.EldoriaButton
@@ -271,10 +272,12 @@ fun ExpeditionCombatScreen(viewModel: GameViewModel) {
                         rivets = true,
                         glowPulse = combat.reactionWindow || enemy.isBoss
                     ) {
-                        Image(
-                            painter = painterResource(id = getEnemyArtRes(enemy.artKey, enemy.name, enemy.isBoss)),
+                        // Zoom inverso: el marco no recorta a la criatura.
+                        EldoriaRevealImage(
+                            painter = painterResource(
+                                id = getEnemyArtRes(enemy.artKey, enemy.name, enemy.isBoss, enemy.rarity)
+                            ),
                             contentDescription = null,
-                            contentScale = ContentScale.Crop,
                             modifier = Modifier.fillMaxSize()
                         )
                         Box(

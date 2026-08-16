@@ -83,6 +83,7 @@ import com.example.ui.screens.WorldAtlasSheet
 import com.example.ui.minigames.MinigameHostScreen
 // ─── Sistema de diseño Eldoria (com.example.ui.design) ───
 // Imports explícitos: este fichero define símbolos propios y un comodín colisionaría.
+import com.example.ui.art.EldoriaArt
 import com.example.ui.design.Eldoria
 import com.example.ui.design.EldoriaBanner
 import com.example.ui.design.EldoriaBarTone
@@ -104,7 +105,13 @@ import com.example.ui.design.EldoriaDamageFloater
 import com.example.ui.design.EldoriaDivider
 import com.example.ui.design.EldoriaEdge
 import com.example.ui.design.EldoriaEmberField
+import com.example.data.content.EldoriaPotions
+import com.example.ui.combat.PotionStack
+import com.example.ui.combat.CombatPotionDrawer
+import com.example.ui.combat.CombatBuffChips
+import com.example.ui.combat.basicAttackFor
 import com.example.ui.design.EldoriaEmptyState
+import com.example.ui.design.EldoriaRevealImage
 import com.example.ui.design.EldoriaFogLayer
 import com.example.ui.design.EldoriaFrame
 import com.example.ui.design.EldoriaImpactBurst
@@ -1381,6 +1388,7 @@ fun SpecialMerchantDialog(merchantState: SpecialMerchantState, viewModel: GameVi
 
             if (merchantState.items.isEmpty()) {
                 EldoriaEmptyState(
+                    artKey = "empty_shop",
                     title = "Alforjas vacías",
                     message = "Ya vendió todo lo que traía. Volverá a cruzarse en tu camino más adelante.",
                     icon = Icons.Default.Storefront,
@@ -2251,6 +2259,7 @@ fun ShopScreen(viewModel: GameViewModel) {
     var showMassSellConfirmation by remember { mutableStateOf(false) }
     var buyingItemType by remember { mutableStateOf<String?>(null) }
     var quantityText by remember { mutableStateOf("1") }
+    var showApothecary by remember { mutableStateOf(false) }
 
     val filteredInventory = remember(rawInventory, searchQuery, selectedRarityFilter, selectedTypeFilter, selectedLevelFilter) {
         filterInventory(rawInventory, selectedRarityFilter, selectedTypeFilter, selectedLevelFilter, searchQuery)
@@ -2361,6 +2370,51 @@ fun ShopScreen(viewModel: GameViewModel) {
                 }
             }
 
+            // La botica: un frasco por fila, con lo que hace y lo que cuesta.
+            // Antes había un solo botón "POCIÓN · 40" porque sólo había una.
+            if (showApothecary) {
+                item {
+                    EldoriaPanel(
+                        modifier = Modifier.fillMaxWidth(),
+                        edge = EldoriaEdge.Vitae,
+                        filigree = true
+                    ) {
+                        Text(
+                            text = "BOTICA DEL MERCADER",
+                            style = EldoriaType.heading,
+                            color = Eldoria.TextGold
+                        )
+                        Spacer(Modifier.height(Eldoria.S8))
+                        EldoriaPotions.ALL.forEach { potion ->
+                            val locked = p.charLevel < potion.unlockLevel
+                            EldoriaButton(
+                                text = if (locked) {
+                                    "${potion.name} · nivel ${potion.unlockLevel}"
+                                } else {
+                                    "${potion.name} · ${potion.price}"
+                                },
+                                onClick = {
+                                    quantityText = "1"
+                                    buyingItemType = "POTION:" + potion.id
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = !locked,
+                                tone = if (locked) EldoriaTone.Iron else EldoriaTone.Vitae,
+                                size = EldoriaButtonSize.Small,
+                                fullWidth = true,
+                                testTag = "buy_" + potion.id
+                            )
+                            Text(
+                                text = potion.description,
+                                style = EldoriaType.lore,
+                                color = Eldoria.TextLow
+                            )
+                            Spacer(Modifier.height(Eldoria.S6))
+                        }
+                    }
+                }
+            }
+
             // Miniscule Potion & Refresh Row
             item {
                 Row(
@@ -2368,11 +2422,8 @@ fun ShopScreen(viewModel: GameViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(Eldoria.S8)
                 ) {
                     EldoriaButton(
-                        text = "POCIÓN · 40",
-                        onClick = {
-                            quantityText = "1"
-                            buyingItemType = "POTION"
-                        },
+                        text = "BOTICA",
+                        onClick = { showApothecary = !showApothecary },
                         modifier = Modifier.weight(1f),
                         tone = EldoriaTone.Blood,
                         size = EldoriaButtonSize.Small,
@@ -2702,7 +2753,15 @@ fun ShopScreen(viewModel: GameViewModel) {
         )
 
         val spec = when (itemType) {
-            "POTION" -> ShopItemSpec("Poción Rejuvenecedora", 40, "Restaura instantáneamente el 50% de HP y Maná en combate.", true)
+            // Cualquier id del catálogo: "POTION:pot_regen" y demás. La rama
+            // "POTION" pelada se mantiene por las pantallas que aún no ofrecen
+            // el catálogo entero.
+            "POTION" -> EldoriaPotions.spec("pot_menor")!!.let {
+                ShopItemSpec(it.name, it.price, it.description, true)
+            }
+            in POTION_TYPES -> EldoriaPotions.spec(itemType.removePrefix("POTION:"))!!.let {
+                ShopItemSpec(it.name, it.price, it.description, true)
+            }
             "BESTIAL" -> ShopItemSpec("Ración de Carne Bestial", 150, "Alimento. +25 Saciedad, +100 EXP para tu mascota.", false)
             "MISTICA" -> ShopItemSpec("Galleta Mística de Mascota", 500, "Alimento. +50 Saciedad, +400 EXP para tu mascota.", false)
             "DRAGON" -> ShopItemSpec("Manjar Imperial de Dragón", 2000, "Alimento. +80 Saciedad, +1,800 EXP para tu mascota.", false)
@@ -2874,7 +2933,11 @@ fun ShopScreen(viewModel: GameViewModel) {
                             text = "COMPRAR ×$currentQty",
                             onClick = {
                                 if (spec.isPotion) {
-                                    viewModel.buyPotion(currentQty)
+                                    viewModel.buyPotion(
+                                        currentQty,
+                                        if (itemType.startsWith("POTION:")) itemType.removePrefix("POTION:")
+                                        else "pot_menor"
+                                    )
                                 } else {
                                     viewModel.buyPetFood(itemType, currentQty)
                                 }
@@ -2895,6 +2958,10 @@ fun ShopScreen(viewModel: GameViewModel) {
 
 
 
+
+/** Tipos de item de la tienda que son frascos del catálogo. */
+private val POTION_TYPES: Set<String> =
+    EldoriaPotions.ALL.map { "POTION:" + it.id }.toSet()
 
 enum class SkillGlassTheme(
     val glowColor: Color,
@@ -3634,11 +3701,15 @@ fun CombatScreen(viewModel: GameViewModel) {
                                 rivets = true,
                                 glowPulse = !combatState.playerTurn
                             ) {
-                                Image(
-                                    painter = painterResource(id = getEnemyArtRes(enemy.artKey, enemy.name, enemy.isBoss)),
+                                // Se revela con zoom inverso en vez de recortarse:
+                                // el marco es cuadrado y el arte apaisado, así que
+                                // `Crop` cortaba a la criatura por los lados.
+                                EldoriaRevealImage(
+                                    painter = painterResource(
+                                        id = getEnemyArtRes(enemy.artKey, enemy.name, enemy.isBoss, enemy.rarity)
+                                    ),
                                     contentDescription = "Enemy Portrait",
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentScale = ContentScale.Crop
+                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
 
@@ -3848,6 +3919,45 @@ fun CombatScreen(viewModel: GameViewModel) {
                 val potionCount = inventory.count { it.type == "POTION" }
                 val classSkills = GameJsonParser.listFromJson<Skill>(p.skillsJson)
 
+                // El inventario guarda un Item POR UNIDAD, así que hay que
+                // agrupar para enseñar "Poción Menor ×7" y no siete filas.
+                val potionStacks = remember(p.inventoryJson) {
+                    inventory.filter { it.type == "POTION" }
+                        .map { EldoriaPotions.fromItem(it.id, it.name) }
+                        .groupingBy { it }
+                        .eachCount()
+                        .map { (spec, count) -> PotionStack(spec, count) }
+                        .sortedBy { it.spec.unlockLevel }
+                }
+                var potionDrawerOpen by remember { mutableStateOf(false) }
+                val heroAction = basicAttackFor(p.charClass)
+
+                // Efectos activos: sin esto un buff de cuatro turnos es
+                // invisible en cuanto pasa la línea del registro.
+                CombatBuffChips(
+                    regenTurns = combatState.regenTurns,
+                    damageTurns = combatState.damageBuffTurns,
+                    damagePotency = combatState.damageBuffPotency,
+                    evasionTurns = combatState.evasionTurns,
+                    evasionPotency = combatState.evasionPotency,
+                    wardTurns = combatState.wardTurns,
+                    wardPotency = combatState.wardPotency,
+                    modifier = Modifier.padding(bottom = 6.dp)
+                )
+
+                if (potionDrawerOpen) {
+                    CombatPotionDrawer(
+                        stacks = potionStacks,
+                        enabled = combatState.playerTurn,
+                        onPick = { spec ->
+                            potionDrawerOpen = false
+                            viewModel.usePotionCombat(spec.id)
+                        },
+                        onDismiss = { potionDrawerOpen = false },
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    )
+                }
+
                 // Stained Glass Frame HUD Panel Container
                 Box(
                     modifier = Modifier
@@ -3881,12 +3991,19 @@ fun CombatScreen(viewModel: GameViewModel) {
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         // 1. Basic Attack Slot (Crimson Stained Glass)
+                        // El golpe básico lleva el nombre y el icono de TU clase:
+                        // un Mago no "ataca físicamente" con un puño dibujado.
                         StainedGlassSkillSlot(
-                            title = "Ataque Físico",
-                            badgeLabel = "Ataque",
+                            title = heroAction.label,
+                            badgeLabel = heroAction.badge,
                             costText = "0",
-                            icon = Icons.Default.SportsMartialArts,
-                            glassTheme = SkillGlassTheme.CRIMSON,
+                            icon = heroAction.icon,
+                            glassTheme = when (p.charClass) {
+                                "Mago" -> SkillGlassTheme.PURPLE
+                                "Pícaro" -> SkillGlassTheme.TURQUOISE
+                                "Clérigo" -> SkillGlassTheme.AMBER
+                                else -> SkillGlassTheme.CRIMSON
+                            },
                             enabled = combatState.playerTurn,
                             testTag = "combat_attack_button",
                             onClick = { viewModel.executeBasicAttack() }
@@ -3936,15 +4053,17 @@ fun CombatScreen(viewModel: GameViewModel) {
                         }
 
                         // 3. Potion Slot (Emerald Green Stained Glass)
+                        // Abre el zurrón en vez de beber a ciegas: con seis
+                        // frascos, ELEGIR cuál bebes es la jugada.
                         StainedGlassSkillSlot(
-                            title = "Usar Poción",
-                            badgeLabel = "Poción",
+                            title = "Zurrón",
+                            badgeLabel = "${potionStacks.size} tipos",
                             costText = "x$potionCount",
                             icon = Icons.Default.LocalPharmacy,
                             glassTheme = SkillGlassTheme.EMERALD,
                             enabled = combatState.playerTurn && potionCount > 0,
                             testTag = "combat_potion_button",
-                            onClick = { viewModel.usePotionCombat() }
+                            onClick = { potionDrawerOpen = !potionDrawerOpen }
                         )
 
                         // 4. Flee Slot (Dark Violet Stained Glass)
@@ -6387,109 +6506,26 @@ data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val 
  * o caía en el ogro genérico. Sólo se recurre a adivinar si no hay artKey —
  * los jefes de reino, que no salen del bestiario.
  */
-fun getEnemyArtRes(artKey: String, name: String, isBoss: Boolean): Int = when (artKey) {
-    // ─── Bestiario: un retrato propio por especie (generado con SDXL local) ───
-    "bestiary_eldoria_lobo_cenizo" -> R.drawable.bestiary_eldoria_lobo_cenizo
-    "bestiary_eldoria_duende_zarcero" -> R.drawable.bestiary_eldoria_duende_zarcero
-    "bestiary_eldoria_espantapajaros_runico" -> R.drawable.bestiary_eldoria_espantapajaros_runico
-    "bestiary_eldoria_musgoso_devorador" -> R.drawable.bestiary_eldoria_musgoso_devorador
-    "bestiary_eldoria_avispa_reina_esmeralda" -> R.drawable.bestiary_eldoria_avispa_reina_esmeralda
-    "bestiary_eldoria_sabueso_del_alba" -> R.drawable.bestiary_eldoria_sabueso_del_alba
-    "bestiary_eldoria_druida_renegado" -> R.drawable.bestiary_eldoria_druida_renegado
-    "bestiary_eldoria_jabali_coronado" -> R.drawable.bestiary_eldoria_jabali_coronado
-    "bestiary_eldoria_ciervo_espectral" -> R.drawable.bestiary_eldoria_ciervo_espectral
-    "bestiary_eldoria_raiz_estranguladora" -> R.drawable.bestiary_eldoria_raiz_estranguladora
-    "bestiary_eldoria_cuervo_presagio" -> R.drawable.bestiary_eldoria_cuervo_presagio
-    "bestiary_eldoria_ermitano_podrido" -> R.drawable.bestiary_eldoria_ermitano_podrido
-    "bestiary_drakenhold_salamandra_escoria" -> R.drawable.bestiary_drakenhold_salamandra_escoria
-    "bestiary_drakenhold_herrero_maldito" -> R.drawable.bestiary_drakenhold_herrero_maldito
-    "bestiary_drakenhold_golem_magma" -> R.drawable.bestiary_drakenhold_golem_magma
-    "bestiary_drakenhold_wyvern_ceniza" -> R.drawable.bestiary_drakenhold_wyvern_ceniza
-    "bestiary_drakenhold_cultista_llama" -> R.drawable.bestiary_drakenhold_cultista_llama
-    "bestiary_drakenhold_perro_obsidiana" -> R.drawable.bestiary_drakenhold_perro_obsidiana
-    "bestiary_drakenhold_vulcanoide_menor" -> R.drawable.bestiary_drakenhold_vulcanoide_menor
-    "bestiary_drakenhold_portador_brasas" -> R.drawable.bestiary_drakenhold_portador_brasas
-    "bestiary_drakenhold_escupefuego_goblin" -> R.drawable.bestiary_drakenhold_escupefuego_goblin
-    "bestiary_drakenhold_titan_fundicion" -> R.drawable.bestiary_drakenhold_titan_fundicion
-    "bestiary_drakenhold_murcielago_igneo" -> R.drawable.bestiary_drakenhold_murcielago_igneo
-    "bestiary_drakenhold_chaman_azufre" -> R.drawable.bestiary_drakenhold_chaman_azufre
-    "bestiary_frostgard_aullador_escarcha" -> R.drawable.bestiary_frostgard_aullador_escarcha
-    "bestiary_frostgard_yeti_cristalino" -> R.drawable.bestiary_frostgard_yeti_cristalino
-    "bestiary_frostgard_doncella_ventisquero" -> R.drawable.bestiary_frostgard_doncella_ventisquero
-    "bestiary_frostgard_mamut_sepulcral" -> R.drawable.bestiary_frostgard_mamut_sepulcral
-    "bestiary_frostgard_vidente_congelada" -> R.drawable.bestiary_frostgard_vidente_congelada
-    "bestiary_frostgard_alma_nevisca" -> R.drawable.bestiary_frostgard_alma_nevisca
-    "bestiary_frostgard_lanzahielo_enano" -> R.drawable.bestiary_frostgard_lanzahielo_enano
-    "bestiary_frostgard_oso_glaciar_antiguo" -> R.drawable.bestiary_frostgard_oso_glaciar_antiguo
-    "bestiary_frostgard_serpiente_aguanieve" -> R.drawable.bestiary_frostgard_serpiente_aguanieve
-    "bestiary_frostgard_estatua_sal" -> R.drawable.bestiary_frostgard_estatua_sal
-    "bestiary_frostgard_corneja_hielo" -> R.drawable.bestiary_frostgard_corneja_hielo
-    "bestiary_frostgard_bruja_solsticio" -> R.drawable.bestiary_frostgard_bruja_solsticio
-    "bestiary_aethelgard_custodio_runas" -> R.drawable.bestiary_aethelgard_custodio_runas
-    "bestiary_aethelgard_espectro_conclave" -> R.drawable.bestiary_aethelgard_espectro_conclave
-    "bestiary_aethelgard_ojo_flotante" -> R.drawable.bestiary_aethelgard_ojo_flotante
-    "bestiary_aethelgard_automata_marfileno" -> R.drawable.bestiary_aethelgard_automata_marfileno
-    "bestiary_aethelgard_sombra_bibliotecario" -> R.drawable.bestiary_aethelgard_sombra_bibliotecario
-    "bestiary_aethelgard_quimera_sellada" -> R.drawable.bestiary_aethelgard_quimera_sellada
-    "bestiary_aethelgard_coro_disonante" -> R.drawable.bestiary_aethelgard_coro_disonante
-    "bestiary_aethelgard_tejedor_vacio" -> R.drawable.bestiary_aethelgard_tejedor_vacio
-    "bestiary_aethelgard_guardian_obelisco" -> R.drawable.bestiary_aethelgard_guardian_obelisco
-    "bestiary_aethelgard_alquimista_fracturado" -> R.drawable.bestiary_aethelgard_alquimista_fracturado
-    "bestiary_aethelgard_danzarina_eter" -> R.drawable.bestiary_aethelgard_danzarina_eter
-    "bestiary_aethelgard_sanguijuela_mana" -> R.drawable.bestiary_aethelgard_sanguijuela_mana
-    "bestiary_solaria_escarabajo_solar" -> R.drawable.bestiary_solaria_escarabajo_solar
-    "bestiary_solaria_momia_dorada" -> R.drawable.bestiary_solaria_momia_dorada
-    "bestiary_solaria_leon_alado_bronce" -> R.drawable.bestiary_solaria_leon_alado_bronce
-    "bestiary_solaria_sacerdotisa_rashen" -> R.drawable.bestiary_solaria_sacerdotisa_rashen
-    "bestiary_solaria_escorpion_ambar" -> R.drawable.bestiary_solaria_escorpion_ambar
-    "bestiary_solaria_espejismo_viviente" -> R.drawable.bestiary_solaria_espejismo_viviente
-    "bestiary_solaria_coloso_arenisca" -> R.drawable.bestiary_solaria_coloso_arenisca
-    "bestiary_solaria_halcon_fuego_blanco" -> R.drawable.bestiary_solaria_halcon_fuego_blanco
-    "bestiary_solaria_sepulturero_dunas" -> R.drawable.bestiary_solaria_sepulturero_dunas
-    "bestiary_solaria_serafin_caido" -> R.drawable.bestiary_solaria_serafin_caido
-    "bestiary_solaria_djinn_encadenado" -> R.drawable.bestiary_solaria_djinn_encadenado
-    "bestiary_solaria_devorador_soles" -> R.drawable.bestiary_solaria_devorador_soles
-    "bestiary_aetheria_heraldo_vacio" -> R.drawable.bestiary_aetheria_heraldo_vacio
-    "bestiary_aetheria_fractal_viviente" -> R.drawable.bestiary_aetheria_fractal_viviente
-    "bestiary_aetheria_pastor_estrellas" -> R.drawable.bestiary_aetheria_pastor_estrellas
-    "bestiary_aetheria_larva_nebular" -> R.drawable.bestiary_aetheria_larva_nebular
-    "bestiary_aetheria_testigo_sin_rostro" -> R.drawable.bestiary_aetheria_testigo_sin_rostro
-    "bestiary_aetheria_ancla_gravitatoria" -> R.drawable.bestiary_aetheria_ancla_gravitatoria
-    "bestiary_aetheria_eco_universo_muerto" -> R.drawable.bestiary_aetheria_eco_universo_muerto
-    "bestiary_aetheria_tejedora_constelaciones" -> R.drawable.bestiary_aetheria_tejedora_constelaciones
-    "bestiary_aetheria_simetria_rota" -> R.drawable.bestiary_aetheria_simetria_rota
-    "bestiary_aetheria_devorador_entropia" -> R.drawable.bestiary_aetheria_devorador_entropia
-    "bestiary_aetheria_peregrino_umbral" -> R.drawable.bestiary_aetheria_peregrino_umbral
-    "bestiary_aetheria_cero_absoluto" -> R.drawable.bestiary_aetheria_cero_absoluto
-    "enemy_anubis_1784850895657" -> R.drawable.enemy_anubis_1784850895657
-    "enemy_archangel_1784850912318" -> R.drawable.enemy_archangel_1784850912318
-    "enemy_automaton_1784850938702" -> R.drawable.enemy_automaton_1784850938702
-    "enemy_bandit_1784850826788" -> R.drawable.enemy_bandit_1784850826788
-    "enemy_basilisk_1784850958621" -> R.drawable.enemy_basilisk_1784850958621
-    "enemy_cultist_1784850844974" -> R.drawable.enemy_cultist_1784850844974
-    "enemy_demon_1784903246195" -> R.drawable.enemy_demon_1784903246195
-    "enemy_dragon_1784850948333" -> R.drawable.enemy_dragon_1784850948333
-    "enemy_elemental_1784850835033" -> R.drawable.enemy_elemental_1784850835033
-    "enemy_goblin_1784850794614" -> R.drawable.enemy_goblin_1784850794614
-    "enemy_kraken_1784903268006" -> R.drawable.enemy_kraken_1784903268006
-    "enemy_lich_1784850885522" -> R.drawable.enemy_lich_1784850885522
-    "enemy_minotaur_1784903256639" -> R.drawable.enemy_minotaur_1784903256639
-    "enemy_mummy_1784850903429" -> R.drawable.enemy_mummy_1784850903429
-    "enemy_naga_1784850928739" -> R.drawable.enemy_naga_1784850928739
-    "enemy_scorpion_1784850968611" -> R.drawable.enemy_scorpion_1784850968611
-    "enemy_spectre_1784850809472" -> R.drawable.enemy_spectre_1784850809472
-    "enemy_treant_1784850817186" -> R.drawable.enemy_treant_1784850817186
-    "enemy_witch_1784850877826" -> R.drawable.enemy_witch_1784850877826
-    "enemy_wolf_1784850801847" -> R.drawable.enemy_wolf_1784850801847
-    "enemy_yeti_1784850855217" -> R.drawable.enemy_yeti_1784850855217
-    "enemy_zombie_1784850868957" -> R.drawable.enemy_zombie_1784850868957
-    "img_boss_yggdrasil_machine_1784674150126" -> R.drawable.img_boss_yggdrasil_machine_1784674150126
-    "img_enemy_boss_1784386985144" -> R.drawable.img_enemy_boss_1784386985144
-    "img_enemy_mud_golem_1784386930907" -> R.drawable.img_enemy_mud_golem_1784386930907
-    "img_enemy_ogre_1784386944311" -> R.drawable.img_enemy_ogre_1784386944311
-    "img_enemy_spectre_1784386971041" -> R.drawable.img_enemy_spectre_1784386971041
-    "img_enemy_spider_1784386956688" -> R.drawable.img_enemy_spider_1784386956688
-    else -> getEnemyPortraitRes(name, isBoss)
+fun getEnemyArtRes(
+    artKey: String,
+    name: String,
+    isBoss: Boolean,
+    rarity: String = "NORMAL"
+): Int {
+    if (artKey.isNotBlank()) {
+        // Cada especie tiene una lamina por rango: un lobo comun y uno
+        // legendario no pueden ser la misma imagen con otro numero al lado.
+        val rank = when (rarity.uppercase()) {
+            "ELITE" -> "elite"
+            "CHAMPION" -> "champion"
+            "LEGENDARY", "UNIVERSAL" -> "legendary"
+            else -> "normal"
+        }
+        EldoriaArt.of(artKey + "_" + rank)?.let { return it }
+        // Sin variante de rango (jefes de reino, arte antiguo): la base sirve.
+        EldoriaArt.of(artKey)?.let { return it }
+    }
+    return getEnemyPortraitRes(name, isBoss)
 }
 
 fun getEnemyPortraitRes(name: String, isBoss: Boolean): Int {

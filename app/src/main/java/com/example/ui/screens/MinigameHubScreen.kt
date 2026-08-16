@@ -1,5 +1,10 @@
 package com.example.ui.screens
 
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.Image
+import com.example.ui.art.EldoriaArt
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -361,6 +366,10 @@ private fun TavernTableCard(
                     .size(width = 66.dp, height = 80.dp),
                 contentAlignment = Alignment.Center
             ) {
+                // Lamina de la mesa: el yunque de Grommash, el cerrojo, la
+                // hoguera. El escudo procedural sigue debajo como marco — y
+                // como respaldo entero si la lamina no estuviera.
+                val art = EldoriaArt.of("table_" + table.id.lowercase())
                 EldoriaCrest(
                     seed = table.crestSeed,
                     modifier = Modifier.fillMaxSize(),
@@ -368,6 +377,16 @@ private fun TavernTableCard(
                     secondary = Eldoria.IronDeep,
                     ornate = true
                 )
+                if (art != null) {
+                    Image(
+                        painter = painterResource(id = art),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .size(width = 52.dp, height = 62.dp)
+                            .clip(RoundedCornerShape(Eldoria.R8))
+                    )
+                }
             }
             Spacer(Modifier.width(Eldoria.S12))
             Column(modifier = Modifier.weight(1f)) {

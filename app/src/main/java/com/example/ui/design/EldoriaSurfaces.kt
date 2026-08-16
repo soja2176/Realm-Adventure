@@ -1,5 +1,7 @@
 package com.example.ui.design
 
+import androidx.compose.foundation.shape.CircleShape
+import com.example.ui.art.EldoriaArt
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -584,6 +586,13 @@ fun EldoriaEmptyState(
     message: String,
     icon: ImageVector,
     modifier: Modifier = Modifier,
+    /**
+     * Lámina para el hueco. El estado vacío era un círculo dibujado a mano con
+     * un icono de Material dentro — correcto pero mudo, y el único sitio del
+     * juego donde no había arte. Con [artKey] se resuelve una ilustración; sin
+     * él se mantiene el icono, que sigue siendo el respaldo si falta el recurso.
+     */
+    artKey: String? = "empty_generic",
     accent: Color = Eldoria.Gold,
     actionLabel: String? = null,
     onAction: (() -> Unit)? = null,
@@ -597,8 +606,9 @@ fun EldoriaEmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        val artRes = artKey?.let { EldoriaArt.of(it) }
         Box(
-            modifier = Modifier.size(84.dp),
+            modifier = Modifier.size(if (artRes != null) 132.dp else 84.dp),
             contentAlignment = Alignment.Center
         ) {
             Canvas(modifier = Modifier.matchParentSize()) {
@@ -622,12 +632,23 @@ fun EldoriaEmptyState(
                 drawPath(eldoriaDiamondPath(center.x, center.y - r * 0.74f, 3.5.dp.toPx()), accent.copy(alpha = 0.8f))
                 drawPath(eldoriaDiamondPath(center.x, center.y + r * 0.74f, 3.5.dp.toPx()), accent.copy(alpha = 0.8f))
             }
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = accent.copy(alpha = 0.85f),
-                modifier = Modifier.size(36.dp)
-            )
+            if (artRes != null) {
+                Image(
+                    painter = painterResource(id = artRes),
+                    contentDescription = null,
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .size(104.dp)
+                        .clip(CircleShape)
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = accent.copy(alpha = 0.85f),
+                    modifier = Modifier.size(36.dp)
+                )
+            }
         }
         Spacer(Modifier.height(Eldoria.S16))
         Text(

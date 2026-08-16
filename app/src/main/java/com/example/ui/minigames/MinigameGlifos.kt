@@ -69,6 +69,9 @@ private const val GLYPH_PHASE_BREAK = 2
 @Composable
 fun MinigameGlifos(request: MinigameRequest, onFinish: (MinigameResult) -> Unit) {
     val difficulty = request.difficulty.coerceIn(1, 5)
+    val combo = rememberComboState()
+    val gameFeel = rememberMinigameFeedback()
+
     var started by remember { mutableStateOf(false) }
 
     if (!started) {
@@ -190,6 +193,10 @@ fun MinigameGlifos(request: MinigameRequest, onFinish: (MinigameResult) -> Unit)
             flashGood = true
             correctTotal += 1
             inputIndex += 1
+            val before = combo.multiplier
+            combo.hit()
+            gameFeel.hit(combo.streak)
+            if (combo.multiplier > before) gameFeel.step()
             SoundManager.playButtonClick()
             if (inputIndex >= seq.size) {
                 cleanRounds += 1
@@ -203,6 +210,8 @@ fun MinigameGlifos(request: MinigameRequest, onFinish: (MinigameResult) -> Unit)
             shakeTrigger += 1
             phase = GLYPH_PHASE_BREAK
             breakToken += 1
+            combo.miss()
+            gameFeel.miss()
             SoundManager.playEnemyAttack()
         }
     }
@@ -225,6 +234,7 @@ fun MinigameGlifos(request: MinigameRequest, onFinish: (MinigameResult) -> Unit)
         subtitle = "Ronda ${(round + 1).coerceAtMost(GLYPH_ROUNDS)}/$GLYPH_ROUNDS  ·  ${MinigameClockText(secondsLeft)}",
         tone = EldoriaTone.Arcane,
         scoreLabel = "$correctTotal/$totalSymbols",
+        combo = combo,
         onQuit = {
             if (!finished) {
                 finished = true

@@ -76,6 +76,9 @@ private const val DIG_TRAP = 2
 @Composable
 fun MinigameExcavacion(request: MinigameRequest, onFinish: (MinigameResult) -> Unit) {
     val difficulty = request.difficulty.coerceIn(1, 5)
+    val combo = rememberComboState()
+    val gameFeel = rememberMinigameFeedback()
+
     var started by remember { mutableStateOf(false) }
 
     if (!started) {
@@ -159,6 +162,10 @@ fun MinigameExcavacion(request: MinigameRequest, onFinish: (MinigameResult) -> U
                 picks -= 1
                 lastEvent = 1
                 burst += 1
+                val before = combo.multiplier
+                combo.hit()
+                gameFeel.hit(combo.streak)
+                if (combo.multiplier > before) gameFeel.step()
                 SoundManager.playCriticalHit()
             }
             DIG_TRAP -> {
@@ -166,6 +173,8 @@ fun MinigameExcavacion(request: MinigameRequest, onFinish: (MinigameResult) -> U
                 picks = (picks - 3).coerceAtLeast(0)
                 lastEvent = -1
                 shakeTrigger += 1
+                combo.miss()
+                gameFeel.miss()
                 SoundManager.playEnemyAttack()
             }
             else -> {
@@ -181,6 +190,7 @@ fun MinigameExcavacion(request: MinigameRequest, onFinish: (MinigameResult) -> U
         subtitle = "Vetas $found/$totalVeins  ·  ${MinigameClockText(secondsLeft)}",
         tone = EldoriaTone.Iron,
         scoreLabel = "$picks ⛏",
+        combo = combo,
         onQuit = {
             if (!finished) {
                 finished = true

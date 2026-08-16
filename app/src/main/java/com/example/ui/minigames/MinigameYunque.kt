@@ -72,6 +72,9 @@ private const val ANVIL_TOTAL_MS = 30_000
 @Composable
 fun MinigameYunque(request: MinigameRequest, onFinish: (MinigameResult) -> Unit) {
     val difficulty = request.difficulty.coerceIn(1, 5)
+    val combo = rememberComboState()
+    val gameFeel = rememberMinigameFeedback()
+
     var started by remember { mutableStateOf(false) }
 
     if (!started) {
@@ -134,14 +137,18 @@ fun MinigameYunque(request: MinigameRequest, onFinish: (MinigameResult) -> Unit)
     val strikes = qualities.size
     val perfects = qualities.count { it == 2 }
     val goods = qualities.count { it == 1 }
-    val score = (perfects * 20 + goods * 10).coerceIn(0, 100)
+    val score = ((perfects * 20 + goods * 10) * combo.multiplier).toInt().coerceIn(0, 100)
 
     val closeRun: () -> Unit = closeRun@{
         if (finished) return@closeRun
         finished = true
         val p = qualities.count { it == 2 }
         val g = qualities.count { it == 1 }
-        val finalScore = (p * 20 + g * 10).coerceIn(0, 100)
+        // El multiplicador que cuenta es el MEJOR de la partida, no el que
+        // quedase al final: si no, un ultimo golpe fallado borraba una racha
+        // impecable de nueve y el jugador no entendia por que.
+        val bestMult = (1f + (combo.best / 3) * 0.25f).coerceAtMost(2.5f)
+        val finalScore = ((p * 20 + g * 10) * bestMult).toInt().coerceIn(0, 100)
         val rating = when {
             p >= ANVIL_STRIKES -> "FORJA MAESTRA"
             p >= 3 -> "FORJA EXCELENTE"
@@ -188,6 +195,18 @@ fun MinigameYunque(request: MinigameRequest, onFinish: (MinigameResult) -> Unit)
         lastQuality = q
         burst += 1
         shakeTrigger += 1
+        // La racha cuenta el golpe ANTES del sonido, porque el repique sube de
+        // tono con ella: si se registrase despues, el primer eslabon sonaria
+        // siempre como si no hubiera racha.
+        if (q > 0) {
+            val before = combo.multiplier
+            combo.hit()
+            gameFeel.hit(combo.streak)
+            if (combo.multiplier > before) gameFeel.step()
+        } else {
+            combo.miss()
+            gameFeel.miss()
+        }
         when (q) {
             2 -> SoundManager.playCriticalHit()
             1 -> SoundManager.playSwordSlash()
@@ -204,6 +223,7 @@ fun MinigameYunque(request: MinigameRequest, onFinish: (MinigameResult) -> Unit)
         subtitle = "Golpe ${(strikes + 1).coerceAtMost(ANVIL_STRIKES)}/$ANVIL_STRIKES  ·  ${MinigameClockText(secondsLeft)}",
         tone = EldoriaTone.Ember,
         scoreLabel = "$score",
+        combo = combo,
         onQuit = {
             if (!finished) {
                 finished = true

@@ -501,10 +501,179 @@ object EldoriaBestiary {
             "FUEGO", "HIELO")
     )
 
-    /** 72 especies: 12 por reino × 6 reinos. */
+    /**
+     * EXPANSIÓN — 6 especies más por reino.
+     *
+     * Las doce originales de cada reino cubrían sus arquetipos, pero no lo que
+     * el propio reino promete: Eldoria advertía de "bandidos de camino" y no
+     * había ni un bandido; Aethelgard hablaba de "no-muertos que recuerdan tu
+     * cara" y sus criaturas eran de biblioteca; Frostgard nombraba "algo que
+     * aúlla bajo el glaciar" que no existía. Estas seis por reino son eso: la
+     * amenaza que el lore ya había prometido.
+     */
+    private val EXPANSION_SPECIES: List<EnemySpecies> = listOf(
+        // ── ELDORIA — los bandidos y la fauna del camino real ──
+        sp("esp_eldoria_bandido_camino", "Bandido del Camino Real", "eldoria", ACECHADOR,
+            "bestiary_eldoria_bandido_camino", 1,
+            "Cobra peaje en un camino que no es suyo, con un contrato que él mismo escribió. Lo firma cada viajero con la garganta.",
+            "SAGRADO", "FÍSICO"),
+        sp("esp_eldoria_oso_colmenero", "Oso Colmenero", "eldoria", BRUTO,
+            "bestiary_eldoria_oso_colmenero", 1,
+            "Aprendió que la miel está dentro de las cosas y desde entonces abre todo lo que encuentra para comprobarlo.",
+            "FUEGO", "FÍSICO"),
+        sp("esp_eldoria_niebla_del_vado", "Niebla del Vado", "eldoria", ELEMENTAL,
+            "bestiary_eldoria_niebla_del_vado", 1,
+            "Se levanta del río al anochecer y devuelve las botas vacías a la orilla. Siempre emparejadas, siempre limpias.",
+            "RAYO", "FÍSICO"),
+        sp("esp_eldoria_alcaide_ruinas", "Alcaide de las Ruinas", "eldoria", BASTION,
+            "bestiary_eldoria_alcaide_ruinas", 1,
+            "Custodia la primera piedra del reino desde antes de que hubiera reino. Nadie le ha dicho que el turno terminó.",
+            "ARCANO", "FÍSICO"),
+        sp("esp_eldoria_zorro_dos_colas", "Zorro de Dos Colas", "eldoria", HOSTIGADOR,
+            "bestiary_eldoria_zorro_dos_colas", 1,
+            "Roba lo que brilla y lo entierra donde nadie mira. Los tesoros del valle llevan siglos cambiando de sitio por su culpa.",
+            "SAGRADO", "ARCANO"),
+        sp("esp_eldoria_luciernagas_palidas", "Luciérnagas Pálidas", "eldoria", ENJAMBRE,
+            "bestiary_eldoria_luciernagas_palidas", 1,
+            "Guían al caminante perdido con una luz amable hasta el centro exacto de la ciénaga, y allí se apagan todas a la vez.",
+            "FUEGO", "SOMBRA"),
+
+        // ── DRAKENHOLD — los wyrms de la obsidiana y la ceniza ──
+        sp("esp_drakenhold_wyrm_obsidiana", "Wyrm de Obsidiana", "drakenhold", COLOSO,
+            "bestiary_drakenhold_wyrm_obsidiana", 2,
+            "Anida en la veta de cristal negro y muda de piel rompiéndola contra la montaña. El estruendo se oye en tres valles.",
+            "HIELO", "FUEGO"),
+        sp("esp_drakenhold_fundidor_almas", "Fundidor de Almas", "drakenhold", INVOCADOR,
+            "bestiary_drakenhold_fundidor_almas", 2,
+            "El pacto con los enanos fijaba qué se podía fundir. Él encontró el hueco: lo que no tiene cuerpo no figura en la lista.",
+            "SAGRADO", "FUEGO"),
+        sp("esp_drakenhold_gigante_hollin", "Gigante de Hollín", "drakenhold", BRUTO,
+            "bestiary_drakenhold_gigante_hollin", 2,
+            "Cada fragua apagada deja un poso, y el poso de mil fraguas terminó levantándose. Camina dejando huellas que arden.",
+            "RAYO", "FUEGO"),
+        sp("esp_drakenhold_sierpe_fumarola", "Sierpe de Fumarola", "drakenhold", ACECHADOR,
+            "bestiary_drakenhold_sierpe_fumarola", 2,
+            "Vive dentro de la columna de vapor y sólo es visible el instante en que muerde. Los mineros cuentan las fumarolas, no las sierpes.",
+            "HIELO", "FUEGO"),
+        sp("esp_drakenhold_piromante_exiliado", "Piromante Exiliado", "drakenhold", LANZADOR,
+            "bestiary_drakenhold_piromante_exiliado", 2,
+            "Lo desterraron por encender algo que no supo apagar. Sigue intentando apagarlo, y para eso necesita más fuego.",
+            "HIELO", "FUEGO"),
+        sp("esp_drakenhold_fenix_roto", "Fénix Roto", "drakenhold", VOLADOR,
+            "bestiary_drakenhold_fenix_roto", 2,
+            "Renació mal una vez y desde entonces cada muerte lo devuelve un poco peor. Ya no recuerda de qué forma era el original.",
+            "ARCANO", "FUEGO"),
+
+        // ── FROSTGARD — lo que aúlla bajo el glaciar ──
+        sp("esp_frostgard_cosa_bajo_glaciar", "La Cosa Bajo el Glaciar", "frostgard", COLOSO,
+            "bestiary_frostgard_cosa_bajo_glaciar", 3,
+            "Nadie la ha visto entera porque nadie ha visto dónde termina. El hielo sobre ella lleva mil años agrietándose hacia arriba.",
+            "FUEGO", "HIELO"),
+        sp("esp_frostgard_skald_congelado", "Skald Congelado", "frostgard", INVOCADOR,
+            "bestiary_frostgard_skald_congelado", 3,
+            "Murió a mitad de una saga y la ventisca terminó de cantarla por él. Ahora convoca a todos los que nombra el verso.",
+            "FUEGO", "HIELO"),
+        sp("esp_frostgard_alce_hielo_negro", "Alce de Hielo Negro", "frostgard", BRUTO,
+            "bestiary_frostgard_alce_hielo_negro", 3,
+            "Su cornamenta creció hacia dentro del glaciar antes que hacia el cielo. Arrastra un trozo de invierno adherido a la cabeza.",
+            "FUEGO", "FÍSICO"),
+        sp("esp_frostgard_arponero_ahogado", "Arponero Ahogado", "frostgard", NO_MUERTO,
+            "bestiary_frostgard_arponero_ahogado", 3,
+            "Cayó por una grieta con el arpón en la mano y el frío lo conservó exactamente en esa postura, incluida la intención.",
+            "SAGRADO", "HIELO"),
+        sp("esp_frostgard_espiritu_ventisca", "Espíritu de Ventisca", "frostgard", ELEMENTAL,
+            "bestiary_frostgard_espiritu_ventisca", 3,
+            "No sopla contra ti: sopla alrededor, hasta que dejas de saber cuál de las direcciones era la de vuelta.",
+            "FUEGO", "HIELO"),
+        sp("esp_frostgard_mastin_nieve", "Mastín de Nieve", "frostgard", HOSTIGADOR,
+            "bestiary_frostgard_mastin_nieve", 3,
+            "Corre por delante de la manada para cansar a la presa. Nunca es el que muerde, y por eso siempre sobrevive.",
+            "FUEGO", "HIELO"),
+
+        // ── AETHELGARD — la necrópolis y los cultos del vacío ──
+        sp("esp_aethelgard_sepulturero_conclave", "Sepulturero del Cónclave", "aethelgard", NO_MUERTO,
+            "bestiary_aethelgard_sepulturero_conclave", 4,
+            "Enterró a todos los magos del Cónclave y luego se enterró a sí mismo, por orden. Sigue cumpliendo el resto de la lista.",
+            "SAGRADO", "SOMBRA"),
+        sp("esp_aethelgard_heraldo_culto_vacio", "Heraldo del Culto Vacío", "aethelgard", LANZADOR,
+            "bestiary_aethelgard_heraldo_culto_vacio", 4,
+            "Predica que detrás de todo no hay nada, y lo demuestra abriendo agujeros donde antes había algo.",
+            "SAGRADO", "ARCANO"),
+        sp("esp_aethelgard_viuda_necropolis", "Viuda de la Necrópolis", "aethelgard", SANADOR_CORRUPTO,
+            "bestiary_aethelgard_viuda_necropolis", 4,
+            "Cura a los suyos con lo que le quita a los tuyos. Lleva luto por gente que aún no ha muerto.",
+            "SAGRADO", "SOMBRA"),
+        sp("esp_aethelgard_osario_ambulante", "Osario Ambulante", "aethelgard", CONSTRUCTO,
+            "bestiary_aethelgard_osario_ambulante", 4,
+            "Un montón de huesos que se ordenó solo cuando faltó sitio en las criptas. Cada pieza pertenece a alguien distinto.",
+            "SAGRADO", "FÍSICO"),
+        sp("esp_aethelgard_caballero_recordado", "Caballero Recordado", "aethelgard", BASTION,
+            "bestiary_aethelgard_caballero_recordado", 4,
+            "Los no-muertos de Aethelgard recuerdan tu cara. Éste además recuerda la de su reina, y te la compara.",
+            "ARCANO", "FÍSICO"),
+        sp("esp_aethelgard_escarabajos_tumbales", "Escarabajos Tumbales", "aethelgard", ENJAMBRE,
+            "bestiary_aethelgard_escarabajos_tumbales", 4,
+            "Limpian las criptas de todo lo blando. Llevan tanto tiempo haciéndolo que ya no distinguen lo enterrado de lo que camina.",
+            "FUEGO", "SOMBRA"),
+
+        // ── SOLARIA — los faraones que no pensaban morir ──
+        sp("esp_solaria_faraon_inmortal", "Faraón Inmortal", "solaria", NO_MUERTO,
+            "bestiary_solaria_faraon_inmortal", 5,
+            "Construyó la tumba para esperar dentro, no para descansar. Se levanta molesto cada vez que alguien confunde las dos cosas.",
+            "SAGRADO", "FÍSICO"),
+        sp("esp_solaria_guardian_tumba_sellada", "Guardián de la Tumba Sellada", "solaria", BASTION,
+            "bestiary_solaria_guardian_tumba_sellada", 5,
+            "Las tumbas de Solaria se cierran solas. Él es el motivo, y lleva dentro más tiempo que cualquiera de los reyes que guarda.",
+            "ARCANO", "FÍSICO"),
+        sp("esp_solaria_chacal_arena", "Chacal de Arena", "solaria", ACECHADOR,
+            "bestiary_solaria_chacal_arena", 5,
+            "Sigue a las caravanas a un día exacto de distancia. Nunca ataca al fuerte: espera a que el desierto elija por él.",
+            "SAGRADO", "FUEGO"),
+        sp("esp_solaria_ushabti_sirviente", "Ushabti Sirviente", "solaria", CONSTRUCTO,
+            "bestiary_solaria_ushabti_sirviente", 5,
+            "Figurilla de barro puesta en la tumba para trabajar en lugar del rey. Creció hasta poder hacerlo de verdad.",
+            "RAYO", "FÍSICO"),
+        sp("esp_solaria_sacerdote_ceniza_solar", "Sacerdote de Ceniza Solar", "solaria", INVOCADOR,
+            "bestiary_solaria_sacerdote_ceniza_solar", 5,
+            "Quema ofrendas al sol y con la ceniza modela a quienes las llevarán la próxima vez.",
+            "HIELO", "FUEGO"),
+        sp("esp_solaria_buitre_dorado", "Buitre Dorado", "solaria", VOLADOR,
+            "bestiary_solaria_buitre_dorado", 5,
+            "Los reyes solares lo tallaron en sus techos como símbolo de vigilancia. El pájaro entendió el encargo literalmente.",
+            "RAYO", "FUEGO"),
+
+        // ── AETHERIA — los arcángeles caídos y los titanes del éter ──
+        sp("esp_aetheria_arcangel_caido", "Arcángel Caído", "aetheria", BERSERKER,
+            "bestiary_aetheria_arcangel_caido", 6,
+            "Cayó defendiendo una orden que nadie recuerda haber dado. Sigue ejecutándola contra todo lo que se mueve.",
+            "SOMBRA", "SAGRADO"),
+        sp("esp_aetheria_titan_eter", "Titán del Éter", "aetheria", COLOSO,
+            "bestiary_aetheria_titan_eter", 6,
+            "Sostiene una isla de piedra blanca sobre los hombros porque un día alguien se la puso encima y no volvió a por ella.",
+            "ARCANO", "FÍSICO"),
+        sp("esp_aetheria_dragon_muchos_lugares", "Dragón de Muchos Lugares", "aetheria", VOLADOR,
+            "bestiary_aetheria_dragon_muchos_lugares", 6,
+            "Existe en varios sitios a la vez, así que matarlo aquí sólo resuelve una parte del problema. Él lo sabe y no tiene prisa.",
+            "SAGRADO", "ARCANO"),
+        sp("esp_aetheria_coro_de_alas", "Coro de Alas", "aetheria", ENJAMBRE,
+            "bestiary_aetheria_coro_de_alas", 6,
+            "Ni cuerpos ni rostros: sólo alas que cantan en formación. Lo que cantan describe con precisión cómo vas a morir.",
+            "SOMBRA", "SAGRADO"),
+        sp("esp_aetheria_juez_piedra_blanca", "Juez de Piedra Blanca", "aetheria", BASTION,
+            "bestiary_aetheria_juez_piedra_blanca", 6,
+            "Pesa a quien llega y devuelve al que sobra. Nunca ha explicado con respecto a qué sobra.",
+            "SOMBRA", "SAGRADO"),
+        sp("esp_aetheria_cartografo_despues", "Cartógrafo del Después", "aetheria", LANZADOR,
+            "bestiary_aetheria_cartografo_despues", 6,
+            "Dibuja el mapa de lo que hay después del mundo, y el mundo se va pareciendo al mapa. Tu posición ya está marcada.",
+            "SAGRADO", "ARCANO"),
+    )
+
+    /** 108 especies: 18 por reino × 6 reinos (12 originales + 6 de expansión). */
     val SPECIES: List<EnemySpecies> =
         ELDORIA_SPECIES + DRAKENHOLD_SPECIES + FROSTGARD_SPECIES +
-            AETHELGARD_SPECIES + SOLARIA_SPECIES + AETHERIA_SPECIES
+            AETHELGARD_SPECIES + SOLARIA_SPECIES + AETHERIA_SPECIES +
+            EXPANSION_SPECIES
 
     // ───────────────────────────────────────────────────────────────────────
     //  ÍNDICES Y CONSULTAS
