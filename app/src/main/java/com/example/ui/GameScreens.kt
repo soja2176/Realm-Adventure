@@ -6388,6 +6388,79 @@ data class Quadruple<A, B, C, D>(val first: A, val second: B, val third: C, val 
  * los jefes de reino, que no salen del bestiario.
  */
 fun getEnemyArtRes(artKey: String, name: String, isBoss: Boolean): Int = when (artKey) {
+    // ─── Bestiario: un retrato propio por especie (generado con SDXL local) ───
+    "bestiary_eldoria_lobo_cenizo" -> R.drawable.bestiary_eldoria_lobo_cenizo
+    "bestiary_eldoria_duende_zarcero" -> R.drawable.bestiary_eldoria_duende_zarcero
+    "bestiary_eldoria_espantapajaros_runico" -> R.drawable.bestiary_eldoria_espantapajaros_runico
+    "bestiary_eldoria_musgoso_devorador" -> R.drawable.bestiary_eldoria_musgoso_devorador
+    "bestiary_eldoria_avispa_reina_esmeralda" -> R.drawable.bestiary_eldoria_avispa_reina_esmeralda
+    "bestiary_eldoria_sabueso_del_alba" -> R.drawable.bestiary_eldoria_sabueso_del_alba
+    "bestiary_eldoria_druida_renegado" -> R.drawable.bestiary_eldoria_druida_renegado
+    "bestiary_eldoria_jabali_coronado" -> R.drawable.bestiary_eldoria_jabali_coronado
+    "bestiary_eldoria_ciervo_espectral" -> R.drawable.bestiary_eldoria_ciervo_espectral
+    "bestiary_eldoria_raiz_estranguladora" -> R.drawable.bestiary_eldoria_raiz_estranguladora
+    "bestiary_eldoria_cuervo_presagio" -> R.drawable.bestiary_eldoria_cuervo_presagio
+    "bestiary_eldoria_ermitano_podrido" -> R.drawable.bestiary_eldoria_ermitano_podrido
+    "bestiary_drakenhold_salamandra_escoria" -> R.drawable.bestiary_drakenhold_salamandra_escoria
+    "bestiary_drakenhold_herrero_maldito" -> R.drawable.bestiary_drakenhold_herrero_maldito
+    "bestiary_drakenhold_golem_magma" -> R.drawable.bestiary_drakenhold_golem_magma
+    "bestiary_drakenhold_wyvern_ceniza" -> R.drawable.bestiary_drakenhold_wyvern_ceniza
+    "bestiary_drakenhold_cultista_llama" -> R.drawable.bestiary_drakenhold_cultista_llama
+    "bestiary_drakenhold_perro_obsidiana" -> R.drawable.bestiary_drakenhold_perro_obsidiana
+    "bestiary_drakenhold_vulcanoide_menor" -> R.drawable.bestiary_drakenhold_vulcanoide_menor
+    "bestiary_drakenhold_portador_brasas" -> R.drawable.bestiary_drakenhold_portador_brasas
+    "bestiary_drakenhold_escupefuego_goblin" -> R.drawable.bestiary_drakenhold_escupefuego_goblin
+    "bestiary_drakenhold_titan_fundicion" -> R.drawable.bestiary_drakenhold_titan_fundicion
+    "bestiary_drakenhold_murcielago_igneo" -> R.drawable.bestiary_drakenhold_murcielago_igneo
+    "bestiary_drakenhold_chaman_azufre" -> R.drawable.bestiary_drakenhold_chaman_azufre
+    "bestiary_frostgard_aullador_escarcha" -> R.drawable.bestiary_frostgard_aullador_escarcha
+    "bestiary_frostgard_yeti_cristalino" -> R.drawable.bestiary_frostgard_yeti_cristalino
+    "bestiary_frostgard_doncella_ventisquero" -> R.drawable.bestiary_frostgard_doncella_ventisquero
+    "bestiary_frostgard_mamut_sepulcral" -> R.drawable.bestiary_frostgard_mamut_sepulcral
+    "bestiary_frostgard_vidente_congelada" -> R.drawable.bestiary_frostgard_vidente_congelada
+    "bestiary_frostgard_alma_nevisca" -> R.drawable.bestiary_frostgard_alma_nevisca
+    "bestiary_frostgard_lanzahielo_enano" -> R.drawable.bestiary_frostgard_lanzahielo_enano
+    "bestiary_frostgard_oso_glaciar_antiguo" -> R.drawable.bestiary_frostgard_oso_glaciar_antiguo
+    "bestiary_frostgard_serpiente_aguanieve" -> R.drawable.bestiary_frostgard_serpiente_aguanieve
+    "bestiary_frostgard_estatua_sal" -> R.drawable.bestiary_frostgard_estatua_sal
+    "bestiary_frostgard_corneja_hielo" -> R.drawable.bestiary_frostgard_corneja_hielo
+    "bestiary_frostgard_bruja_solsticio" -> R.drawable.bestiary_frostgard_bruja_solsticio
+    "bestiary_aethelgard_custodio_runas" -> R.drawable.bestiary_aethelgard_custodio_runas
+    "bestiary_aethelgard_espectro_conclave" -> R.drawable.bestiary_aethelgard_espectro_conclave
+    "bestiary_aethelgard_ojo_flotante" -> R.drawable.bestiary_aethelgard_ojo_flotante
+    "bestiary_aethelgard_automata_marfileno" -> R.drawable.bestiary_aethelgard_automata_marfileno
+    "bestiary_aethelgard_sombra_bibliotecario" -> R.drawable.bestiary_aethelgard_sombra_bibliotecario
+    "bestiary_aethelgard_quimera_sellada" -> R.drawable.bestiary_aethelgard_quimera_sellada
+    "bestiary_aethelgard_coro_disonante" -> R.drawable.bestiary_aethelgard_coro_disonante
+    "bestiary_aethelgard_tejedor_vacio" -> R.drawable.bestiary_aethelgard_tejedor_vacio
+    "bestiary_aethelgard_guardian_obelisco" -> R.drawable.bestiary_aethelgard_guardian_obelisco
+    "bestiary_aethelgard_alquimista_fracturado" -> R.drawable.bestiary_aethelgard_alquimista_fracturado
+    "bestiary_aethelgard_danzarina_eter" -> R.drawable.bestiary_aethelgard_danzarina_eter
+    "bestiary_aethelgard_sanguijuela_mana" -> R.drawable.bestiary_aethelgard_sanguijuela_mana
+    "bestiary_solaria_escarabajo_solar" -> R.drawable.bestiary_solaria_escarabajo_solar
+    "bestiary_solaria_momia_dorada" -> R.drawable.bestiary_solaria_momia_dorada
+    "bestiary_solaria_leon_alado_bronce" -> R.drawable.bestiary_solaria_leon_alado_bronce
+    "bestiary_solaria_sacerdotisa_rashen" -> R.drawable.bestiary_solaria_sacerdotisa_rashen
+    "bestiary_solaria_escorpion_ambar" -> R.drawable.bestiary_solaria_escorpion_ambar
+    "bestiary_solaria_espejismo_viviente" -> R.drawable.bestiary_solaria_espejismo_viviente
+    "bestiary_solaria_coloso_arenisca" -> R.drawable.bestiary_solaria_coloso_arenisca
+    "bestiary_solaria_halcon_fuego_blanco" -> R.drawable.bestiary_solaria_halcon_fuego_blanco
+    "bestiary_solaria_sepulturero_dunas" -> R.drawable.bestiary_solaria_sepulturero_dunas
+    "bestiary_solaria_serafin_caido" -> R.drawable.bestiary_solaria_serafin_caido
+    "bestiary_solaria_djinn_encadenado" -> R.drawable.bestiary_solaria_djinn_encadenado
+    "bestiary_solaria_devorador_soles" -> R.drawable.bestiary_solaria_devorador_soles
+    "bestiary_aetheria_heraldo_vacio" -> R.drawable.bestiary_aetheria_heraldo_vacio
+    "bestiary_aetheria_fractal_viviente" -> R.drawable.bestiary_aetheria_fractal_viviente
+    "bestiary_aetheria_pastor_estrellas" -> R.drawable.bestiary_aetheria_pastor_estrellas
+    "bestiary_aetheria_larva_nebular" -> R.drawable.bestiary_aetheria_larva_nebular
+    "bestiary_aetheria_testigo_sin_rostro" -> R.drawable.bestiary_aetheria_testigo_sin_rostro
+    "bestiary_aetheria_ancla_gravitatoria" -> R.drawable.bestiary_aetheria_ancla_gravitatoria
+    "bestiary_aetheria_eco_universo_muerto" -> R.drawable.bestiary_aetheria_eco_universo_muerto
+    "bestiary_aetheria_tejedora_constelaciones" -> R.drawable.bestiary_aetheria_tejedora_constelaciones
+    "bestiary_aetheria_simetria_rota" -> R.drawable.bestiary_aetheria_simetria_rota
+    "bestiary_aetheria_devorador_entropia" -> R.drawable.bestiary_aetheria_devorador_entropia
+    "bestiary_aetheria_peregrino_umbral" -> R.drawable.bestiary_aetheria_peregrino_umbral
+    "bestiary_aetheria_cero_absoluto" -> R.drawable.bestiary_aetheria_cero_absoluto
     "enemy_anubis_1784850895657" -> R.drawable.enemy_anubis_1784850895657
     "enemy_archangel_1784850912318" -> R.drawable.enemy_archangel_1784850912318
     "enemy_automaton_1784850938702" -> R.drawable.enemy_automaton_1784850938702
