@@ -81,6 +81,7 @@ import com.example.ui.screens.BestiaryScreen
 import com.example.ui.screens.ContractsScreen
 import com.example.ui.screens.WorldAtlasSheet
 import com.example.ui.minigames.MinigameHostScreen
+import com.example.ui.talents.EldoriaTalentTreeScreen
 // ─── Sistema de diseño Eldoria (com.example.ui.design) ───
 // Imports explícitos: este fichero define símbolos propios y un comodín colisionaría.
 import com.example.ui.art.EldoriaArt
@@ -169,6 +170,13 @@ fun getRarityColor(rarity: String): Color {
 }
 
 fun getItemImageRes(imageResName: String, itemType: String): Int {
+    // El índice generado manda: cualquier lámina nueva funciona con sólo
+    // existir, sin tocar la tabla de abajo. Ésta se conserva porque traduce los
+    // alias cortos ("img_mat_cuero") a ficheros con sufijo de fecha, y porque
+    // reparte por afinidad los materiales que aún no tienen arte propio.
+    EldoriaArt.of(imageResName)?.let { return it }
+    EldoriaArt.of("mat_" + imageResName)?.let { return it }
+
     return when (imageResName) {
         "img_mat_cuero" -> R.drawable.img_mat_cuero_1784901594849
         "img_mat_hierro" -> R.drawable.img_mat_hierro_1784901606157
@@ -2985,7 +2993,13 @@ fun StainedGlassSkillSlot(
     enabled: Boolean,
     testTag: String,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /**
+     * Clave de la lámina de la acción. Manda sobre [icon], que se mantiene como
+     * respaldo: un rayo de Material no dice "Llama Necrótica", pero es mejor
+     * que un hueco si algún día falta el recurso.
+     */
+    artKey: String? = null
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -3049,13 +3063,26 @@ fun StainedGlassSkillSlot(
                 drawPath(facetPath, lineColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 1.2f))
             }
 
-            // Center Icon
-            Icon(
-                imageVector = icon,
-                contentDescription = title,
-                tint = if (enabled) glassTheme.centerColor else Color.Gray.copy(alpha = 0.5f),
-                modifier = Modifier.size(24.dp)
-            )
+            // Center Icon — lámina propia si la hay, icono si no.
+            val slotArt = artKey?.let { EldoriaArt.of(it) }
+            if (slotArt != null) {
+                Image(
+                    painter = painterResource(id = slotArt),
+                    contentDescription = title,
+                    contentScale = ContentScale.Crop,
+                    alpha = if (enabled) 1f else 0.4f,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(RoundedCornerShape(5.dp))
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = title,
+                    tint = if (enabled) glassTheme.centerColor else Color.Gray.copy(alpha = 0.5f),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
 
             // Lower-Right Cost Overlay Tag
             if (costText.isNotEmpty()) {
@@ -3932,6 +3959,14 @@ fun CombatScreen(viewModel: GameViewModel) {
                 var potionDrawerOpen by remember { mutableStateOf(false) }
                 val heroAction = basicAttackFor(p.charClass)
 
+                // El contenedor de acciones es un Box, y un Box APILA a sus
+                // hijos: por eso la barra de habilidades se dibujaba ENCIMA del
+                // cajón de pociones en vez de debajo. La Column los ordena.
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+
                 // Efectos activos: sin esto un buff de cuatro turnos es
                 // invisible en cuanto pasa la línea del registro.
                 CombatBuffChips(
@@ -4006,7 +4041,13 @@ fun CombatScreen(viewModel: GameViewModel) {
                             },
                             enabled = combatState.playerTurn,
                             testTag = "combat_attack_button",
-                            onClick = { viewModel.executeBasicAttack() }
+                            onClick = { viewModel.executeBasicAttack() },
+                            artKey = "action_basic_" + when (p.charClass) {
+                                "Mago" -> "mago"
+                                "Pícaro" -> "picaro"
+                                "Clérigo" -> "clerigo"
+                                else -> "guerrero"
+                            }
                         )
 
                         // 2. Class Skills — el color del cristal y el icono siguen
@@ -4048,7 +4089,8 @@ fun CombatScreen(viewModel: GameViewModel) {
                                 glassTheme = skillTheme,
                                 enabled = isSkillEnabled,
                                 testTag = "skill_${skill.id}",
-                                onClick = { viewModel.executeSkill(skill) }
+                                onClick = { viewModel.executeSkill(skill) },
+                                artKey = "skill_${skill.id}"
                             )
                         }
 
@@ -4063,7 +4105,8 @@ fun CombatScreen(viewModel: GameViewModel) {
                             glassTheme = SkillGlassTheme.EMERALD,
                             enabled = combatState.playerTurn && potionCount > 0,
                             testTag = "combat_potion_button",
-                            onClick = { potionDrawerOpen = !potionDrawerOpen }
+                            onClick = { potionDrawerOpen = !potionDrawerOpen },
+                            artKey = "action_zurron"
                         )
 
                         // 4. Flee Slot (Dark Violet Stained Glass)
@@ -4075,9 +4118,11 @@ fun CombatScreen(viewModel: GameViewModel) {
                             glassTheme = SkillGlassTheme.PURPLE,
                             enabled = combatState.playerTurn,
                             testTag = "combat_flee_button",
-                            onClick = { viewModel.fleeCombat() }
+                            onClick = { viewModel.fleeCombat() },
+                            artKey = "action_huir"
                         )
                     }
+                }
                 }
             }
         }
@@ -4911,735 +4956,17 @@ fun CharacterScreen(viewModel: GameViewModel) {
     } // end EldoriaScreen wrapper
 }
 
-// --- TALENTS TREE SCREEN ---
-fun getTalentIcon(id: String): ImageVector {
-    return when (id) {
-        "t_1" -> Icons.Default.Bolt
-        "t_2" -> Icons.Default.Shield
-        "t_3" -> Icons.Default.SportsMartialArts
-        "t_4" -> Icons.Default.FlashOn
-        "t_5" -> Icons.Default.BlurOn
-        "t_6" -> Icons.Default.Shield
-        "t_7" -> Icons.Default.DirectionsWalk
-        "t_8" -> Icons.Default.Gavel
-        "t_9" -> Icons.Default.MonetizationOn
-        else -> Icons.Default.Star
-    }
-}
-
 // ═══════════════════════════════════════════════════════════════════════════
-//  RED DE TALENTOS — tres sendas (Acero, Éter, Sombras) que bajan desde el
-//  héroe. Un nodo que puedes canalizar AHORA late en dorado: la pantalla te
-//  dice dónde gastar el punto sin que tengas que leer nada.
+//  RED DE TALENTOS
+//
+//  El árbol vive en `com.example.ui.talents`: con cien nodos por raza dejó de
+//  ser una pantalla y pasó a ser un sistema (ramas, escalones, evoluciones,
+//  láminas), y arrastrarlo aquí dentro sólo engordaba este fichero.
+//  Esta función se mantiene como puerta de entrada para no tocar el enrutador.
 // ═══════════════════════════════════════════════════════════════════════════
 @Composable
 fun TalentsScreen(viewModel: GameViewModel) {
-    val progress by viewModel.progressState.collectAsState()
-    val p = progress ?: return
-
-    val talentList = GameJsonParser.listFromJson<Talent>(p.talentsJson)
-    var selectedTalent by remember { mutableStateOf<Talent?>(null) }
-
-    // Find active selected talent to keep it reactive when allocating points
-    val activeSelectedTalent = selectedTalent?.let { sel -> talentList.find { it.id == sel.id } }
-
-    val scrollState = rememberScrollState()
-
-    val spentRanks = talentList.sumOf { it.currentRank }
-    val totalRanks = talentList.sumOf { it.maxRank }.coerceAtLeast(1)
-    val hasPoints = p.talentPointsAvailable > 0
-
-    EldoriaScreen(
-        depth = 1,
-        embers = false,
-        fog = true,
-        vignetteStrength = 0.66f,
-        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 10.dp)
-    ) {
-        // Motas arcanas ascendiendo: el cosmos de la red respira.
-        EldoriaEmberField(
-            modifier = Modifier.matchParentSize(),
-            count = 22,
-            tint = Eldoria.ArcaneBright,
-            periodMs = 11000,
-            seed = 19,
-            maxAlpha = 0.4f
-        )
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(scrollState),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            EldoriaBanner(
-                title = "RED DE TALENTOS",
-                subtitle = "$spentRanks/$totalRanks rangos canalizados · las sendas exigen rango 3 para abrirse",
-                artRes = R.drawable.talent_tree_banner_1784843563984,
-                height = 118.dp,
-                edge = EldoriaEdge.Arcane,
-                crestSeed = 5150,
-                trailing = {
-                    EldoriaProgressRing(
-                        progress = spentRanks.toFloat() / totalRanks.toFloat(),
-                        size = 62.dp,
-                        stroke = 6.dp,
-                        accent = Eldoria.Arcane,
-                        centerLabel = "$spentRanks"
-                    )
-                }
-            )
-
-            Spacer(modifier = Modifier.height(Eldoria.S8))
-
-            // Puntos disponibles + auto-asignar. Cuando hay puntos, la barra brilla.
-            EldoriaPanel(
-                edge = if (hasPoints) EldoriaEdge.Gold else EldoriaEdge.Iron,
-                corner = Eldoria.R12,
-                padding = PaddingValues(horizontal = 12.dp, vertical = 10.dp),
-                glow = hasPoints
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            imageVector = Icons.Default.AutoAwesome,
-                            contentDescription = null,
-                            tint = if (hasPoints) Eldoria.TextGold else Eldoria.TextLow,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Spacer(modifier = Modifier.width(Eldoria.S8))
-                        Column {
-                            Text(
-                                text = "PUNTOS SIN GASTAR",
-                                style = EldoriaType.label,
-                                color = Eldoria.TextMid
-                            )
-                            Text(
-                                text = formatGameNumber(p.talentPointsAvailable),
-                                style = EldoriaType.numericBig,
-                                color = if (hasPoints) Eldoria.TextGold else Eldoria.TextLow
-                            )
-                        }
-                    }
-                    EldoriaButton(
-                        text = "AUTO-ASIGNAR",
-                        onClick = { viewModel.autoAllocateTalentPoints() },
-                        enabled = hasPoints,
-                        tone = EldoriaTone.Gold,
-                        size = EldoriaButtonSize.Small,
-                        icon = Icons.Default.Bolt,
-                        testTag = "auto_assign_talents_button"
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(Eldoria.S12))
-
-        // Constellation Box
-        EldoriaFrame(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(440.dp),
-            edge = EldoriaEdge.Arcane,
-            corner = Eldoria.R16,
-            strokeWidth = Eldoria.StrokeBold,
-            filigree = true,
-            rivets = true,
-            glowPulse = hasPoints
-        ) {
-        BoxWithConstraints(
-            modifier = Modifier
-                .matchParentSize()
-                .background(Color.Black)
-        ) {
-            // Generative cosmic space background image
-            Image(
-                painter = painterResource(id = R.drawable.img_talents_bg_1784603912942),
-                contentDescription = "Cosmo celestial",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop,
-                alpha = 0.45f
-            )
-            EldoriaVignette(
-                modifier = Modifier.matchParentSize(),
-                strength = 0.5f,
-                tint = Eldoria.Abyss,
-                centerBiasY = 0.5f
-            )
-
-            val width = maxWidth
-            val height = maxHeight
-
-            val p1 = talentList.find { it.id == "t_1" }
-            val p2 = talentList.find { it.id == "t_2" }
-            val p3 = talentList.find { it.id == "t_3" }
-            val p4 = talentList.find { it.id == "t_4" }
-            val p5 = talentList.find { it.id == "t_5" }
-            val p6 = talentList.find { it.id == "t_6" }
-            val p7 = talentList.find { it.id == "t_7" }
-            val p8 = talentList.find { it.id == "t_8" }
-            val p9 = talentList.find { it.id == "t_9" }
-
-            // Helper for connection status mapping
-            fun getConnectionStyle(
-                endActive: Boolean,
-                isPrereqMet: Boolean,
-                activeColor: Color,
-                dimColor: Color,
-                lockedColor: Color
-            ): Pair<Color, Boolean> {
-                return when {
-                    endActive -> Pair(activeColor, false)
-                    isPrereqMet -> Pair(dimColor, true)
-                    else -> Pair(lockedColor, false)
-                }
-            }
-
-            // Chispa que viaja por las conexiones vivas: la red está encendida.
-            val leyTravel by rememberInfiniteTransition(label = "talentLey").animateFloat(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = infiniteRepeatable(
-                    animation = tween(durationMillis = 2600, easing = LinearEasing),
-                    repeatMode = RepeatMode.Restart
-                ),
-                label = "talentLeyTravel"
-            )
-
-            // Connection Lines Canvas
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val w = size.width
-                val h = size.height
-
-                fun drawGlowingConnection(startX: Float, startY: Float, endX: Float, endY: Float, style: Pair<Color, Boolean>) {
-                    val (color, isDashed) = style
-                    val pathEffect = if (isDashed) {
-                        androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(15f, 10f), 0f)
-                    } else null
-                    val a = androidx.compose.ui.geometry.Offset(startX, startY)
-                    val b = androidx.compose.ui.geometry.Offset(endX, endY)
-
-                    // Halo ancho por capas: el cable de maná tiene grosor, no es una raya.
-                    drawLine(color.copy(alpha = 0.10f), a, b, 11.dp.toPx(), StrokeCap.Round)
-                    drawLine(color.copy(alpha = 0.22f), a, b, 5.dp.toPx(), StrokeCap.Round)
-
-                    // Solid/Dashed line
-                    drawLine(
-                        color = color,
-                        start = a,
-                        end = b,
-                        strokeWidth = 2.dp.toPx(),
-                        cap = StrokeCap.Round,
-                        pathEffect = pathEffect
-                    )
-
-                    // Sólo los tramos ya canalizados (línea continua y viva) llevan chispa.
-                    if (!isDashed && color.alpha > 0.7f) {
-                        val t = leyTravel
-                        val px = a.x + (b.x - a.x) * t
-                        val py = a.y + (b.y - a.y) * t
-                        val fade = kotlin.math.sin(t * Math.PI.toFloat()).coerceIn(0f, 1f)
-                        drawCircle(Color.White.copy(alpha = 0.85f * fade), radius = 2.6.dp.toPx(), center = androidx.compose.ui.geometry.Offset(px, py))
-                        drawCircle(color.copy(alpha = 0.30f * fade), radius = 6.5.dp.toPx(), center = androidx.compose.ui.geometry.Offset(px, py))
-                    }
-                }
-
-                val steel = Eldoria.BloodBright
-                val aether = Eldoria.ManaBright
-                val shadow = Eldoria.ArcaneBright
-                val dead = Eldoria.IronDeep.copy(alpha = 0.55f)
-
-                // Connections from Origin (0.50f, 0.08f)
-                p1?.let {
-                    val style = getConnectionStyle(it.currentRank > 0, true, steel, steel.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.50f, h * 0.08f, w * 0.18f, h * 0.28f, style)
-                }
-                p4?.let {
-                    val style = getConnectionStyle(it.currentRank > 0, true, aether, aether.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.50f, h * 0.08f, w * 0.50f, h * 0.28f, style)
-                }
-                p7?.let {
-                    val style = getConnectionStyle(it.currentRank > 0, true, shadow, shadow.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.50f, h * 0.08f, w * 0.82f, h * 0.28f, style)
-                }
-
-                // Combat Path: t_1 -> t_2
-                if (p1 != null && p2 != null) {
-                    val isPrereqMet = p1.currentRank >= 3
-                    val style = getConnectionStyle(p2.currentRank > 0, isPrereqMet, steel, steel.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.18f, h * 0.28f, w * 0.18f, h * 0.56f, style)
-                }
-                // Magic Path: t_4 -> t_5
-                if (p4 != null && p5 != null) {
-                    val isPrereqMet = p4.currentRank >= 3
-                    val style = getConnectionStyle(p5.currentRank > 0, isPrereqMet, aether, aether.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.50f, h * 0.28f, w * 0.50f, h * 0.56f, style)
-                }
-                // Shadow Path: t_7 -> t_8
-                if (p7 != null && p8 != null) {
-                    val isPrereqMet = p7.currentRank >= 3
-                    val style = getConnectionStyle(p8.currentRank > 0, isPrereqMet, shadow, shadow.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.82f, h * 0.28f, w * 0.82f, h * 0.56f, style)
-                }
-
-                // Combat Path: t_2 -> t_3
-                if (p2 != null && p3 != null) {
-                    val isPrereqMet = p2.currentRank >= 3
-                    val style = getConnectionStyle(p3.currentRank > 0, isPrereqMet, steel, steel.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.18f, h * 0.56f, w * 0.18f, h * 0.84f, style)
-                }
-                // Magic Path: t_5 -> t_6
-                if (p5 != null && p6 != null) {
-                    val isPrereqMet = p5.currentRank >= 3
-                    val style = getConnectionStyle(p6.currentRank > 0, isPrereqMet, aether, aether.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.50f, h * 0.56f, w * 0.50f, h * 0.84f, style)
-                }
-                // Shadow Path: t_8 -> t_9
-                if (p8 != null && p9 != null) {
-                    val isPrereqMet = p8.currentRank >= 3
-                    val style = getConnectionStyle(p9.currentRank > 0, isPrereqMet, shadow, shadow.copy(alpha = 0.45f), dead)
-                    drawGlowingConnection(w * 0.82f, h * 0.56f, w * 0.82f, h * 0.84f, style)
-                }
-            }
-
-            // Path Titles
-            Box(modifier = Modifier.align(Alignment.TopStart).padding(start = 10.dp, top = 62.dp)) {
-                EldoriaChip(text = "ACERO", color = Eldoria.BloodBright, icon = Icons.Default.Shield)
-            }
-            Box(modifier = Modifier.align(Alignment.TopCenter).padding(top = 62.dp)) {
-                EldoriaChip(text = "ÉTER", color = Eldoria.ManaBright, icon = Icons.Default.AutoAwesome)
-            }
-            Box(modifier = Modifier.align(Alignment.TopEnd).padding(end = 10.dp, top = 62.dp)) {
-                EldoriaChip(text = "SOMBRAS", color = Eldoria.ArcaneBright, icon = Icons.Default.BlurOn)
-            }
-
-            // Render Central Hub Node (Hero Origin)
-            EldoriaFrame(
-                modifier = Modifier
-                    .offset(
-                        x = width * 0.50f - 26.dp,
-                        y = height * 0.08f - 26.dp
-                    )
-                    .size(52.dp),
-                edge = EldoriaEdge.Gold,
-                corner = Eldoria.R8,
-                strokeWidth = Eldoria.StrokeMed,
-                filigree = false,
-                rivets = false,
-                glowPulse = true
-            ) {
-                Image(
-                    painter = painterResource(id = getCharacterPortrait(p.charRace, p.charClass)),
-                    contentDescription = "Origen del Héroe",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.radialGradient(
-                                colors = listOf(Color.Transparent, Eldoria.Abyss.copy(alpha = 0.55f))
-                            )
-                        )
-                )
-            }
-
-            // Render All 9 Talent Nodes
-            val nodes = listOf(
-                Pair(p1, Pair(0.18f, 0.28f)),
-                Pair(p4, Pair(0.50f, 0.28f)),
-                Pair(p7, Pair(0.82f, 0.28f)),
-                Pair(p2, Pair(0.18f, 0.56f)),
-                Pair(p5, Pair(0.50f, 0.56f)),
-                Pair(p8, Pair(0.82f, 0.56f)),
-                Pair(p3, Pair(0.18f, 0.84f)),
-                Pair(p6, Pair(0.50f, 0.84f)),
-                Pair(p9, Pair(0.82f, 0.84f))
-            )
-
-            nodes.forEach { (talent, coords) ->
-                if (talent != null) {
-                    val (fx, fy) = coords
-                    val hasPrereq = talent.prerequisiteId == null ||
-                                    (talentList.find { it.id == talent.prerequisiteId }?.currentRank ?: 0) >= 3
-
-                    val isMax = talent.currentRank >= talent.maxRank
-                    val isActive = talent.currentRank > 0
-                    // Lo que el jugador necesita ver de un vistazo: dónde puede gastar YA.
-                    val canChannelNow = hasPoints && hasPrereq && !isMax
-
-                    val nodeThemeColor = when (talent.category) {
-                        "COMBAT" -> Eldoria.BloodBright
-                        "MAGIC" -> Eldoria.ManaBright
-                        else -> Eldoria.ArcaneBright
-                    }
-
-                    val borderColor = when {
-                        isMax -> Eldoria.GoldBright
-                        isActive -> nodeThemeColor
-                        hasPrereq -> nodeThemeColor.copy(alpha = 0.55f)
-                        else -> Eldoria.IronEdge.copy(alpha = 0.5f)
-                    }
-
-                    val isSelected = activeSelectedTalent?.id == talent.id
-                    // Un solo latido gobierna halo, anillo y brillo del icono.
-                    val beat = eldoriaPulse(
-                        periodMs = if (canChannelNow) 1300 else 2400,
-                        from = if (canChannelNow) 0.45f else 0.75f,
-                        to = 1f,
-                        label = "talentBeat_${talent.id}"
-                    )
-                    val haloColor = when {
-                        isSelected -> Eldoria.GoldBright
-                        canChannelNow -> Eldoria.Gold
-                        else -> nodeThemeColor
-                    }
-                    val haloAlpha = when {
-                        isSelected -> 0.42f * beat
-                        canChannelNow -> 0.38f * beat
-                        isActive -> 0.22f * beat
-                        else -> 0f
-                    }
-
-                    Box(
-                        modifier = Modifier
-                            .offset(
-                                x = width * fx - 26.dp,
-                                y = height * fy - 26.dp
-                            )
-                            .size(52.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        // Halo por capas (nada de blur: es no-op por debajo de API 31).
-                        if (haloAlpha > 0.01f) {
-                            Canvas(modifier = Modifier.fillMaxSize()) {
-                                val r = size.minDimension / 2f
-                                drawCircle(
-                                    brush = Brush.radialGradient(
-                                        0f to haloColor.copy(alpha = haloAlpha),
-                                        0.55f to haloColor.copy(alpha = haloAlpha * 0.5f),
-                                        1f to Color.Transparent,
-                                        center = center,
-                                        radius = r * 1.45f
-                                    ),
-                                    radius = r * 1.45f,
-                                    center = center
-                                )
-                            }
-                        }
-
-                        // Nodo rúnico: cristal negro engastado en metal, con destello superior.
-                        Box(
-                            modifier = Modifier
-                                .size(46.dp)
-                                .clip(CircleShape)
-                                .background(
-                                    Brush.verticalGradient(
-                                        listOf(
-                                            Eldoria.PanelHi,
-                                            Eldoria.Slate,
-                                            Eldoria.Abyss
-                                        )
-                                    )
-                                )
-                                .border(
-                                    width = if (isSelected) 2.5.dp else if (isMax) 2.dp else 1.5.dp,
-                                    brush = when {
-                                        isSelected -> Eldoria.goldEdge()
-                                        isMax -> Eldoria.goldEdge()
-                                        isActive -> Brush.verticalGradient(
-                                            listOf(nodeThemeColor, nodeThemeColor.copy(alpha = 0.55f))
-                                        )
-                                        else -> Brush.verticalGradient(listOf(borderColor, borderColor.copy(alpha = 0.4f)))
-                                    },
-                                    shape = CircleShape
-                                )
-                                .eldoriaPressable(onClick = { selectedTalent = talent })
-                                .testTag("talent_node_${talent.id}"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            // Rúnica de fondo: distingue un nodo de otro sin leer el nombre.
-                            EldoriaRuneGlyph(
-                                seed = talent.id.hashCode(),
-                                modifier = Modifier
-                                    .matchParentSize()
-                                    .padding(11.dp),
-                                color = nodeThemeColor.copy(alpha = if (isActive) 0.30f else 0.12f),
-                                strokeWidth = 1.2.dp,
-                                animated = false
-                            )
-                            Icon(
-                                imageVector = getTalentIcon(talent.id),
-                                contentDescription = talent.name,
-                                tint = when {
-                                    isMax -> Eldoria.GoldBright
-                                    isActive -> Eldoria.TextHi
-                                    canChannelNow -> Eldoria.TextGold.copy(alpha = 0.55f + 0.45f * beat)
-                                    else -> Eldoria.TextLow.copy(alpha = 0.45f)
-                                },
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        // Rango: pips en rombo. Se lee sin números a tamaño 7sp.
-                        Row(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .offset(y = 3.dp)
-                                .clip(RoundedCornerShape(4.dp))
-                                .background(Eldoria.Abyss.copy(alpha = 0.9f))
-                                .border(0.75.dp, borderColor.copy(alpha = 0.7f), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 2.5.dp),
-                            horizontalArrangement = Arrangement.spacedBy(2.5.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            repeat(talent.maxRank.coerceIn(1, 6)) { i ->
-                                val filled = i < talent.currentRank
-                                Canvas(modifier = Modifier.size(5.dp)) {
-                                    val c = if (filled) (if (isMax) Eldoria.GoldBright else nodeThemeColor) else Eldoria.IronDeep
-                                    drawPath(
-                                        eldoriaDiamondPath(size.width / 2f, size.height / 2f, size.minDimension / 2f),
-                                        color = c
-                                    )
-                                }
-                            }
-                        }
-
-                        // Sello "MAX": el nodo terminado se marca, no se adivina.
-                        if (isMax) {
-                            Icon(
-                                imageVector = Icons.Default.Star,
-                                contentDescription = null,
-                                tint = Eldoria.GoldBright,
-                                modifier = Modifier
-                                    .align(Alignment.TopEnd)
-                                    .size(13.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        }
-
-        Spacer(modifier = Modifier.height(Eldoria.S12))
-
-        // Selected Talent Detail Panel (Saves screen estate and keeps UI clean and elegant)
-        if (activeSelectedTalent != null) {
-            val talent = activeSelectedTalent
-            val hasPrereq = talent.prerequisiteId == null ||
-                            (talentList.find { it.id == talent.prerequisiteId }?.currentRank ?: 0) >= 1
-            val isMax = talent.currentRank >= talent.maxRank
-            val canUpgrade = hasPrereq && p.talentPointsAvailable > 0 && !isMax
-
-            val categoryName = when (talent.category) {
-                "COMBAT" -> "Fuerza y Acero"
-                "MAGIC" -> "Magia y Éter"
-                else -> "Sombras y Azar"
-            }
-
-            val categoryColor = when (talent.category) {
-                "COMBAT" -> Eldoria.BloodBright
-                "MAGIC" -> Eldoria.ManaBright
-                else -> Eldoria.ArcaneBright
-            }
-            val categoryEdge = when (talent.category) {
-                "COMBAT" -> EldoriaEdge.Blood
-                "MAGIC" -> EldoriaEdge.Arcane
-                else -> EldoriaEdge.Arcane
-            }
-            val categoryTone = when (talent.category) {
-                "COMBAT" -> EldoriaTone.Blood
-                "MAGIC" -> EldoriaTone.Arcane
-                else -> EldoriaTone.Arcane
-            }
-
-            EldoriaPanel(
-                modifier = Modifier.fillMaxWidth(),
-                edge = if (isMax) EldoriaEdge.Gold else categoryEdge,
-                corner = Eldoria.R12,
-                padding = PaddingValues(13.dp),
-                glow = canUpgrade,
-                filigree = true
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        EldoriaFrame(
-                            modifier = Modifier.size(42.dp),
-                            edge = if (isMax) EldoriaEdge.Gold else categoryEdge,
-                            corner = Eldoria.R8,
-                            strokeWidth = Eldoria.StrokeMed,
-                            filigree = false
-                        ) {
-                            Icon(
-                                imageVector = getTalentIcon(talent.id),
-                                contentDescription = null,
-                                tint = if (isMax) Eldoria.GoldBright else categoryColor,
-                                modifier = Modifier
-                                    .align(Alignment.Center)
-                                    .size(19.dp)
-                            )
-                        }
-                        Spacer(modifier = Modifier.width(Eldoria.S12))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                talent.name,
-                                style = EldoriaType.heading,
-                                color = Eldoria.TextHi,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                categoryName,
-                                style = EldoriaType.caption,
-                                color = categoryColor
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(Eldoria.S8))
-                    // Rango en pips grandes: el progreso del nodo, no un número suelto.
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        repeat(talent.maxRank.coerceIn(1, 6)) { i ->
-                            val filled = i < talent.currentRank
-                            Canvas(modifier = Modifier.size(11.dp)) {
-                                val cx = size.width / 2f
-                                val cy = size.height / 2f
-                                val r = size.minDimension / 2f
-                                drawPath(eldoriaDiamondPath(cx, cy, r), Eldoria.Abyss)
-                                drawPath(
-                                    eldoriaDiamondPath(cx, cy, r * 0.82f),
-                                    color = if (filled) (if (isMax) Eldoria.GoldBright else categoryColor) else Eldoria.IronDeep
-                                )
-                                if (!filled) {
-                                    drawPath(
-                                        eldoriaDiamondPath(cx, cy, r * 0.82f),
-                                        color = Eldoria.IronEdge.copy(alpha = 0.7f),
-                                        style = Stroke(width = 1f)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(Eldoria.S8))
-                EldoriaDivider(color = categoryColor.copy(alpha = 0.6f))
-                Spacer(modifier = Modifier.height(Eldoria.S8))
-
-                Text(
-                    text = talent.description,
-                    style = EldoriaType.body,
-                    color = Eldoria.TextMid
-                )
-
-                Spacer(modifier = Modifier.height(Eldoria.S12))
-
-                // Requirements / Info indicators
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        // Prerequisite requirement
-                        if (talent.prerequisiteId != null) {
-                            val prereq = talentList.find { it.id == talent.prerequisiteId }
-                            if (prereq != null) {
-                                val met = prereq.currentRank >= 1
-                                TalentRequirementRow(
-                                    met = met,
-                                    text = "Requiere ${prereq.name} (rango ≥ 1)"
-                                )
-                            }
-                        } else {
-                            TalentRequirementRow(met = true, text = "Sin requisitos previos")
-                        }
-
-                        // Talent Points requirement
-                        if (!isMax) {
-                            TalentRequirementRow(
-                                met = p.talentPointsAvailable > 0,
-                                text = "Cuesta 1 punto de talento"
-                            )
-                        } else {
-                            TalentRequirementRow(met = true, text = "Rango máximo alcanzado")
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(Eldoria.S8))
-
-                    EldoriaButton(
-                        text = if (isMax) "COMPLETADO" else "CANALIZAR",
-                        onClick = {
-                            if (canUpgrade) {
-                                viewModel.allocateTalentPoint(talent.id)
-                            }
-                        },
-                        enabled = canUpgrade,
-                        tone = if (isMax) EldoriaTone.Gold else categoryTone,
-                        size = EldoriaButtonSize.Medium,
-                        icon = if (isMax) Icons.Default.Star else Icons.Default.Bolt,
-                        testTag = "talent_upgrade_btn"
-                    )
-                }
-            }
-        } else {
-            // Empty State Instruction
-            EldoriaPanel(
-                modifier = Modifier.fillMaxWidth(),
-                edge = EldoriaEdge.Iron,
-                corner = Eldoria.R12,
-                padding = PaddingValues(4.dp)
-            ) {
-                EldoriaEmptyState(
-                    title = "Selecciona una runa estelar",
-                    message = "Toca cualquier nodo del mapa celestial para canalizar tus puntos y despertar poderes pasivos.",
-                    icon = Icons.Default.Schema,
-                    accent = Eldoria.Arcane
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(Eldoria.S24))
-        }
-    }
-}
-
-/** Línea de requisito: marca verde si se cumple, aspa roja si no. */
-@Composable
-private fun TalentRequirementRow(met: Boolean, text: String) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Icon(
-            imageVector = if (met) Icons.Default.CheckCircle else Icons.Default.Cancel,
-            contentDescription = null,
-            tint = if (met) Eldoria.Success else Eldoria.Danger,
-            modifier = Modifier.size(14.dp)
-        )
-        Spacer(modifier = Modifier.width(Eldoria.S6))
-        Text(
-            text = text,
-            style = EldoriaType.caption,
-            color = if (met) Eldoria.TextMid else Eldoria.Danger,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
+    EldoriaTalentTreeScreen(viewModel)
 }
 
 @Composable

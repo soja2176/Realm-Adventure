@@ -146,7 +146,7 @@ object EldoriaPets {
             title = "Guardiana de la Fragua",
             lore = "Duerme dentro del yunque de los herreros de Drakenhold y despierta cuando el metal canta. Su lomo mantiene el rescoldo toda la noche.",
             rarity = "RARO", paletteKey = "EMBER", sigilSeed = 11_027,
-            imageResName = "", signatureTrait = TRAIT_ESCAMA_IGNEA,
+            imageResName = "pet_fenix_cosmico_s1", signatureTrait = TRAIT_ESCAMA_IGNEA,
             baseAtk = 18, baseDef = 14, baseVit = 12, favoriteFood = "BESTIAL",
             evolutionNames = listOf("Salamandra de Forja", "Salamandra de Yunque", "Draco de Fundición")
         ),
@@ -155,7 +155,7 @@ object EldoriaPets {
             title = "Lector de Presagios",
             lore = "Sus plumas están cubiertas de runas que cambian cada noche. Lee tus conjuros antes de que los pronuncies y te ahorra el esfuerzo.",
             rarity = "RARO", paletteKey = "ARCANE", sigilSeed = 11_063,
-            imageResName = "", signatureTrait = TRAIT_VINCULO_ARCANO,
+            imageResName = "pet_dragon_sombras_s1", signatureTrait = TRAIT_VINCULO_ARCANO,
             baseAtk = 13, baseDef = 12, baseVit = 19, favoriteFood = "MISTICA",
             evolutionNames = listOf("Búho Rúnico", "Búho del Cónclave", "Oráculo Alado de Aethelgard")
         ),
@@ -164,7 +164,7 @@ object EldoriaPets {
             title = "Chispa de los Páramos",
             lore = "Nació en el rescoldo de un bosque quemado y aprendió a correr más rápido que el fuego. Nunca pisa dos veces la misma brasa.",
             rarity = "RARO", paletteKey = "EMBER", sigilSeed = 11_091,
-            imageResName = "", signatureTrait = TRAIT_ZANCADA_VELOZ,
+            imageResName = "pet_lobo_celestial_s1", signatureTrait = TRAIT_ZANCADA_VELOZ,
             baseAtk = 17, baseDef = 10, baseVit = 15, favoriteFood = "BESTIAL",
             evolutionNames = listOf("Zorro de Ceniza", "Zorro de Tres Colas", "Kitsune de Brasa")
         ),
@@ -173,7 +173,7 @@ object EldoriaPets {
             title = "Broquel Viviente",
             lore = "Su caparazón se endurece cada vez que lo golpean, de modo que agradece sinceramente cada combate difícil.",
             rarity = "RARO", paletteKey = "IRON", sigilSeed = 11_117,
-            imageResName = "", signatureTrait = TRAIT_PIEL_HIERRO,
+            imageResName = "pet_gato_estelar_s1", signatureTrait = TRAIT_PIEL_HIERRO,
             baseAtk = 10, baseDef = 22, baseVit = 16, favoriteFood = "BESTIAL",
             evolutionNames = listOf("Escarabajo Coraza", "Escarabajo de Placas", "Coloso Escarabajo de Acero")
         ),
@@ -182,7 +182,7 @@ object EldoriaPets {
             title = "Ojo de la Luna Llena",
             lore = "Sólo se deja ver cuando la luna está entera. Señala con la oreja el punto exacto donde la armadura enemiga falla.",
             rarity = "ÉPICO", paletteKey = "SILVER", sigilSeed = 12_203,
-            imageResName = "", signatureTrait = TRAIT_OJO_CERTERO,
+            imageResName = "pet_titan_cristal_s1", signatureTrait = TRAIT_OJO_CERTERO,
             baseAtk = 21, baseDef = 14, baseVit = 20, favoriteFood = "MISTICA",
             evolutionNames = listOf("Liebre Lunar", "Liebre de Marea Alta", "Heraldo de la Luna Llena")
         ),
@@ -191,7 +191,7 @@ object EldoriaPets {
             title = "Corazón del Claro",
             lore = "Un montón de piedras que el bosque decidió vestir de verde. Reparte savia curativa a manos llenas, sin entender por qué duele nada.",
             rarity = "ÉPICO", paletteKey = "VITAE", sigilSeed = 12_241,
-            imageResName = "", signatureTrait = TRAIT_CORAZON_VITAL,
+            imageResName = "pet_grifo_dorado_s1", signatureTrait = TRAIT_CORAZON_VITAL,
             baseAtk = 14, baseDef = 24, baseVit = 26, favoriteFood = "MISTICA",
             evolutionNames = listOf("Gólem de Musgo", "Gólem de Arboleda", "Guardián Primaveral de Eldoria")
         ),
@@ -200,7 +200,7 @@ object EldoriaPets {
             title = "Trueno de Cascos Blancos",
             lore = "Galopa sobre nubes cargadas y sólo toca el suelo para castigar a los injustos. Su relincho suena a descarga.",
             rarity = "ÉPICO", paletteKey = "MANA", sigilSeed = 12_277,
-            imageResName = "", signatureTrait = TRAIT_AURA_FEROZ,
+            imageResName = "pet_serpiente_astral_s1", signatureTrait = TRAIT_AURA_FEROZ,
             baseAtk = 27, baseDef = 17, baseVit = 20, favoriteFood = "MISTICA",
             evolutionNames = listOf("Kirin de Tormenta", "Kirin de Rayo Azul", "Emperador Kirin del Cielo Roto")
         ),
@@ -209,7 +209,7 @@ object EldoriaPets {
             title = "Aguijón de las Ruinas",
             lore = "Cría de mantícora criada entre columnas caídas. Todavía no ruge bien, pero su aguijón ya cumple de sobra.",
             rarity = "ÉPICO", paletteKey = "BLOOD", sigilSeed = 12_311,
-            imageResName = "", signatureTrait = TRAIT_COLMILLO_VENENOSO,
+            imageResName = "pet_behemoth_vacio_s1", signatureTrait = TRAIT_COLMILLO_VENENOSO,
             baseAtk = 29, baseDef = 15, baseVit = 17, favoriteFood = "BESTIAL",
             evolutionNames = listOf("Mantícora Menor", "Mantícora de Ruinas", "Mantícora Coronada")
         ),
@@ -218,7 +218,7 @@ object EldoriaPets {
             title = "Tres Voces, Una Luz",
             lore = "Tres bestias fundidas en cuarzo vivo por un alquimista arrepentido. Cantan a la vez y el aire se limpia de maldiciones.",
             rarity = "LEGENDARIO", paletteKey = "ARCANE", sigilSeed = 13_407,
-            imageResName = "", signatureTrait = TRAIT_BENDICION_SERENA,
+            imageResName = "pet_salamandra_forja_s1", signatureTrait = TRAIT_BENDICION_SERENA,
             baseAtk = 31, baseDef = 27, baseVit = 29, favoriteFood = "DRAGON",
             evolutionNames = listOf("Quimera de Cristal", "Quimera Prismática", "Quimera del Cónclave Eterno")
         ),
@@ -227,7 +227,7 @@ object EldoriaPets {
             title = "Sombra de la Última Luz",
             lore = "Caza en el instante exacto en que el día se rinde. Su aliento tiene el color naranja de las despedidas.",
             rarity = "LEGENDARIO", paletteKey = "EMBER", sigilSeed = 13_451,
-            imageResName = "", signatureTrait = TRAIT_AURA_FEROZ,
+            imageResName = "pet_buho_runico_s1", signatureTrait = TRAIT_AURA_FEROZ,
             baseAtk = 38, baseDef = 22, baseVit = 25, favoriteFood = "DRAGON",
             evolutionNames = listOf("Wyvern Crepuscular", "Wyvern del Ocaso", "Dragón del Último Sol")
         ),
@@ -236,7 +236,7 @@ object EldoriaPets {
             title = "Mirada de Piedra Verde",
             lore = "Sus escamas de jade valen un reino y su mirada cuesta bastante más. Envenena por lealtad, nunca por hambre.",
             rarity = "LEGENDARIO", paletteKey = "VITAE", sigilSeed = 13_487,
-            imageResName = "", signatureTrait = TRAIT_COLMILLO_VENENOSO,
+            imageResName = "pet_zorro_ceniza_s1", signatureTrait = TRAIT_COLMILLO_VENENOSO,
             baseAtk = 35, baseDef = 26, baseVit = 27, favoriteFood = "BESTIAL",
             evolutionNames = listOf("Basilisco de Jade", "Basilisco Imperial", "Rey Basilisco de Jade")
         ),
@@ -245,7 +245,7 @@ object EldoriaPets {
             title = "Batir de Tormenta",
             lore = "Cada aletazo suyo adelanta la tormenta un poco más. Los pastores de Frostgard rezan para que pase de largo.",
             rarity = "LEGENDARIO", paletteKey = "MANA", sigilSeed = 13_523,
-            imageResName = "", signatureTrait = TRAIT_ZANCADA_VELOZ,
+            imageResName = "pet_escarabajo_coraza_s1", signatureTrait = TRAIT_ZANCADA_VELOZ,
             baseAtk = 36, baseDef = 21, baseVit = 28, favoriteFood = "CELESTIAL",
             evolutionNames = listOf("Ave del Trueno", "Ave de Tempestad", "Soberana del Cielo Tronante")
         ),
@@ -254,7 +254,7 @@ object EldoriaPets {
             title = "Océano en Miniatura",
             lore = "Cabe en la palma de la mano y contiene una fosa abisal entera. Nadie sabe dónde guarda toda esa agua.",
             rarity = "ARCANO", paletteKey = "MANA", sigilSeed = 14_609,
-            imageResName = "", signatureTrait = TRAIT_GUARDIAN_LEAL,
+            imageResName = "pet_liebre_lunar_s1", signatureTrait = TRAIT_GUARDIAN_LEAL,
             baseAtk = 34, baseDef = 42, baseVit = 36, favoriteFood = "DRAGON",
             evolutionNames = listOf("Leviatán de Bolsillo", "Leviatán de Marea", "Leviatán de las Fosas Negras")
         ),
@@ -263,7 +263,7 @@ object EldoriaPets {
             title = "Círculo Sin Final",
             lore = "Se muerde la cola para no olvidar dónde empieza. Mientras el círculo aguante, tú tampoco terminas.",
             rarity = "ARCANO", paletteKey = "VITAE", sigilSeed = 14_653,
-            imageResName = "", signatureTrait = TRAIT_CORAZON_VITAL,
+            imageResName = "pet_golem_musgo_s1", signatureTrait = TRAIT_CORAZON_VITAL,
             baseAtk = 33, baseDef = 33, baseVit = 46, favoriteFood = "CELESTIAL",
             evolutionNames = listOf("Ouróboros Menor", "Ouróboros de Eras", "Ouróboros del Ciclo Eterno")
         ),
@@ -272,7 +272,7 @@ object EldoriaPets {
             title = "Portero de lo que No Vuelve",
             lore = "Vigila la puerta que separa lo vivo de lo demás. Cuando cruzas sin permiso, te acompaña de vuelta a rastras.",
             rarity = "UNIVERSAL", paletteKey = "ARCANE", sigilSeed = 15_733,
-            imageResName = "", signatureTrait = TRAIT_ALMA_FENIX,
+            imageResName = "pet_kirin_tormenta_s1", signatureTrait = TRAIT_ALMA_FENIX,
             baseAtk = 47, baseDef = 44, baseVit = 45, favoriteFood = "CELESTIAL",
             evolutionNames = listOf("Custodio del Umbral", "Custodio de la Puerta Negra", "Soberano del Umbral Final")
         ),
@@ -281,7 +281,7 @@ object EldoriaPets {
             title = "Luz que No Calienta",
             lore = "Hecho con el último resplandor de una aurora sobre Frostgard. Señala el oro enterrado porque el oro también brilla.",
             rarity = "UNIVERSAL", paletteKey = "SILVER", sigilSeed = 15_787,
-            imageResName = "", signatureTrait = TRAIT_SED_ORO,
+            imageResName = "pet_manticora_menor_s1", signatureTrait = TRAIT_SED_ORO,
             baseAtk = 45, baseDef = 38, baseVit = 48, favoriteFood = "CELESTIAL",
             evolutionNames = listOf("Espectro de Aurora", "Espectro Boreal", "Corona de Aurora Eterna")
         )

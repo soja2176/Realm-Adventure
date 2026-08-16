@@ -64,6 +64,7 @@ import com.example.ui.design.eldoriaFloat
 import com.example.ui.design.eldoriaPaletteOf
 import com.example.ui.design.eldoriaPressable
 import com.example.ui.design.eldoriaPulse
+import com.example.ui.art.EldoriaArt
 import com.example.ui.getItemImageRes
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -193,6 +194,13 @@ internal fun PetPortrait(
     framed: Boolean = true
 ) {
     val species = remember(record.speciesId) { EldoriaPets.species(record.speciesId) }
+    // Lámina por ESPECIE Y ETAPA. Se resuelve aquí, en la pieza que dibuja
+    // todos los retratos de mascota del juego — tarjetas del santuario, foco,
+    // listas — porque haberlo hecho sólo en la pantalla del foco dejaba las
+    // miniaturas con el sigilo procedural y parecía que faltaban los assets.
+    val stageArt = remember(record.speciesId, record.stage) {
+        EldoriaArt.of("${record.speciesId}_s${record.stage.coerceIn(1, 3)}")
+    }
     val art = record.imageResName.ifBlank { species?.imageResName ?: "" }
     val paletteKey = record.paletteKey.ifBlank { species?.paletteKey ?: "EMBER" }
     val palette = petPaletteOf(paletteKey)
@@ -215,6 +223,7 @@ internal fun PetPortrait(
             glowPulse = animated
         ) {
             PetPortraitBody(
+                artRes = stageArt,
                 art = art,
                 seed = seed,
                 stage = record.stage,
@@ -236,6 +245,7 @@ internal fun PetPortrait(
                 .border(Eldoria.StrokeThin, EldoriaEdge.rarity(record.rarity).brush(), shape)
         ) {
             PetPortraitBody(
+                artRes = stageArt,
                 art = art,
                 seed = seed,
                 stage = record.stage,
@@ -252,6 +262,8 @@ internal fun PetPortrait(
 
 @Composable
 private fun PetPortraitBody(
+    /** Lámina de la etapa ya resuelta. Manda sobre [art] si existe. */
+    artRes: Int?,
     art: String,
     seed: Int,
     stage: Int,
@@ -276,9 +288,10 @@ private fun PetPortraitBody(
                 center = center
             )
         }
-        if (art.isNotBlank()) {
+        val resolved = artRes ?: art.takeIf { it.isNotBlank() }?.let { getItemImageRes(it, "PET") }
+        if (resolved != null) {
             Image(
-                painter = painterResource(id = getItemImageRes(art, "PET")),
+                painter = painterResource(id = resolved),
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier

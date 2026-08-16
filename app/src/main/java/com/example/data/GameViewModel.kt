@@ -29,6 +29,11 @@ import com.example.data.content.EldoriaExpeditions
 import com.example.data.content.EldoriaPotions
 import com.example.data.content.PotionEffect
 import com.example.data.content.EldoriaPets
+import com.example.data.content.EldoriaTalentEngine
+import com.example.data.content.EldoriaTalents
+import com.example.data.content.TalentContext
+import com.example.data.content.TalentKind
+import com.example.data.content.TalentLoadout
 import com.example.data.engine.EldoriaHost
 import com.example.data.engine.EldoriaSystemsController
 import androidx.lifecycle.ViewModel
@@ -164,7 +169,18 @@ data class CombatState(
     val evasionPotency: Double = 0.0,
     /** Turnos y fracción en que se reduce el daño recibido. */
     val wardTurns: Int = 0,
-    val wardPotency: Double = 0.0
+    val wardPotency: Double = 0.0,
+
+    // ─── Talentos de un solo disparo ───
+    //
+    // No se reutiliza [secondWindUsed] a propósito: el Segundo Aliento es una
+    // pasiva de objeto y el Último Aliento un talento. Compartir la bandera
+    // haría que tener las dos cosas salvara UNA vez en vez de dos, y el jugador
+    // que invirtió puntos en el talento no entendería por qué no se dispara.
+    /** El Último Aliento (talento) sólo salva una vez por combate. */
+    val lastBreathUsed: Boolean = false,
+    /** Ya se gastó el crítico garantizado del primer golpe. */
+    val firstStrikeUsed: Boolean = false
 )
 
 data class SpecialMerchantItem(
@@ -441,40 +457,197 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         return enemy.isBoss || enemy.rarity == "CHAMPION" || enemy.rarity == "UNIVERSAL"
     }
 
+    /**
+     * Golpe aproximado del héroe, para decidir — no para mostrar.
+     *
+     * Ignora el azar, el crítico y a la mascota a propósito: el piloto sólo
+     * necesita saber si el enemigo cae ESTE turno, y una estimación optimista le
+     * haría malgastar la definitiva en un enemigo que sobrevive con un hilo.
+     * Quedarse corto sólo cuesta un turno; pasarse cuesta el recurso.
+     */
+    private fun estimateHeroHit(progress: GameProgress, state: CombatState, skill: Skill?): Int {
+        val weapon = GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)
+        val isMagic = progress.charClass == "Mago" || progress.charClass == "Clérigo"
+        val stat = when {
+            skill != null && isMagic -> progress.statInt + (weapon?.intBonus ?: 0)
+            progress.charClass == "Pícaro" -> progress.statDex + (weapon?.dexBonus ?: 0)
+            else -> progress.statStr + (weapon?.strBonus ?: 0)
+        }
+        val base = (stat * (if (skill != null) 0.9 else 0.6)) + (weapon?.dmgBonus ?: 0)
+        val mult = (skill?.damageMultiplier ?: 1.0) *
+            (1.0 + state.momentum / 200.0) *
+            (if (state.damageBuffTurns > 0) 1.0 + state.damageBuffPotency else 1.0)
+        val outputScale = EldoriaBalance.measureHero(progress) { id -> getTalentRank(id) }.outputScale
+        val raw = EldoriaBalance.scaleHeroDamage((base * mult).toInt(), outputScale)
+        val enemy = state.enemy ?: return raw
+        return EldoriaBalance.mitigate(raw, enemy.defense, progress.charLevel).coerceAtLeast(1)
+    }
+
+    /**
+     * Turno del piloto automático.
+     *
+     * El piloto viejo bebía "la primera poción del zurrón", y eso convertía un
+     * Bálsamo de Piedra de 500 de oro en un frasco de curar mal. Ahora cada
+     * decisión mira la situación: cuánta vida queda, cuánto le queda al enemigo,
+     * si la pelea va a ser larga y qué efectos hay ya puestos. El orden de las
+     * reglas ES la prioridad: lo que decide el combate va antes que lo que lo
+     * mejora.
+     */
     private fun performAutoCombatTurn(state: CombatState) {
         val progress = _progressState.value ?: return
+        val enemy = state.enemy ?: return
         val invList = GameJsonParser.listFromJson<Item>(progress.inventoryJson)
         val classSkills = GameJsonParser.listFromJson<Skill>(progress.skillsJson)
 
-        val hpPercent = state.playerCurrentHp.toFloat() / progress.maxHp.toFloat()
+        val hpPct = state.playerCurrentHp.toDouble() / progress.maxHp.coerceAtLeast(1)
+        val enemyPct = enemy.currentHp.toDouble() / enemy.maxHp.coerceAtLeast(1)
+        // "Pelea grande" = la que se va a alargar. Es el criterio que separa el
+        // frasco que te salva ahora del que te mantiene vivo diez turnos.
+        val bigFight = enemy.isBoss || enemy.rarity == "ELITE" || enemy.rarity == "CHAMPION" ||
+            enemy.rarity == "LEGENDARY" || enemy.rarity == "UNIVERSAL"
 
-        // 1. Healing logic (if HP is below 40%)
-        if (hpPercent < 0.4f) {
-            // Try to find healing skill
-            val healSkill = classSkills.firstOrNull { it.healingMultiplier > 0.0 && state.playerCurrentMp >= it.manaCost }
+        // Frascos ya identificados: sin esto habría que adivinar por el nombre en
+        // cada regla, y las pociones de partidas viejas no tienen id de catálogo.
+        val flasks = invList
+            .filter { it.type == "POTION" }
+            .map { it to EldoriaPotions.fromItem(it.id, it.name) }
+        fun flasksOf(effect: PotionEffect) = flasks.filter { it.second.effect == effect }
+
+        val healSkill = classSkills
+            .filter { it.healingMultiplier > 0.0 && state.playerCurrentMp >= it.manaCost }
+            .maxByOrNull { it.healingMultiplier }
+
+        // ── 1. Rematar. Un enemigo muerto no pega: si cae este turno, cualquier
+        // otra jugada (beber, buffear, curarse) es un turno regalado.
+        if (estimateHeroHit(progress, state, null) >= enemy.currentHp) {
+            // El básico ya basta: no se gasta maná en lo que ya está hecho.
+            executeBasicAttack()
+            return
+        }
+        val affordableDamage = classSkills
+            .filter { it.damageMultiplier > 0.0 && state.playerCurrentMp >= it.manaCost }
+        val finisher = affordableDamage
+            // A igualdad de daño se prefiere la definitiva: es la que tiene el
+            // multiplicador alto y la que menos ocasiones tiene de usarse bien.
+            .sortedWith(compareByDescending<Skill> { it.damageMultiplier }.thenByDescending { it.isUltimate })
+            .firstOrNull { estimateHeroHit(progress, state, it) >= enemy.currentHp }
+        if (finisher != null) {
+            executeSkill(finisher)
+            return
+        }
+
+        // ── 2. Vida crítica: se cura con lo más gordo que haya. Aquí no se
+        // economiza — la Gran Poción guardada "para luego" no sirve de nada si
+        // el luego no llega.
+        if (hpPct < 0.25) {
+            val biggest = flasksOf(PotionEffect.RESTORE).maxByOrNull { it.second.healPct }
+            if (biggest != null) {
+                usePotionCombat(biggest.first.id)
+                return
+            }
             if (healSkill != null) {
                 executeSkill(healSkill)
                 return
             }
+        }
 
-            // Otherwise try potion
-            val hasPotion = invList.any { it.type == "POTION" }
-            if (hasPotion) {
-                usePotionCombat()
+        // ── 3. Curación normal. La habilidad va antes que el frasco: el maná se
+        // recupera solo entre combates y los frascos hay que comprarlos.
+        if (hpPct < 0.40 && healSkill != null) {
+            executeSkill(healSkill)
+            return
+        }
+
+        // ── 4. Vida media-baja en pelea larga: regeneración. Curar de golpe aquí
+        // sería desperdiciar la mitad del frasco, porque el daño va a seguir
+        // llegando; el elixir cubre los turnos que quedan.
+        val longFight = bigFight || enemyPct > 0.50
+        if (hpPct < 0.45 && longFight && state.regenTurns == 0) {
+            val regen = flasksOf(PotionEffect.REGEN).firstOrNull()
+            if (regen != null) {
+                usePotionCombat(regen.first.id)
+                return
+            }
+        }
+        // Sin elixir a mano, el frasco de curar sigue siendo mejor que morirse.
+        if (hpPct < 0.40) {
+            val restore = flasksOf(PotionEffect.RESTORE).maxByOrNull { it.second.healPct }
+            if (restore != null) {
+                usePotionCombat(restore.first.id)
                 return
             }
         }
 
-        // 2. Offense logic: Use available damaging skills
-        val damageSkill = classSkills
-            .filter { it.damageMultiplier > 0.0 && state.playerCurrentMp >= it.manaCost }
+        // ── 5. Rematar con Filtro de Furia. Se bebe cuando el enemigo ya está
+        // por debajo del 35 %: ahí los cuatro turnos de buff se aprovechan
+        // enteros, mientras que beberlo al principio se gasta en la fase larga.
+        if (enemyPct < 0.35 && state.damageBuffTurns == 0) {
+            val fury = flasksOf(PotionEffect.DAMAGE).firstOrNull()
+            if (fury != null) {
+                usePotionCombat(fury.first.id)
+                return
+            }
+        }
+
+        // ── 6. Preparación contra un enemigo grande, y sólo con la vida sana:
+        // un buff defensivo cuesta un turno, y ese turno sólo se puede pagar
+        // cuando no hay una emergencia encima. Nunca se bebe un efecto que ya
+        // está activo, porque no se acumula: sería tirar el frasco.
+        if (bigFight && hpPct >= 0.60) {
+            if (state.wardTurns == 0) {
+                val stone = flasksOf(PotionEffect.DEFENSE).firstOrNull()
+                if (stone != null) {
+                    usePotionCombat(stone.first.id)
+                    return
+                }
+            }
+            if (state.evasionTurns == 0) {
+                val shadow = flasksOf(PotionEffect.EVASION).firstOrNull()
+                if (shadow != null) {
+                    usePotionCombat(shadow.first.id)
+                    return
+                }
+            }
+        }
+
+        // ── 7. Anti-curación contra lo que se cura. Un enemigo que regenera
+        // convierte el combate en una carrera imposible: cortarle la curación
+        // vale más que un turno de daño, aunque el número que sale sea menor.
+        val enemyHeals = bigFight ||
+            state.enemyArchetype == "SANADOR_CORRUPTO" || state.enemyArchetype == "NO_MUERTO"
+        if (enemyHeals && state.enemyAntiHealTurns == 0) {
+            val curse = affordableDamage.firstOrNull { it.isAntiHeal }
+            if (curse != null) {
+                executeSkill(curse)
+                return
+            }
+        }
+
+        // ── 8. Ofensiva con gestión de maná.
+        //
+        // Si la mejor habilidad no se puede pagar, se pega a mano en vez de
+        // quemar el maná en una habilidad mediocre: guardar dos turnos para
+        // lanzar la buena hace más daño total que gastar en la mala tres veces.
+        // Y si hay curación disponible, se le reserva su coste: quedarse sin
+        // maná para curar es la forma más habitual de perder un combate ganado.
+        val bestOverall = classSkills.filter { it.damageMultiplier > 0.0 }
             .maxByOrNull { it.damageMultiplier }
-        if (damageSkill != null) {
-            executeSkill(damageSkill)
+        val healReserve = classSkills
+            .filter { it.healingMultiplier > 0.0 }
+            .minOfOrNull { it.manaCost } ?: 0
+        val keepReserve = healReserve > 0 && hpPct < 0.60
+        val bestAffordable = affordableDamage
+            .filter { !keepReserve || state.playerCurrentMp - it.manaCost >= healReserve }
+            .maxByOrNull { it.damageMultiplier }
+
+        if (bestAffordable != null &&
+            (bestOverall == null || bestAffordable.damageMultiplier >= bestOverall.damageMultiplier * 0.7)
+        ) {
+            executeSkill(bestAffordable)
             return
         }
 
-        // 3. Fallback: Basic attack
+        // ── 9. A mano: o no llega el maná, o lo que llega no merece gastarlo.
         executeBasicAttack()
     }
 
@@ -2142,6 +2315,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             // Talent calculation
             val talentDmgMultiplier = 1.0 + (getTalentRank("t_1") * 0.04)
 
+            // Árbol nuevo: el contexto se saca del estado con el que se abre el
+            // golpe, y todo lo que sume se aplica ENCIMA del talento viejo.
+            val talents = heroTalentLoadout()
+            val tctx = talentContextOf(currentCombat, progress)
+
             val baseDmg = (modifierStat * 0.6) + weaponDmg + Random.nextInt(3, 8)
             // El daño del héroe crece en centenas mientras su vida crece en
             // decenas de miles; este factor pone las dos en la misma escala.
@@ -2172,6 +2350,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 finalDmg = (finalDmg * (1.0 + currentCombat.damageBuffPotency)).toInt()
             }
 
+            // ─── Talentos ofensivos ───
+            // Los tres factores se multiplican por separado en vez de sumarse:
+            // así el que sube daño global, el que sube daño físico y el que sube
+            // sólo el golpe básico se premian por combinarse, que es justo la
+            // decisión que el árbol quiere que el jugador tome.
+            finalDmg = (finalDmg *
+                (1.0 + talents.value(TalentKind.DANO_TOTAL, tctx)) *
+                (1.0 + talents.value(TalentKind.DANO_FISICO, tctx)) *
+                (1.0 + talents.value(TalentKind.DANO_BASICO, tctx))).toInt()
+
             // ─── Pasivas ofensivas del equipo legendario ───
             val loadout = EldoriaPassives.loadoutOf(progress, getAllEquippedItems(progress))
             // Furia Creciente: premia aguantar. Se corta a los ocho turnos para
@@ -2191,11 +2379,19 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             // Armadura del enemigo: misma curva de rendimientos decrecientes que
             // se aplica al héroe, para que las dos mitades del combate midan igual.
             val enemyDef = currentCombat.enemy?.defense ?: 0
-            finalDmg = EldoriaBalance.mitigate(finalDmg, enemyDef, progress.charLevel)
-                .coerceAtLeast(3)
+            // La penetración de talento entra por el mismo hueco que la de los
+            // movimientos enemigos: es el porcentaje del golpe que se salta la
+            // curva de armadura, no un descuento plano sobre la defensa.
+            finalDmg = EldoriaBalance.mitigate(
+                finalDmg, enemyDef, progress.charLevel,
+                talents.value(TalentKind.PENETRACION, tctx).coerceIn(0.0, 0.85)
+            ).coerceAtLeast(3)
 
             // Critical strike chance
-            val baseCrit = 5 + (progress.statDex * 0.4) + (getTalentRank("t_8") * 3)
+            val baseCrit = 5 + (progress.statDex * 0.4) + (getTalentRank("t_8") * 3) +
+                // El árbol da la probabilidad en fracción y aquí se trabaja en
+                // porcentaje: un talento de 0,03 vale tres puntos de crítico.
+                (talents.value(TalentKind.CRIT_PROB, tctx) * 100.0)
             val raceCritBonus = when {
                 progress.charRace == "Elfo" && progress.charLevel >= 100 -> 40
                 progress.charRace == "Elfo" && progress.charLevel >= 50 -> 25
@@ -2208,9 +2404,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 else -> 0
             }
             val critChance = baseCrit + raceCritBonus
-            val isCrit = Random.nextInt(100) < critChance
+            // Primer Golpe Crítico: el turno de apertura no se sortea. Un talento
+            // que "a veces" abre con crítico no se nota; garantizarlo es lo que
+            // hace que valga la pena planear el primer golpe.
+            val guaranteedFirst = !currentCombat.firstStrikeUsed &&
+                talents.has(TalentKind.PRIMER_GOLPE_CRITICO, tctx)
+            val isCrit = guaranteedFirst || Random.nextInt(100) < critChance
             if (isCrit) {
-                finalDmg = (finalDmg * 1.8).toInt()
+                finalDmg = (finalDmg * (1.8 + talents.value(TalentKind.CRIT_MULT, tctx))).toInt()
                 SoundManager.playCriticalHit()
             } else {
                 SoundManager.playSwordSlash()
@@ -2241,6 +2442,25 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 if (siphoned > 0) {
                     currentPlayerMp = minOf(progress.maxMp, currentPlayerMp + siphoned)
                     log += " 🔮 Sanguijuela Arcana te devuelve $siphoned MP."
+                }
+            }
+            // ─── Robo de vida y maná del árbol ───
+            // Se cobra sobre el daño YA mitigado: robar sobre el daño bruto
+            // convertiría a los enemigos acorazados en la mejor fuente de vida.
+            val talentDrain = talents.value(TalentKind.ROBO_VIDA, tctx)
+            if (talentDrain > 0.0) {
+                val drained = (finalDmg * talentDrain).toInt()
+                if (drained > 0) {
+                    currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + drained)
+                    log += " 🩸 Tus talentos de sangre te devuelven $drained HP."
+                }
+            }
+            val talentSiphon = talents.value(TalentKind.ROBO_MANA, tctx)
+            if (talentSiphon > 0.0) {
+                val siphoned = (finalDmg * talentSiphon).toInt()
+                if (siphoned > 0) {
+                    currentPlayerMp = minOf(progress.maxMp, currentPlayerMp + siphoned)
+                    log += " 🔮 Tus talentos arcanos te devuelven $siphoned MP."
                 }
             }
             if (progress.charRace == "Orco" && progress.charLevel >= 20) {
@@ -2280,13 +2500,17 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 )
                 val petHeal = (((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult) * 0.40f).toInt().coerceAtLeast(4)
 
-                updatedEnemyHp = maxOf(0, updatedEnemyHp - petDmg)
+                // Rama Bestia: multiplica el mordisco de la mascota, no el del
+                // héroe, para que invertir ahí cambie de verdad cómo se pelea.
+                val petBite = (petDmg * (1.0 + talents.value(TalentKind.DANO_MASCOTA, tctx))).toInt()
+
+                updatedEnemyHp = maxOf(0, updatedEnemyHp - petBite)
                 enemy.currentHp = updatedEnemyHp
 
                 val currentPetSatiety = maxOf(0, progress.petSatiety - 1)
                 currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + petHeal)
 
-                log += "\n🐾 [Mascota ${playerPet.name} Niv.${progress.petLevel}] ¡Ataca asestando +$petDmg de daño a ${enemy.name} y te cura +$petHeal HP!"
+                log += "\n🐾 [Mascota ${playerPet.name} Niv.${progress.petLevel}] ¡Ataca asestando +$petBite de daño a ${enemy.name} y te cura +$petHeal HP!"
 
                 working = working.copy(
                     currentHp = currentPlayerHp,
@@ -2301,7 +2525,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 damageFeedbackEnemy = "-$finalDmg HP$critLabel",
                 combatLogs = currentCombat.combatLogs + log,
                 activeAnimation = "PLAYER_ATTACK",
-                turnsFought = currentCombat.turnsFought + 1
+                turnsFought = currentCombat.turnsFought + 1,
+                // El primer golpe ya se gastó, aunque el crítico haya salido por
+                // suerte: si no se marcara aquí, el talento seguiría regalando
+                // críticos garantizados hasta el fin del combate.
+                firstStrikeUsed = true
             )
 
             // Bloodlust talent trigger (t_3)
@@ -2364,6 +2592,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             // Spells power talent
             val spellMult = 1.0 + (getTalentRank("t_4") * 0.04)
 
+            // Árbol nuevo, mismo criterio que en el golpe básico: se suma encima.
+            val talents = heroTalentLoadout()
+            val tctx = talentContextOf(currentCombat, progress)
+
             // Mismo reescalado que el golpe básico: si sólo se aplicara a uno de
             // los dos, las habilidades se volverían inútiles. Lo comparten el
             // daño de la habilidad y el acoso de la mascota que la acompaña.
@@ -2397,21 +2629,50 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val momentumMult = 1.0 + (currentCombat.momentum / 200.0)
                 val furyMult = if (currentCombat.damageBuffTurns > 0)
                     1.0 + currentCombat.damageBuffPotency else 1.0
+                // La rama mágica o la física según con qué pegue la clase: un
+                // Mago no debería sacar nada de un talento de daño físico, y al
+                // revés. Es lo que hace que las ramas signifiquen algo por clase.
+                val schoolMult = if (isMagic)
+                    1.0 + talents.value(TalentKind.DANO_MAGICO, tctx)
+                else
+                    1.0 + talents.value(TalentKind.DANO_FISICO, tctx)
+                val talentSkillMult =
+                    (1.0 + talents.value(TalentKind.DANO_TOTAL, tctx)) *
+                    schoolMult *
+                    (1.0 + talents.value(TalentKind.DANO_HABILIDAD, tctx))
+
                 var finalSkillDmg = EldoriaBalance.scaleHeroDamage(
                     (baseSkillDmg * skill.damageMultiplier * spellMult * raceDmgMult *
-                        momentumMult * furyMult).toInt(),
+                        momentumMult * furyMult * talentSkillMult).toInt(),
                     outputScale
                 )
 
-                // Defense mitigation — misma curva que el ataque básico.
+                // Defense mitigation — misma curva que el ataque básico, con la
+                // misma penetración: si sólo perforara el golpe básico, invertir
+                // en penetración castigaría a las clases que viven de habilidades.
                 val enemyDef = currentCombat.enemy?.defense ?: 0
-                finalSkillDmg = EldoriaBalance.mitigate(finalSkillDmg, enemyDef, progress.charLevel)
-                    .coerceAtLeast(4)
+                finalSkillDmg = EldoriaBalance.mitigate(
+                    finalSkillDmg, enemyDef, progress.charLevel,
+                    talents.value(TalentKind.PENETRACION, tctx).coerceIn(0.0, 0.85)
+                ).coerceAtLeast(4)
+
+                // Primer Golpe Crítico: vale igual si abres con habilidad. Si sólo
+                // contara el ataque básico, el talento sería una trampa para el
+                // que juega lanzando su mejor conjuro de salida.
+                var critLabel = ""
+                if (!currentCombat.firstStrikeUsed &&
+                    talents.has(TalentKind.PRIMER_GOLPE_CRITICO, tctx)
+                ) {
+                    finalSkillDmg =
+                        (finalSkillDmg * (1.8 + talents.value(TalentKind.CRIT_MULT, tctx))).toInt()
+                    critLabel = " ¡CRÍTICO!"
+                    SoundManager.playCriticalHit()
+                }
 
                 currentEnemyHp = maxOf(0, currentEnemyHp - finalSkillDmg)
                 currentCombat.enemy?.currentHp = currentEnemyHp
-                damageFeedbackEnemy = "-$finalSkillDmg HP (${skill.name})"
-                log = "Usas ${skill.name} contra ${currentCombat.enemy?.name} e infliges $finalSkillDmg de daño."
+                damageFeedbackEnemy = "-$finalSkillDmg HP (${skill.name})$critLabel"
+                log = "Usas ${skill.name} contra ${currentCombat.enemy?.name} e infliges $finalSkillDmg de daño.$critLabel"
             }
 
             if (skill.healingMultiplier > 0.0) {
@@ -2451,12 +2712,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 )
                 val petHeal = (((playerPet.hpRegen * 2 + progress.petLevel * 6 + playerPet.conBonus * 0.5 + extraHeal + Random.nextInt(8, 15)) * satietyMult) * 0.40f).toInt().coerceAtLeast(4)
 
-                currentEnemyHp = maxOf(0, currentEnemyHp - petDmg)
+                // Mismo bono de bestia que en el turno de ataque básico: la
+                // mascota no pega menos por acompañar a una habilidad.
+                val petBite = (petDmg * (1.0 + talents.value(TalentKind.DANO_MASCOTA, tctx))).toInt()
+
+                currentEnemyHp = maxOf(0, currentEnemyHp - petBite)
                 enemyObj.currentHp = currentEnemyHp
 
                 currentPlayerHp = minOf(progress.maxHp, currentPlayerHp + petHeal)
 
-                log += "\n🐾 [Mascota ${playerPet.name} Niv.${progress.petLevel}] ¡Ataca coordinadamente con tu habilidad asestando +$petDmg de daño y te cura +$petHeal HP!"
+                log += "\n🐾 [Mascota ${playerPet.name} Niv.${progress.petLevel}] ¡Ataca coordinadamente con tu habilidad asestando +$petBite de daño y te cura +$petHeal HP!"
             }
 
             // Synchronize player health and mana to database
@@ -2475,7 +2740,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 damageFeedbackPlayer = damageFeedbackPlayer,
                 combatLogs = currentCombat.combatLogs + log,
                 activeAnimation = if (skill.healingMultiplier > 0.0) "PLAYER_HEAL" else "PLAYER_MAGIC",
-                lastSkillId = skill.id
+                lastSkillId = skill.id,
+                // Un turno gastado en habilidad es un turno peleado: sin esto,
+                // las condiciones de "combate largo" nunca se cumplirían para
+                // quien juega lanzando conjuros.
+                turnsFought = currentCombat.turnsFought + 1,
+                firstStrikeUsed = true
             )
 
             kotlinx.coroutines.delay(1000)
@@ -2518,7 +2788,21 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
         viewModelScope.launch {
             SoundManager.playHealPotion()
-            invList.removeAt(potionIndex)
+
+            // ─── Talentos de alquimia ───
+            // POTENCIA escala lo que hace el frasco y DURACIÓN los turnos que
+            // aguanta; se leen antes de resolver el efecto para que la misma
+            // poción valga más en manos de quien invirtió en la rama.
+            val talents = heroTalentLoadout()
+            val tctx = talentContextOf(currentCombat, progress)
+            val potency = 1.0 + talents.value(TalentKind.POCION_POTENCIA, tctx)
+            val extraTurns = talents.value(TalentKind.POCION_DURACION, tctx).toInt()
+
+            // AHORRO: a veces el frasco no se gasta. Se tira ANTES de aplicar el
+            // efecto para no tener que deshacer nada, y el jugador ve el efecto
+            // completo igual: lo único que cambia es si el frasco vuelve al zurrón.
+            val saved = Random.nextDouble() < talents.value(TalentKind.POCION_AHORRO, tctx)
+            if (!saved) invList.removeAt(potionIndex)
 
             var newHp = currentCombat.playerCurrentHp
             var newMp = currentCombat.playerCurrentMp
@@ -2537,43 +2821,53 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             var wardT = currentCombat.wardTurns
             var wardP = currentCombat.wardPotency
 
+            // Valores ya escalados por los talentos. La evasión se corta al 75 %
+            // porque una esquiva casi segura deja al enemigo sin turno y el
+            // combate se vuelve una animación en vez de una pelea.
+            val effTurns = spec.turns + extraTurns
+            val effPotency = spec.potency * potency
+
             when (spec.effect) {
                 PotionEffect.RESTORE -> {
-                    val heal = (progress.maxHp * spec.healPct).toInt()
-                    val mana = (progress.maxMp * spec.manaPct).toInt()
+                    val heal = (progress.maxHp * spec.healPct * potency).toInt()
+                    val mana = (progress.maxMp * spec.manaPct * potency).toInt()
                     newHp = minOf(progress.maxHp, newHp + heal)
                     newMp = minOf(progress.maxMp, newMp + mana)
                     feedback = "+$heal HP / +$mana MP"
                     log = "Bebes ${spec.name}: recuperas $heal de salud y $mana de maná."
                 }
                 PotionEffect.REGEN -> {
-                    regenT = maxOf(regenT, spec.turns)
-                    regenP = maxOf(regenP, spec.potency)
+                    regenT = maxOf(regenT, effTurns)
+                    regenP = maxOf(regenP, effPotency)
                     feedback = "REGENERACIÓN"
-                    log = "Bebes ${spec.name}: te curarás un ${(spec.potency * 100).toInt()} % " +
-                        "al principio de cada turno durante ${spec.turns} turnos."
+                    log = "Bebes ${spec.name}: te curarás un ${(effPotency * 100).toInt()} % " +
+                        "al principio de cada turno durante $effTurns turnos."
                 }
                 PotionEffect.DAMAGE -> {
-                    dmgT = maxOf(dmgT, spec.turns)
-                    dmgP = maxOf(dmgP, spec.potency)
-                    feedback = "+${(spec.potency * 100).toInt()} % DAÑO"
-                    log = "Bebes ${spec.name}: tus golpes hacen un ${(spec.potency * 100).toInt()} % " +
-                        "más de daño durante ${spec.turns} turnos."
+                    dmgT = maxOf(dmgT, effTurns)
+                    dmgP = maxOf(dmgP, effPotency)
+                    feedback = "+${(effPotency * 100).toInt()} % DAÑO"
+                    log = "Bebes ${spec.name}: tus golpes hacen un ${(effPotency * 100).toInt()} % " +
+                        "más de daño durante $effTurns turnos."
                 }
                 PotionEffect.EVASION -> {
-                    evaT = maxOf(evaT, spec.turns)
-                    evaP = maxOf(evaP, spec.potency)
-                    feedback = "+${(spec.potency * 100).toInt()} % EVASIÓN"
-                    log = "Bebes ${spec.name}: esquivarás por completo un ${(spec.potency * 100).toInt()} % " +
-                        "de los golpes durante ${spec.turns} turnos."
+                    evaT = maxOf(evaT, effTurns)
+                    evaP = maxOf(evaP, effPotency.coerceAtMost(0.75))
+                    feedback = "+${(evaP * 100).toInt()} % EVASIÓN"
+                    log = "Bebes ${spec.name}: esquivarás por completo un ${(evaP * 100).toInt()} % " +
+                        "de los golpes durante $effTurns turnos."
                 }
                 PotionEffect.DEFENSE -> {
-                    wardT = maxOf(wardT, spec.turns)
-                    wardP = maxOf(wardP, spec.potency)
-                    feedback = "-${(spec.potency * 100).toInt()} % DAÑO RECIBIDO"
-                    log = "Bebes ${spec.name}: recibes un ${(spec.potency * 100).toInt()} % menos " +
-                        "de daño durante ${spec.turns} turnos."
+                    wardT = maxOf(wardT, effTurns)
+                    wardP = maxOf(wardP, effPotency.coerceAtMost(0.75))
+                    feedback = "-${(wardP * 100).toInt()} % DAÑO RECIBIDO"
+                    log = "Bebes ${spec.name}: recibes un ${(wardP * 100).toInt()} % menos " +
+                        "de daño durante $effTurns turnos."
                 }
+            }
+
+            if (saved) {
+                log += " ✨ Apuras el frasco sin gastarlo: aún te queda."
             }
 
             val updatedProgress = progress.copy(
@@ -2731,20 +3025,29 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         var momentum = state.momentum
         var counterDealt = 0
 
+        // Ímpetu de talento: multiplica lo que GANA cada parada en vez de subir
+        // el techo. Así el talento premia parar bien —que es la jugada que
+        // queremos enseñar— y no simplemente aguantar turnos.
+        val talents = heroTalentLoadout()
+        val tctx = talentContextOf(state, progress)
+        val momentumMult = 1.0 + talents.value(TalentKind.IMPETU_GANANCIA, tctx)
+
         when (grade) {
             "PERFECTO" -> {
                 pendingReactionMitigation = 0f
                 pendingReactionCounter = true
                 counterDealt = counterAttackDamage(progress, enemy, state.momentum)
                 enemy.currentHp = maxOf(0, enemy.currentHp - counterDealt)
-                momentum = (momentum + 25).coerceAtMost(100)
-                log = "🛡️ ¡PARADA PERFECTA! Desvías ${intentLabel(pendingEnemyMove).lowercase()} y contraatacas por $counterDealt de daño. (+25 de ímpetu)"
+                val gained = (25 * momentumMult).toInt()
+                momentum = (momentum + gained).coerceAtMost(100)
+                log = "🛡️ ¡PARADA PERFECTA! Desvías ${intentLabel(pendingEnemyMove).lowercase()} y contraatacas por $counterDealt de daño. (+$gained de ímpetu)"
                 SoundManager.playCriticalHit()
             }
             "BUENO" -> {
                 pendingReactionMitigation = 0.5f
-                momentum = (momentum + 10).coerceAtMost(100)
-                log = "🛡️ Bloqueas a tiempo: el golpe pierde la mitad de su fuerza. (+10 de ímpetu)"
+                val gained = (10 * momentumMult).toInt()
+                momentum = (momentum + gained).coerceAtMost(100)
+                log = "🛡️ Bloqueas a tiempo: el golpe pierde la mitad de su fuerza. (+$gained de ímpetu)"
                 SoundManager.playSwordSlash()
             }
             else -> {
@@ -2912,8 +3215,17 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             // orden a su bestia, y ese HP/MP/ímpetu no puede perderse aquí.
             val live = _combatState.value
 
+            // Los talentos del turno enemigo se resuelven contra el estado VIVO:
+            // si el jugador quedó a un hilo de vida, los talentos de "vida baja"
+            // tienen que estar ya activos para el golpe que viene.
+            val talents = heroTalentLoadout()
+            val tctx = talentContextOf(live, progress)
+
             // Dodge check
             val dodgeChance = 3 + (progress.statDex * 0.3) + (getTalentRank("t_7") * 4) +
+                // La esquiva de talento se suma como la del Tónico: son puntos
+                // porcentuales sobre la misma tirada, no una tirada aparte.
+                (talents.value(TalentKind.ESQUIVA, tctx) * 100.0) +
                 // Tónico de Sombras: se SUMA a tu esquiva en vez de sustituirla,
                 // para que el Pícaro siga siendo el que mejor lo aprovecha.
                 (if (live.evasionTurns > 0) live.evasionPotency * 100.0 else 0.0)
@@ -2937,6 +3249,11 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             val armorPen = EldoriaBalance.armorPenOf(skillChosen) *
                 (if (loadout.aegis > 0.0) 0.5 else 1.0)
             val talentGuard = if (getTalentRank("t_6") > 0) 0.85 else 1.0
+            // Reducción del árbol. Con suelo del 20 % del golpe: una reducción
+            // que pueda llegar al 100 % convierte al héroe en inmune y deja el
+            // combate sin salida, igual que pasaba con la mitigación plana vieja.
+            val treeGuard = (1.0 - talents.value(TalentKind.REDUCCION_DANO, tctx))
+                .coerceIn(0.20, 1.0)
             val aegisGuard = 1.0 - loadout.aegis
             // El jefe enfurecido pega más fuerte mientras le dura la fase.
             val enrageMult = if (live.enrageTurns > 0) 1.35 else 1.0
@@ -2945,7 +3262,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 val raw = ((baseDmg * multiplier * enrageMult).toInt() + (progress.maxHp * floorHp).toInt())
                 val hit = EldoriaBalance.mitigate(raw, playerDefense, enemy.level, pen)
                 // Techo: ningún golpe se lleva más de lo que su rareza permite.
-                return EldoriaBalance.capHit((hit * talentGuard * aegisGuard).toInt(), progress.maxHp, enemy.rarity)
+                return EldoriaBalance.capHit((hit * talentGuard * treeGuard * aegisGuard).toInt(), progress.maxHp, enemy.rarity)
                     .coerceAtLeast(1)
             }
 
@@ -3090,6 +3407,18 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 logMsg += " ✨ ¡SEGUNDO ALIENTO! Te levantas con $newHp HP."
             }
 
+            // ─── Último Aliento (talento): la segunda red, una vez por combate ───
+            // Se comprueba DESPUÉS del Segundo Aliento y con su propia bandera:
+            // el que pagó puntos por el talento Y lleva el objeto legendario
+            // espera dos salvadas, no una.
+            var lastBreathUsed = live.lastBreathUsed
+            val lastBreath = talents.value(TalentKind.ULTIMO_ALIENTO, tctx)
+            if (newHp <= 0 && !lastBreathUsed && lastBreath > 0.0) {
+                newHp = (progress.maxHp * lastBreath).toInt().coerceAtLeast(1)
+                lastBreathUsed = true
+                logMsg += " 🕯️ ¡ÚLTIMO ALIENTO! Te niegas a caer y aguantas con $newHp HP."
+            }
+
             // Dwarf Level 20+ Reflect passive
             var enemyHpAfterReflect = enemy.currentHp
             var reflectLog = ""
@@ -3100,6 +3429,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - thornsDmg)
                 enemy.currentHp = enemyHpAfterReflect
                 logMsg += " 🌵 Las Espinas de Hierro devuelven $thornsDmg de daño."
+            }
+            // Espinas del árbol: se cobran sobre el daño que TE llegó, así que
+            // esquivar o parar también anula la devolución. Es coherente con que
+            // sean un castigo por golpearte, no una fuente de daño pasiva.
+            val treeThorns = talents.value(TalentKind.ESPINAS, tctx)
+            if (treeThorns > 0.0 && finalDmg > 0 && !dodged) {
+                val spikes = (finalDmg * treeThorns).toInt().coerceAtLeast(1)
+                enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - spikes)
+                enemy.currentHp = enemyHpAfterReflect
+                logMsg += " 🌵 Tus espinas devuelven $spikes de daño."
             }
             if (progress.charRace == "Enano" && progress.charLevel >= 20 && finalDmg > 0 && !dodged) {
                 val reflectPct = when {
@@ -3130,9 +3469,14 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             if (reflectLog.isNotEmpty()) logMsg += reflectLog
             if (humanHealLog.isNotEmpty()) logMsg += humanHealLog
 
-            val regenHpVal = getHpRegenerationValue(progress)
-            val regenMpVal = getMpRegenerationValue(progress)
-            
+            // Regeneración por turno: la del equipo más la del árbol. Los
+            // talentos dan FRACCIÓN de la barra, no puntos planos, porque un
+            // "+10 HP por turno" deja de significar nada a nivel 80.
+            val regenHpVal = getHpRegenerationValue(progress) +
+                (progress.maxHp * talents.value(TalentKind.REGEN_VIDA_TURNO, tctx)).toInt()
+            val regenMpVal = getMpRegenerationValue(progress) +
+                (progress.maxMp * talents.value(TalentKind.REGEN_MANA_TURNO, tctx)).toInt()
+
             var finalPlayerHp = if (afterHealHp > 0) minOf(progress.maxHp, afterHealHp + regenHpVal) else 0
             val afterRegenMp = if (afterHealHp > 0) minOf(progress.maxMp, newPlayerMp + regenMpVal) else newPlayerMp
             
@@ -3176,12 +3520,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                     (((pet.dmgBonus * 0.9 + progress.charLevel * 6 + progress.petLevel * 18 + pet.strBonus * 0.5 + extraDmg + Random.nextInt(15, 35)) * satietyMult) * 0.40f).toInt().coerceAtLeast(14),
                     EldoriaBalance.measureHero(progress) { id -> getTalentRank(id) }.outputScale
                 )
+                // El acoso también es daño de mascota: dejarlo fuera del talento
+                // haría que la rama Bestia rindiera distinto según de qué turno
+                // viniera el mordisco, que es exactamente lo que confunde.
+                val petHarass = (petDmg * (1.0 + talents.value(TalentKind.DANO_MASCOTA, tctx))).toInt()
 
-                enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - petDmg)
+                enemyHpAfterReflect = maxOf(0, enemyHpAfterReflect - petHarass)
                 enemy.currentHp = enemyHpAfterReflect
 
                 currentPetSatiety = maxOf(0, progress.petSatiety - 1)
-                updatedLogMsg += "\n🐾 [Mascota ${pet.name} Niv.${progress.petLevel}] Acosa a ${enemy.name} por $petDmg de daño. (Saciedad: $currentPetSatiety%)"
+                updatedLogMsg += "\n🐾 [Mascota ${pet.name} Niv.${progress.petLevel}] Acosa a ${enemy.name} por $petHarass de daño. (Saciedad: $currentPetSatiety%)"
             }
 
             // Synchronize with database so stats screens and HUDs are updated
@@ -3254,6 +3602,7 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                 damageFeedbackPlayer = feedbackText,
                 runeShieldLeft = shieldLeft,
                 secondWindUsed = secondWindUsed,
+                lastBreathUsed = lastBreathUsed,
                 bossPhase = bossPhase,
                 enrageTurns = enrageTurns,
                 combatLogs = settled.combatLogs + updatedLogMsg + phaseLog + regenLog,
@@ -3310,8 +3659,16 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             else -> 1.0
         }
 
-        val goldReward = (baseGoldReward * rewardMultiplier)
-        val expReward = (baseExpReward * rewardMultiplier).toInt()
+        // Talentos de Fortuna. El contexto se toma del combate que se acaba de
+        // ganar, así que un talento de "oro contra grandes" mira al bicho que de
+        // verdad cayó y no a un contexto vacío.
+        val talents = heroTalentLoadout()
+        val tctx = talentContextOf(currentCombat, progress)
+
+        val goldReward = (baseGoldReward * rewardMultiplier) *
+            (1.0 + talents.value(TalentKind.ORO, tctx))
+        val expReward = (baseExpReward * rewardMultiplier *
+            (1.0 + talents.value(TalentKind.EXP, tctx))).toInt()
 
         // Drop generation rate calibrator
         val isBoss = enemy.isBoss
@@ -4509,6 +4866,46 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     }
 
     // --- TALENTS ALLOCATION ---
+    /**
+     * Rangos invertidos del heroe, indexados por id de talento.
+     *
+     * `talentsJson` guarda una lista de [Talent], pero de las partidas viejas
+     * solo trae los nueve talentos originales. El arbol de raza tiene cien, asi
+     * que aqui se LEE lo guardado y se completa con lo que falte en vez de dar
+     * por hecho que la lista esta al dia: al abrir el arbol nuevo con una
+     * partida vieja, ninguno de los cien ids existia todavia y asignar puntos
+     * fallaba en silencio.
+     */
+    private fun talentRanksOf(progress: GameProgress): MutableMap<String, Int> {
+        val saved = GameJsonParser.listFromJson<Talent>(progress.talentsJson)
+        return saved.associate { it.id to it.currentRank }.toMutableMap()
+    }
+
+    /** Persiste los rangos como lista de [Talent], que es el formato guardado. */
+    private fun talentJsonFrom(race: String, ranks: Map<String, Int>): String {
+        val defs = EldoriaTalents.forRace(race)
+        val fromTree = defs.map { def ->
+            Talent(
+                id = def.id,
+                name = def.name,
+                description = def.description,
+                maxRank = def.maxRank,
+                currentRank = ranks[def.id] ?: 0,
+                category = def.branch.name,
+                prerequisiteId = def.prerequisiteId,
+                row = def.tier,
+                col = 1
+            )
+        }
+        // Los talentos viejos (t_1..t_9) se conservan aunque ya no se muestren:
+        // siguen leidos por el combate y borrarlos quitaria poder a quien ya los
+        // tenia puestos.
+        val treeIds = defs.map { it.id }.toSet()
+        val legacy = GameJsonParser.listFromJson<Talent>(_progressState.value?.talentsJson ?: "")
+            .filter { it.id !in treeIds }
+        return GameJsonParser.listToJson(fromTree + legacy)
+    }
+
     fun allocateTalentPoint(talentId: String) {
         val progress = _progressState.value ?: return
         if (progress.talentPointsAvailable <= 0) {
@@ -4516,32 +4913,43 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             return
         }
 
-        val talentList = GameJsonParser.listFromJson<Talent>(progress.talentsJson).toMutableList()
-        val index = talentList.indexOfFirst { it.id == talentId }
-        if (index == -1) return
+        val def = EldoriaTalents.def(talentId)
+        if (def == null) {
+            showNotification("Ese talento no pertenece a la red de tu raza.")
+            return
+        }
 
-        val talent = talentList[index]
+        val ranks = talentRanksOf(progress)
+        val current = ranks[talentId] ?: 0
 
-        // Prerequisite check: prerequisite must have at least 1 point assigned
-        if (talent.prerequisiteId != null) {
-            val prereq = talentList.find { it.id == talent.prerequisiteId }
-            if (prereq == null || prereq.currentRank < 1) {
-                showNotification("Requiere tener puntos en el talento previo '${prereq?.name ?: ""}'.")
-                return
-            }
+        if (current >= def.maxRank) {
+            showNotification("${def.name} ya esta al rango maximo (${def.maxRank}).")
+            return
+        }
+
+        if (!EldoriaTalents.isUnlocked(def, progress.charLevel)) {
+            val etapa = EldoriaTalentEngine.evolutionName(progress.charRace, def.evolutionTier)
+            val nivel = when (def.evolutionTier) { 1 -> 20; 2 -> 50; else -> 100 }
+            showNotification("${def.name} exige ser $etapa (nivel $nivel).")
+            return
+        }
+
+        val prereqId = def.prerequisiteId
+        if (prereqId != null && (ranks[prereqId] ?: 0) < 1) {
+            val prereqName = EldoriaTalents.def(prereqId)?.name ?: prereqId
+            showNotification("Requiere tener puntos en '$prereqName'.")
+            return
         }
 
         viewModelScope.launch {
-            val updatedTalent = talent.copy(currentRank = talent.currentRank + 1)
-            talentList[index] = updatedTalent
-
+            ranks[talentId] = current + 1
             val updatedProgress = progress.copy(
                 talentPointsAvailable = progress.talentPointsAvailable - 1,
                 talentPointsSpent = progress.talentPointsSpent + 1,
-                talentsJson = GameJsonParser.listToJson(talentList)
+                talentsJson = talentJsonFrom(progress.charRace, ranks)
             )
             saveProgressSynced(updatedProgress)
-            showNotification("¡Asignaste un punto al talento: ${talent.name}! (Niv.${updatedTalent.currentRank})")
+            showNotification("¡Asignaste un punto a ${def.name}! (rango ${current + 1}/${def.maxRank})")
         }
     }
 
@@ -4552,39 +4960,47 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             return
         }
 
-        var available = progress.talentPointsAvailable
-        val talentList = GameJsonParser.listFromJson<Talent>(progress.talentsJson).toMutableList()
-        var allocatedCount = 0
-
-        while (available > 0) {
-            val eligibleIndices = talentList.indices.filter { idx ->
-                val t = talentList[idx]
-                t.prerequisiteId == null || talentList.any { it.id == t.prerequisiteId && it.currentRank >= 1 }
-            }
-
-            if (eligibleIndices.isEmpty()) break
-
-            val targetIdx = eligibleIndices.minByOrNull { idx ->
-                val t = talentList[idx]
-                t.row * 100 + t.currentRank
-            } ?: break
-
-            val t = talentList[targetIdx]
-            talentList[targetIdx] = t.copy(currentRank = t.currentRank + 1)
-            available -= 1
-            allocatedCount += 1
+        val defs = EldoriaTalents.forRace(progress.charRace)
+        if (defs.isEmpty()) {
+            showNotification("Tu raza aun no tiene red de talentos.")
+            return
         }
 
-        if (allocatedCount > 0) {
-            viewModelScope.launch {
-                val updatedProgress = progress.copy(
-                    talentPointsAvailable = available,
-                    talentPointsSpent = progress.talentPointsSpent + allocatedCount,
-                    talentsJson = GameJsonParser.listToJson(talentList)
-                )
-                saveProgressSynced(updatedProgress)
-                showNotification("⚡ ¡Se auto-asignaron $allocatedCount puntos de talento!")
-            }
+        val ranks = talentRanksOf(progress)
+        var available = progress.talentPointsAvailable
+        var allocated = 0
+
+        // Reparte de arriba abajo: primero los escalones bajos y, dentro de un
+        // escalon, el talento menos invertido. Asi el auto-asignar ABRE camino
+        // en vez de vaciar todos los puntos en la primera rama que encuentra.
+        while (available > 0) {
+            val target = defs
+                .filter { def ->
+                    (ranks[def.id] ?: 0) < def.maxRank &&
+                        EldoriaTalents.isUnlocked(def, progress.charLevel) &&
+                        (def.prerequisiteId == null || (ranks[def.prerequisiteId] ?: 0) >= 1)
+                }
+                .minByOrNull { def -> def.tier * 100 + (ranks[def.id] ?: 0) }
+                ?: break
+
+            ranks[target.id] = (ranks[target.id] ?: 0) + 1
+            available -= 1
+            allocated += 1
+        }
+
+        if (allocated == 0) {
+            showNotification("No queda ningun talento disponible que subir.")
+            return
+        }
+
+        viewModelScope.launch {
+            val updatedProgress = progress.copy(
+                talentPointsAvailable = available,
+                talentPointsSpent = progress.talentPointsSpent + allocated,
+                talentsJson = talentJsonFrom(progress.charRace, ranks)
+            )
+            saveProgressSynced(updatedProgress)
+            showNotification("⚡ ¡Se auto-asignaron $allocated puntos de talento!")
         }
     }
 
@@ -4650,6 +5066,73 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val progress = _progressState.value ?: return 0
         val list = GameJsonParser.listFromJson<Talent>(progress.talentsJson)
         return list.find { it.id == talentId }?.currentRank ?: 0
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  PUENTE CON EL MOTOR DE TALENTOS
+    //
+    //  Los nueve talentos viejos (`t_1`..`t_9`) siguen leyéndose a mano donde
+    //  siempre: hay partidas guardadas con puntos puestos en ellos y quitarles
+    //  el efecto sería robarles la inversión. Lo que viene del árbol nuevo se
+    //  SUMA encima, y el combate nunca pregunta por un talento concreto: pide
+    //  un [TalentKind] y recibe el total que aplica en ese instante.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /**
+     * El loadout se recalcula sólo cuando cambian los rangos o la raza. Se
+     * consulta varias veces por golpe y reconstruirlo cada vez obligaría a
+     * reparsear el JSON de talentos en mitad de la fórmula del daño.
+     */
+    private var talentLoadoutKey: String = ""
+    private var talentLoadoutCache: TalentLoadout = TalentLoadout.EMPTY
+
+    private fun heroTalentLoadout(): TalentLoadout {
+        val progress = _progressState.value ?: return TalentLoadout.EMPTY
+        val key = progress.charRace + "\u0000" + progress.talentsJson
+        if (key == talentLoadoutKey) return talentLoadoutCache
+        val ranks = GameJsonParser.listFromJson<Talent>(progress.talentsJson)
+            .filter { it.currentRank > 0 }
+            .associate { it.id to it.currentRank }
+        val built = EldoriaTalents.loadoutFor(progress.charRace, ranks)
+        talentLoadoutKey = key
+        talentLoadoutCache = built
+        return built
+    }
+
+    /**
+     * Fotografía del instante para resolver las condiciones de los talentos.
+     *
+     * Se construye desde el estado VIVO de combate y no desde el snapshot con
+     * el que empezó la acción: un talento "por debajo del 35 % de vida" tiene
+     * que mirar la vida que hay cuando se aplica, no la que había al abrir el
+     * turno, o llegaría siempre un golpe tarde.
+     */
+    private fun talentContextOf(state: CombatState, progress: GameProgress): TalentContext {
+        val enemy = state.enemy
+        // "Grande" es todo lo que no es un bicho de camino: jefes y las rarezas
+        // que el botín ya trata como excepcionales. Es la misma lista que usa
+        // el reparto de recompensas, para que el jugador no tenga que aprender
+        // dos definiciones distintas de enemigo importante.
+        val big = enemy != null && (
+            enemy.isBoss ||
+            enemy.rarity == "ELITE" || enemy.rarity == "CHAMPION" ||
+            enemy.rarity == "LEGENDARY" || enemy.rarity == "UNIVERSAL"
+        )
+        return TalentContext(
+            hpFraction = if (progress.maxHp > 0)
+                state.playerCurrentHp.toDouble() / progress.maxHp else 1.0,
+            // `turnsFought` cuenta turnos cerrados; el que se está jugando es el
+            // siguiente, así que PRIMER_TURNO cuadra con el primer golpe real.
+            turn = state.turnsFought + 1,
+            againstBigTarget = big,
+            hasPet = GameJsonParser.fromJson<Item>(progress.equippedPetJson) != null,
+            // La expedición cuenta como calabozo: para el jugador es lo mismo
+            // —bajar por salas sin poder volver— y separarlas sólo haría que la
+            // mitad de los talentos de calabozo parecieran rotos.
+            inDungeon = _dungeonRunState.value.inDungeonRun || state.inExpedition,
+            potionActive = state.regenTurns > 0 || state.damageBuffTurns > 0 ||
+                state.evasionTurns > 0 || state.wardTurns > 0
+        )
     }
 
     // --- MANUAL ATTRIBUTES SPENDING ---

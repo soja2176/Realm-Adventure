@@ -8,7 +8,7 @@ import com.example.R
  * Indice de laminas del juego. Existe porque el arte pasó a resolverse por
  * clave en tiempo de ejecucion — la misma especie tiene una lamina por rango
  * ("lobo_cenizo_elite"), y los subjefes de calabozo se nombran solos — y un
- * `when` escrito a mano con 806 ramas se desincroniza a la primera.
+ * `when` escrito a mano con 1236 ramas se desincroniza a la primera.
  *
  * Se regenera con scratchpad/wire_art2.py a partir del contenido REAL de
  * res/drawable, de modo que no puede referenciar un recurso inexistente.
@@ -22,9 +22,17 @@ object EldoriaArt {
             block2(m)
             block3(m)
             block4(m)
+            block5(m)
+            block6(m)
     }
 
     private fun block0(m: MutableMap<String, Int>) {
+        m["action_basic_clerigo"] = R.drawable.action_basic_clerigo
+        m["action_basic_guerrero"] = R.drawable.action_basic_guerrero
+        m["action_basic_mago"] = R.drawable.action_basic_mago
+        m["action_basic_picaro"] = R.drawable.action_basic_picaro
+        m["action_huir"] = R.drawable.action_huir
+        m["action_zurron"] = R.drawable.action_zurron
         m["app_icon_fg_1784385781814"] = R.drawable.app_icon_fg_1784385781814
         m["bestiary_aethelgard_alquimista_fracturado_champion"] = R.drawable.bestiary_aethelgard_alquimista_fracturado_champion
         m["bestiary_aethelgard_alquimista_fracturado_elite"] = R.drawable.bestiary_aethelgard_alquimista_fracturado_elite
@@ -219,15 +227,15 @@ object EldoriaArt {
         m["bestiary_drakenhold_portador_brasas_legendary"] = R.drawable.bestiary_drakenhold_portador_brasas_legendary
         m["bestiary_drakenhold_portador_brasas_normal"] = R.drawable.bestiary_drakenhold_portador_brasas_normal
         m["bestiary_drakenhold_salamandra_escoria_champion"] = R.drawable.bestiary_drakenhold_salamandra_escoria_champion
+    }
+
+    private fun block1(m: MutableMap<String, Int>) {
         m["bestiary_drakenhold_salamandra_escoria_elite"] = R.drawable.bestiary_drakenhold_salamandra_escoria_elite
         m["bestiary_drakenhold_salamandra_escoria_legendary"] = R.drawable.bestiary_drakenhold_salamandra_escoria_legendary
         m["bestiary_drakenhold_salamandra_escoria_normal"] = R.drawable.bestiary_drakenhold_salamandra_escoria_normal
         m["bestiary_drakenhold_sierpe_fumarola_champion"] = R.drawable.bestiary_drakenhold_sierpe_fumarola_champion
         m["bestiary_drakenhold_sierpe_fumarola_elite"] = R.drawable.bestiary_drakenhold_sierpe_fumarola_elite
         m["bestiary_drakenhold_sierpe_fumarola_legendary"] = R.drawable.bestiary_drakenhold_sierpe_fumarola_legendary
-    }
-
-    private fun block1(m: MutableMap<String, Int>) {
         m["bestiary_drakenhold_sierpe_fumarola_normal"] = R.drawable.bestiary_drakenhold_sierpe_fumarola_normal
         m["bestiary_drakenhold_titan_fundicion_champion"] = R.drawable.bestiary_drakenhold_titan_fundicion_champion
         m["bestiary_drakenhold_titan_fundicion_elite"] = R.drawable.bestiary_drakenhold_titan_fundicion_elite
@@ -422,15 +430,15 @@ object EldoriaArt {
         m["bestiary_solaria_espejismo_viviente_legendary"] = R.drawable.bestiary_solaria_espejismo_viviente_legendary
         m["bestiary_solaria_espejismo_viviente_normal"] = R.drawable.bestiary_solaria_espejismo_viviente_normal
         m["bestiary_solaria_faraon_inmortal_champion"] = R.drawable.bestiary_solaria_faraon_inmortal_champion
+    }
+
+    private fun block2(m: MutableMap<String, Int>) {
         m["bestiary_solaria_faraon_inmortal_elite"] = R.drawable.bestiary_solaria_faraon_inmortal_elite
         m["bestiary_solaria_faraon_inmortal_legendary"] = R.drawable.bestiary_solaria_faraon_inmortal_legendary
         m["bestiary_solaria_faraon_inmortal_normal"] = R.drawable.bestiary_solaria_faraon_inmortal_normal
         m["bestiary_solaria_guardian_tumba_sellada_champion"] = R.drawable.bestiary_solaria_guardian_tumba_sellada_champion
         m["bestiary_solaria_guardian_tumba_sellada_elite"] = R.drawable.bestiary_solaria_guardian_tumba_sellada_elite
         m["bestiary_solaria_guardian_tumba_sellada_legendary"] = R.drawable.bestiary_solaria_guardian_tumba_sellada_legendary
-    }
-
-    private fun block2(m: MutableMap<String, Int>) {
         m["bestiary_solaria_guardian_tumba_sellada_normal"] = R.drawable.bestiary_solaria_guardian_tumba_sellada_normal
         m["bestiary_solaria_halcon_fuego_blanco_champion"] = R.drawable.bestiary_solaria_halcon_fuego_blanco_champion
         m["bestiary_solaria_halcon_fuego_blanco_elite"] = R.drawable.bestiary_solaria_halcon_fuego_blanco_elite
@@ -625,15 +633,15 @@ object EldoriaArt {
         m["dg16_heraldo_del_destino"] = R.drawable.dg16_heraldo_del_destino
         m["dg16_nebula_destructora"] = R.drawable.dg16_nebula_destructora
         m["dg16_soberano_cosmico"] = R.drawable.dg16_soberano_cosmico
+    }
+
+    private fun block3(m: MutableMap<String, Int>) {
         m["dg16_sombra_del_big_bang"] = R.drawable.dg16_sombra_del_big_bang
         m["dg16_titan_del_espacio"] = R.drawable.dg16_titan_del_espacio
         m["dg16_vertice_infinito"] = R.drawable.dg16_vertice_infinito
         m["empty_bestiary"] = R.drawable.empty_bestiary
         m["empty_generic"] = R.drawable.empty_generic
         m["empty_inventory"] = R.drawable.empty_inventory
-    }
-
-    private fun block3(m: MutableMap<String, Int>) {
         m["empty_pets"] = R.drawable.empty_pets
         m["empty_quests"] = R.drawable.empty_quests
         m["empty_shop"] = R.drawable.empty_shop
@@ -752,6 +760,18 @@ object EldoriaArt {
         m["img_tile_shrine_1784470929381"] = R.drawable.img_tile_shrine_1784470929381
         m["img_warcraft_bottom_bar_1784669353873"] = R.drawable.img_warcraft_bottom_bar_1784669353873
         m["img_world_map_banner"] = R.drawable.img_world_map_banner
+        m["mat_ancient_relic"] = R.drawable.mat_ancient_relic
+        m["mat_anima_shard"] = R.drawable.mat_anima_shard
+        m["mat_blood_gem"] = R.drawable.mat_blood_gem
+        m["mat_crystal"] = R.drawable.mat_crystal
+        m["mat_forge_ember"] = R.drawable.mat_forge_ember
+        m["mat_herbs"] = R.drawable.mat_herbs
+        m["mat_mystic_silk"] = R.drawable.mat_mystic_silk
+        m["mat_phoenix_feather"] = R.drawable.mat_phoenix_feather
+        m["mat_pure_crystal"] = R.drawable.mat_pure_crystal
+        m["mat_sealed_key"] = R.drawable.mat_sealed_key
+        m["mat_shadow_essence"] = R.drawable.mat_shadow_essence
+        m["mat_wood"] = R.drawable.mat_wood
         m["merchant_stall_banner_1784845825754"] = R.drawable.merchant_stall_banner_1784845825754
         m["pet_ave_trueno_s1"] = R.drawable.pet_ave_trueno_s1
         m["pet_ave_trueno_s2"] = R.drawable.pet_ave_trueno_s2
@@ -816,6 +836,9 @@ object EldoriaArt {
         m["pet_serpiente_astral_s1"] = R.drawable.pet_serpiente_astral_s1
         m["pet_serpiente_astral_s2"] = R.drawable.pet_serpiente_astral_s2
         m["pet_serpiente_astral_s3"] = R.drawable.pet_serpiente_astral_s3
+    }
+
+    private fun block4(m: MutableMap<String, Int>) {
         m["pet_titan_cristal_s1"] = R.drawable.pet_titan_cristal_s1
         m["pet_titan_cristal_s2"] = R.drawable.pet_titan_cristal_s2
         m["pet_titan_cristal_s3"] = R.drawable.pet_titan_cristal_s3
@@ -831,15 +854,430 @@ object EldoriaArt {
         m["potion_piedra"] = R.drawable.potion_piedra
         m["potion_regen"] = R.drawable.potion_regen
         m["potion_sombra"] = R.drawable.potion_sombra
+        m["skill_c_1"] = R.drawable.skill_c_1
+        m["skill_c_2"] = R.drawable.skill_c_2
+        m["skill_g_1"] = R.drawable.skill_g_1
+        m["skill_g_2"] = R.drawable.skill_g_2
+        m["skill_m_1"] = R.drawable.skill_m_1
+        m["skill_m_2"] = R.drawable.skill_m_2
+        m["skill_p_1"] = R.drawable.skill_p_1
+        m["skill_p_2"] = R.drawable.skill_p_2
+        m["skill_sk_adv_cleric"] = R.drawable.skill_sk_adv_cleric
+        m["skill_sk_adv_mage"] = R.drawable.skill_sk_adv_mage
+        m["skill_sk_adv_rogue"] = R.drawable.skill_sk_adv_rogue
+        m["skill_sk_adv_warrior"] = R.drawable.skill_sk_adv_warrior
         m["table_adiestramiento"] = R.drawable.table_adiestramiento
         m["table_excavacion"] = R.drawable.table_excavacion
         m["table_ganzua"] = R.drawable.table_ganzua
-    }
-
-    private fun block4(m: MutableMap<String, Int>) {
         m["table_glifos"] = R.drawable.table_glifos
         m["table_vigilia"] = R.drawable.table_vigilia
         m["table_yunque"] = R.drawable.table_yunque
+        m["talent_elf_arc1"] = R.drawable.talent_elf_arc1
+        m["talent_elf_arc10"] = R.drawable.talent_elf_arc10
+        m["talent_elf_arc11"] = R.drawable.talent_elf_arc11
+        m["talent_elf_arc12"] = R.drawable.talent_elf_arc12
+        m["talent_elf_arc2"] = R.drawable.talent_elf_arc2
+        m["talent_elf_arc3"] = R.drawable.talent_elf_arc3
+        m["talent_elf_arc4"] = R.drawable.talent_elf_arc4
+        m["talent_elf_arc5"] = R.drawable.talent_elf_arc5
+        m["talent_elf_arc6"] = R.drawable.talent_elf_arc6
+        m["talent_elf_arc7"] = R.drawable.talent_elf_arc7
+        m["talent_elf_arc8"] = R.drawable.talent_elf_arc8
+        m["talent_elf_arc9"] = R.drawable.talent_elf_arc9
+        m["talent_elf_arm1"] = R.drawable.talent_elf_arm1
+        m["talent_elf_arm10"] = R.drawable.talent_elf_arm10
+        m["talent_elf_arm11"] = R.drawable.talent_elf_arm11
+        m["talent_elf_arm2"] = R.drawable.talent_elf_arm2
+        m["talent_elf_arm3"] = R.drawable.talent_elf_arm3
+        m["talent_elf_arm4"] = R.drawable.talent_elf_arm4
+        m["talent_elf_arm5"] = R.drawable.talent_elf_arm5
+        m["talent_elf_arm6"] = R.drawable.talent_elf_arm6
+        m["talent_elf_arm7"] = R.drawable.talent_elf_arm7
+        m["talent_elf_arm8"] = R.drawable.talent_elf_arm8
+        m["talent_elf_arm9"] = R.drawable.talent_elf_arm9
+        m["talent_elf_bes1"] = R.drawable.talent_elf_bes1
+        m["talent_elf_bes10"] = R.drawable.talent_elf_bes10
+        m["talent_elf_bes11"] = R.drawable.talent_elf_bes11
+        m["talent_elf_bes2"] = R.drawable.talent_elf_bes2
+        m["talent_elf_bes3"] = R.drawable.talent_elf_bes3
+        m["talent_elf_bes4"] = R.drawable.talent_elf_bes4
+        m["talent_elf_bes5"] = R.drawable.talent_elf_bes5
+        m["talent_elf_bes6"] = R.drawable.talent_elf_bes6
+        m["talent_elf_bes7"] = R.drawable.talent_elf_bes7
+        m["talent_elf_bes8"] = R.drawable.talent_elf_bes8
+        m["talent_elf_bes9"] = R.drawable.talent_elf_bes9
+        m["talent_elf_def1"] = R.drawable.talent_elf_def1
+        m["talent_elf_def10"] = R.drawable.talent_elf_def10
+        m["talent_elf_def11"] = R.drawable.talent_elf_def11
+        m["talent_elf_def2"] = R.drawable.talent_elf_def2
+        m["talent_elf_def3"] = R.drawable.talent_elf_def3
+        m["talent_elf_def4"] = R.drawable.talent_elf_def4
+        m["talent_elf_def5"] = R.drawable.talent_elf_def5
+        m["talent_elf_def6"] = R.drawable.talent_elf_def6
+        m["talent_elf_def7"] = R.drawable.talent_elf_def7
+        m["talent_elf_def8"] = R.drawable.talent_elf_def8
+        m["talent_elf_def9"] = R.drawable.talent_elf_def9
+        m["talent_elf_ev1a"] = R.drawable.talent_elf_ev1a
+        m["talent_elf_ev1b"] = R.drawable.talent_elf_ev1b
+        m["talent_elf_ev1c"] = R.drawable.talent_elf_ev1c
+        m["talent_elf_ev1d"] = R.drawable.talent_elf_ev1d
+        m["talent_elf_ev2a"] = R.drawable.talent_elf_ev2a
+        m["talent_elf_ev2b"] = R.drawable.talent_elf_ev2b
+        m["talent_elf_ev2c"] = R.drawable.talent_elf_ev2c
+        m["talent_elf_ev2d"] = R.drawable.talent_elf_ev2d
+        m["talent_elf_ev3a"] = R.drawable.talent_elf_ev3a
+        m["talent_elf_ev3b"] = R.drawable.talent_elf_ev3b
+        m["talent_elf_ev3c"] = R.drawable.talent_elf_ev3c
+        m["talent_elf_ev3d"] = R.drawable.talent_elf_ev3d
+        m["talent_elf_for1"] = R.drawable.talent_elf_for1
+        m["talent_elf_for10"] = R.drawable.talent_elf_for10
+        m["talent_elf_for11"] = R.drawable.talent_elf_for11
+        m["talent_elf_for2"] = R.drawable.talent_elf_for2
+        m["talent_elf_for3"] = R.drawable.talent_elf_for3
+        m["talent_elf_for4"] = R.drawable.talent_elf_for4
+        m["talent_elf_for5"] = R.drawable.talent_elf_for5
+        m["talent_elf_for6"] = R.drawable.talent_elf_for6
+        m["talent_elf_for7"] = R.drawable.talent_elf_for7
+        m["talent_elf_for8"] = R.drawable.talent_elf_for8
+        m["talent_elf_for9"] = R.drawable.talent_elf_for9
+        m["talent_elf_leg1"] = R.drawable.talent_elf_leg1
+        m["talent_elf_leg10"] = R.drawable.talent_elf_leg10
+        m["talent_elf_leg11"] = R.drawable.talent_elf_leg11
+        m["talent_elf_leg2"] = R.drawable.talent_elf_leg2
+        m["talent_elf_leg3"] = R.drawable.talent_elf_leg3
+        m["talent_elf_leg4"] = R.drawable.talent_elf_leg4
+        m["talent_elf_leg5"] = R.drawable.talent_elf_leg5
+        m["talent_elf_leg6"] = R.drawable.talent_elf_leg6
+        m["talent_elf_leg7"] = R.drawable.talent_elf_leg7
+        m["talent_elf_leg8"] = R.drawable.talent_elf_leg8
+        m["talent_elf_leg9"] = R.drawable.talent_elf_leg9
+        m["talent_elf_san1"] = R.drawable.talent_elf_san1
+        m["talent_elf_san10"] = R.drawable.talent_elf_san10
+        m["talent_elf_san11"] = R.drawable.talent_elf_san11
+        m["talent_elf_san2"] = R.drawable.talent_elf_san2
+        m["talent_elf_san3"] = R.drawable.talent_elf_san3
+        m["talent_elf_san4"] = R.drawable.talent_elf_san4
+        m["talent_elf_san5"] = R.drawable.talent_elf_san5
+        m["talent_elf_san6"] = R.drawable.talent_elf_san6
+        m["talent_elf_san7"] = R.drawable.talent_elf_san7
+        m["talent_elf_san8"] = R.drawable.talent_elf_san8
+        m["talent_elf_san9"] = R.drawable.talent_elf_san9
+        m["talent_elf_som1"] = R.drawable.talent_elf_som1
+        m["talent_elf_som10"] = R.drawable.talent_elf_som10
+        m["talent_elf_som2"] = R.drawable.talent_elf_som2
+        m["talent_elf_som3"] = R.drawable.talent_elf_som3
+        m["talent_elf_som4"] = R.drawable.talent_elf_som4
+        m["talent_elf_som5"] = R.drawable.talent_elf_som5
+        m["talent_elf_som6"] = R.drawable.talent_elf_som6
+        m["talent_elf_som7"] = R.drawable.talent_elf_som7
+        m["talent_elf_som8"] = R.drawable.talent_elf_som8
+        m["talent_elf_som9"] = R.drawable.talent_elf_som9
+        m["talent_ena_arc1"] = R.drawable.talent_ena_arc1
+        m["talent_ena_arc10"] = R.drawable.talent_ena_arc10
+        m["talent_ena_arc2"] = R.drawable.talent_ena_arc2
+        m["talent_ena_arc3"] = R.drawable.talent_ena_arc3
+        m["talent_ena_arc4"] = R.drawable.talent_ena_arc4
+        m["talent_ena_arc5"] = R.drawable.talent_ena_arc5
+        m["talent_ena_arc6"] = R.drawable.talent_ena_arc6
+        m["talent_ena_arc7"] = R.drawable.talent_ena_arc7
+        m["talent_ena_arc8"] = R.drawable.talent_ena_arc8
+        m["talent_ena_arc9"] = R.drawable.talent_ena_arc9
+        m["talent_ena_arm1"] = R.drawable.talent_ena_arm1
+        m["talent_ena_arm10"] = R.drawable.talent_ena_arm10
+        m["talent_ena_arm11"] = R.drawable.talent_ena_arm11
+        m["talent_ena_arm12"] = R.drawable.talent_ena_arm12
+        m["talent_ena_arm2"] = R.drawable.talent_ena_arm2
+        m["talent_ena_arm3"] = R.drawable.talent_ena_arm3
+        m["talent_ena_arm4"] = R.drawable.talent_ena_arm4
+        m["talent_ena_arm5"] = R.drawable.talent_ena_arm5
+        m["talent_ena_arm6"] = R.drawable.talent_ena_arm6
+        m["talent_ena_arm7"] = R.drawable.talent_ena_arm7
+        m["talent_ena_arm8"] = R.drawable.talent_ena_arm8
+        m["talent_ena_arm9"] = R.drawable.talent_ena_arm9
+        m["talent_ena_bes1"] = R.drawable.talent_ena_bes1
+        m["talent_ena_bes10"] = R.drawable.talent_ena_bes10
+        m["talent_ena_bes11"] = R.drawable.talent_ena_bes11
+        m["talent_ena_bes12"] = R.drawable.talent_ena_bes12
+        m["talent_ena_bes2"] = R.drawable.talent_ena_bes2
+        m["talent_ena_bes3"] = R.drawable.talent_ena_bes3
+        m["talent_ena_bes4"] = R.drawable.talent_ena_bes4
+        m["talent_ena_bes5"] = R.drawable.talent_ena_bes5
+        m["talent_ena_bes6"] = R.drawable.talent_ena_bes6
+        m["talent_ena_bes7"] = R.drawable.talent_ena_bes7
+        m["talent_ena_bes8"] = R.drawable.talent_ena_bes8
+        m["talent_ena_bes9"] = R.drawable.talent_ena_bes9
+        m["talent_ena_def1"] = R.drawable.talent_ena_def1
+        m["talent_ena_def10"] = R.drawable.talent_ena_def10
+        m["talent_ena_def11"] = R.drawable.talent_ena_def11
+        m["talent_ena_def12"] = R.drawable.talent_ena_def12
+        m["talent_ena_def2"] = R.drawable.talent_ena_def2
+        m["talent_ena_def3"] = R.drawable.talent_ena_def3
+        m["talent_ena_def4"] = R.drawable.talent_ena_def4
+        m["talent_ena_def5"] = R.drawable.talent_ena_def5
+        m["talent_ena_def6"] = R.drawable.talent_ena_def6
+        m["talent_ena_def7"] = R.drawable.talent_ena_def7
+        m["talent_ena_def8"] = R.drawable.talent_ena_def8
+        m["talent_ena_def9"] = R.drawable.talent_ena_def9
+        m["talent_ena_ev1a"] = R.drawable.talent_ena_ev1a
+        m["talent_ena_ev1b"] = R.drawable.talent_ena_ev1b
+        m["talent_ena_ev1c"] = R.drawable.talent_ena_ev1c
+        m["talent_ena_ev1d"] = R.drawable.talent_ena_ev1d
+        m["talent_ena_ev2a"] = R.drawable.talent_ena_ev2a
+        m["talent_ena_ev2b"] = R.drawable.talent_ena_ev2b
+        m["talent_ena_ev2c"] = R.drawable.talent_ena_ev2c
+        m["talent_ena_ev2d"] = R.drawable.talent_ena_ev2d
+        m["talent_ena_ev3a"] = R.drawable.talent_ena_ev3a
+        m["talent_ena_ev3b"] = R.drawable.talent_ena_ev3b
+        m["talent_ena_ev3c"] = R.drawable.talent_ena_ev3c
+        m["talent_ena_ev3d"] = R.drawable.talent_ena_ev3d
+        m["talent_ena_for1"] = R.drawable.talent_ena_for1
+        m["talent_ena_for10"] = R.drawable.talent_ena_for10
+        m["talent_ena_for2"] = R.drawable.talent_ena_for2
+        m["talent_ena_for3"] = R.drawable.talent_ena_for3
+        m["talent_ena_for4"] = R.drawable.talent_ena_for4
+        m["talent_ena_for5"] = R.drawable.talent_ena_for5
+        m["talent_ena_for6"] = R.drawable.talent_ena_for6
+        m["talent_ena_for7"] = R.drawable.talent_ena_for7
+        m["talent_ena_for8"] = R.drawable.talent_ena_for8
+    }
+
+    private fun block5(m: MutableMap<String, Int>) {
+        m["talent_ena_for9"] = R.drawable.talent_ena_for9
+        m["talent_ena_leg1"] = R.drawable.talent_ena_leg1
+        m["talent_ena_leg10"] = R.drawable.talent_ena_leg10
+        m["talent_ena_leg11"] = R.drawable.talent_ena_leg11
+        m["talent_ena_leg12"] = R.drawable.talent_ena_leg12
+        m["talent_ena_leg2"] = R.drawable.talent_ena_leg2
+        m["talent_ena_leg3"] = R.drawable.talent_ena_leg3
+        m["talent_ena_leg4"] = R.drawable.talent_ena_leg4
+        m["talent_ena_leg5"] = R.drawable.talent_ena_leg5
+        m["talent_ena_leg6"] = R.drawable.talent_ena_leg6
+        m["talent_ena_leg7"] = R.drawable.talent_ena_leg7
+        m["talent_ena_leg8"] = R.drawable.talent_ena_leg8
+        m["talent_ena_leg9"] = R.drawable.talent_ena_leg9
+        m["talent_ena_san1"] = R.drawable.talent_ena_san1
+        m["talent_ena_san10"] = R.drawable.talent_ena_san10
+        m["talent_ena_san2"] = R.drawable.talent_ena_san2
+        m["talent_ena_san3"] = R.drawable.talent_ena_san3
+        m["talent_ena_san4"] = R.drawable.talent_ena_san4
+        m["talent_ena_san5"] = R.drawable.talent_ena_san5
+        m["talent_ena_san6"] = R.drawable.talent_ena_san6
+        m["talent_ena_san7"] = R.drawable.talent_ena_san7
+        m["talent_ena_san8"] = R.drawable.talent_ena_san8
+        m["talent_ena_san9"] = R.drawable.talent_ena_san9
+        m["talent_ena_som1"] = R.drawable.talent_ena_som1
+        m["talent_ena_som10"] = R.drawable.talent_ena_som10
+        m["talent_ena_som2"] = R.drawable.talent_ena_som2
+        m["talent_ena_som3"] = R.drawable.talent_ena_som3
+        m["talent_ena_som4"] = R.drawable.talent_ena_som4
+        m["talent_ena_som5"] = R.drawable.talent_ena_som5
+        m["talent_ena_som6"] = R.drawable.talent_ena_som6
+        m["talent_ena_som7"] = R.drawable.talent_ena_som7
+        m["talent_ena_som8"] = R.drawable.talent_ena_som8
+        m["talent_ena_som9"] = R.drawable.talent_ena_som9
+        m["talent_hum_arc1"] = R.drawable.talent_hum_arc1
+        m["talent_hum_arc10"] = R.drawable.talent_hum_arc10
+        m["talent_hum_arc11"] = R.drawable.talent_hum_arc11
+        m["talent_hum_arc2"] = R.drawable.talent_hum_arc2
+        m["talent_hum_arc3"] = R.drawable.talent_hum_arc3
+        m["talent_hum_arc4"] = R.drawable.talent_hum_arc4
+        m["talent_hum_arc5"] = R.drawable.talent_hum_arc5
+        m["talent_hum_arc6"] = R.drawable.talent_hum_arc6
+        m["talent_hum_arc7"] = R.drawable.talent_hum_arc7
+        m["talent_hum_arc8"] = R.drawable.talent_hum_arc8
+        m["talent_hum_arc9"] = R.drawable.talent_hum_arc9
+        m["talent_hum_arm1"] = R.drawable.talent_hum_arm1
+        m["talent_hum_arm10"] = R.drawable.talent_hum_arm10
+        m["talent_hum_arm11"] = R.drawable.talent_hum_arm11
+        m["talent_hum_arm2"] = R.drawable.talent_hum_arm2
+        m["talent_hum_arm3"] = R.drawable.talent_hum_arm3
+        m["talent_hum_arm4"] = R.drawable.talent_hum_arm4
+        m["talent_hum_arm5"] = R.drawable.talent_hum_arm5
+        m["talent_hum_arm6"] = R.drawable.talent_hum_arm6
+        m["talent_hum_arm7"] = R.drawable.talent_hum_arm7
+        m["talent_hum_arm8"] = R.drawable.talent_hum_arm8
+        m["talent_hum_arm9"] = R.drawable.talent_hum_arm9
+        m["talent_hum_bes1"] = R.drawable.talent_hum_bes1
+        m["talent_hum_bes10"] = R.drawable.talent_hum_bes10
+        m["talent_hum_bes11"] = R.drawable.talent_hum_bes11
+        m["talent_hum_bes2"] = R.drawable.talent_hum_bes2
+        m["talent_hum_bes3"] = R.drawable.talent_hum_bes3
+        m["talent_hum_bes4"] = R.drawable.talent_hum_bes4
+        m["talent_hum_bes5"] = R.drawable.talent_hum_bes5
+        m["talent_hum_bes6"] = R.drawable.talent_hum_bes6
+        m["talent_hum_bes7"] = R.drawable.talent_hum_bes7
+        m["talent_hum_bes8"] = R.drawable.talent_hum_bes8
+        m["talent_hum_bes9"] = R.drawable.talent_hum_bes9
+        m["talent_hum_def1"] = R.drawable.talent_hum_def1
+        m["talent_hum_def10"] = R.drawable.talent_hum_def10
+        m["talent_hum_def11"] = R.drawable.talent_hum_def11
+        m["talent_hum_def2"] = R.drawable.talent_hum_def2
+        m["talent_hum_def3"] = R.drawable.talent_hum_def3
+        m["talent_hum_def4"] = R.drawable.talent_hum_def4
+        m["talent_hum_def5"] = R.drawable.talent_hum_def5
+        m["talent_hum_def6"] = R.drawable.talent_hum_def6
+        m["talent_hum_def7"] = R.drawable.talent_hum_def7
+        m["talent_hum_def8"] = R.drawable.talent_hum_def8
+        m["talent_hum_def9"] = R.drawable.talent_hum_def9
+        m["talent_hum_ev1a"] = R.drawable.talent_hum_ev1a
+        m["talent_hum_ev1b"] = R.drawable.talent_hum_ev1b
+        m["talent_hum_ev1c"] = R.drawable.talent_hum_ev1c
+        m["talent_hum_ev1d"] = R.drawable.talent_hum_ev1d
+        m["talent_hum_ev2a"] = R.drawable.talent_hum_ev2a
+        m["talent_hum_ev2b"] = R.drawable.talent_hum_ev2b
+        m["talent_hum_ev2c"] = R.drawable.talent_hum_ev2c
+        m["talent_hum_ev2d"] = R.drawable.talent_hum_ev2d
+        m["talent_hum_ev3a"] = R.drawable.talent_hum_ev3a
+        m["talent_hum_ev3b"] = R.drawable.talent_hum_ev3b
+        m["talent_hum_ev3c"] = R.drawable.talent_hum_ev3c
+        m["talent_hum_ev3d"] = R.drawable.talent_hum_ev3d
+        m["talent_hum_for1"] = R.drawable.talent_hum_for1
+        m["talent_hum_for10"] = R.drawable.talent_hum_for10
+        m["talent_hum_for11"] = R.drawable.talent_hum_for11
+        m["talent_hum_for2"] = R.drawable.talent_hum_for2
+        m["talent_hum_for3"] = R.drawable.talent_hum_for3
+        m["talent_hum_for4"] = R.drawable.talent_hum_for4
+        m["talent_hum_for5"] = R.drawable.talent_hum_for5
+        m["talent_hum_for6"] = R.drawable.talent_hum_for6
+        m["talent_hum_for7"] = R.drawable.talent_hum_for7
+        m["talent_hum_for8"] = R.drawable.talent_hum_for8
+        m["talent_hum_for9"] = R.drawable.talent_hum_for9
+        m["talent_hum_leg1"] = R.drawable.talent_hum_leg1
+        m["talent_hum_leg10"] = R.drawable.talent_hum_leg10
+        m["talent_hum_leg11"] = R.drawable.talent_hum_leg11
+        m["talent_hum_leg2"] = R.drawable.talent_hum_leg2
+        m["talent_hum_leg3"] = R.drawable.talent_hum_leg3
+        m["talent_hum_leg4"] = R.drawable.talent_hum_leg4
+        m["talent_hum_leg5"] = R.drawable.talent_hum_leg5
+        m["talent_hum_leg6"] = R.drawable.talent_hum_leg6
+        m["talent_hum_leg7"] = R.drawable.talent_hum_leg7
+        m["talent_hum_leg8"] = R.drawable.talent_hum_leg8
+        m["talent_hum_leg9"] = R.drawable.talent_hum_leg9
+        m["talent_hum_san1"] = R.drawable.talent_hum_san1
+        m["talent_hum_san10"] = R.drawable.talent_hum_san10
+        m["talent_hum_san11"] = R.drawable.talent_hum_san11
+        m["talent_hum_san2"] = R.drawable.talent_hum_san2
+        m["talent_hum_san3"] = R.drawable.talent_hum_san3
+        m["talent_hum_san4"] = R.drawable.talent_hum_san4
+        m["talent_hum_san5"] = R.drawable.talent_hum_san5
+        m["talent_hum_san6"] = R.drawable.talent_hum_san6
+        m["talent_hum_san7"] = R.drawable.talent_hum_san7
+        m["talent_hum_san8"] = R.drawable.talent_hum_san8
+        m["talent_hum_san9"] = R.drawable.talent_hum_san9
+        m["talent_hum_som1"] = R.drawable.talent_hum_som1
+        m["talent_hum_som10"] = R.drawable.talent_hum_som10
+        m["talent_hum_som11"] = R.drawable.talent_hum_som11
+        m["talent_hum_som2"] = R.drawable.talent_hum_som2
+        m["talent_hum_som3"] = R.drawable.talent_hum_som3
+        m["talent_hum_som4"] = R.drawable.talent_hum_som4
+        m["talent_hum_som5"] = R.drawable.talent_hum_som5
+        m["talent_hum_som6"] = R.drawable.talent_hum_som6
+        m["talent_hum_som7"] = R.drawable.talent_hum_som7
+        m["talent_hum_som8"] = R.drawable.talent_hum_som8
+        m["talent_hum_som9"] = R.drawable.talent_hum_som9
+        m["talent_orc_arc1"] = R.drawable.talent_orc_arc1
+        m["talent_orc_arc2"] = R.drawable.talent_orc_arc2
+        m["talent_orc_arc3"] = R.drawable.talent_orc_arc3
+        m["talent_orc_arc4"] = R.drawable.talent_orc_arc4
+        m["talent_orc_arc5"] = R.drawable.talent_orc_arc5
+        m["talent_orc_arc6"] = R.drawable.talent_orc_arc6
+        m["talent_orc_arm1"] = R.drawable.talent_orc_arm1
+        m["talent_orc_arm10"] = R.drawable.talent_orc_arm10
+        m["talent_orc_arm11"] = R.drawable.talent_orc_arm11
+        m["talent_orc_arm12"] = R.drawable.talent_orc_arm12
+        m["talent_orc_arm13"] = R.drawable.talent_orc_arm13
+        m["talent_orc_arm14"] = R.drawable.talent_orc_arm14
+        m["talent_orc_arm15"] = R.drawable.talent_orc_arm15
+        m["talent_orc_arm16"] = R.drawable.talent_orc_arm16
+        m["talent_orc_arm2"] = R.drawable.talent_orc_arm2
+        m["talent_orc_arm3"] = R.drawable.talent_orc_arm3
+        m["talent_orc_arm4"] = R.drawable.talent_orc_arm4
+        m["talent_orc_arm5"] = R.drawable.talent_orc_arm5
+        m["talent_orc_arm6"] = R.drawable.talent_orc_arm6
+        m["talent_orc_arm7"] = R.drawable.talent_orc_arm7
+        m["talent_orc_arm8"] = R.drawable.talent_orc_arm8
+        m["talent_orc_arm9"] = R.drawable.talent_orc_arm9
+        m["talent_orc_bes1"] = R.drawable.talent_orc_bes1
+        m["talent_orc_bes10"] = R.drawable.talent_orc_bes10
+        m["talent_orc_bes11"] = R.drawable.talent_orc_bes11
+        m["talent_orc_bes2"] = R.drawable.talent_orc_bes2
+        m["talent_orc_bes3"] = R.drawable.talent_orc_bes3
+        m["talent_orc_bes4"] = R.drawable.talent_orc_bes4
+        m["talent_orc_bes5"] = R.drawable.talent_orc_bes5
+        m["talent_orc_bes6"] = R.drawable.talent_orc_bes6
+        m["talent_orc_bes7"] = R.drawable.talent_orc_bes7
+        m["talent_orc_bes8"] = R.drawable.talent_orc_bes8
+        m["talent_orc_bes9"] = R.drawable.talent_orc_bes9
+        m["talent_orc_def1"] = R.drawable.talent_orc_def1
+        m["talent_orc_def10"] = R.drawable.talent_orc_def10
+        m["talent_orc_def11"] = R.drawable.talent_orc_def11
+        m["talent_orc_def2"] = R.drawable.talent_orc_def2
+        m["talent_orc_def3"] = R.drawable.talent_orc_def3
+        m["talent_orc_def4"] = R.drawable.talent_orc_def4
+        m["talent_orc_def5"] = R.drawable.talent_orc_def5
+        m["talent_orc_def6"] = R.drawable.talent_orc_def6
+        m["talent_orc_def7"] = R.drawable.talent_orc_def7
+        m["talent_orc_def8"] = R.drawable.talent_orc_def8
+        m["talent_orc_def9"] = R.drawable.talent_orc_def9
+        m["talent_orc_ev1a"] = R.drawable.talent_orc_ev1a
+        m["talent_orc_ev1b"] = R.drawable.talent_orc_ev1b
+        m["talent_orc_ev1c"] = R.drawable.talent_orc_ev1c
+        m["talent_orc_ev1d"] = R.drawable.talent_orc_ev1d
+        m["talent_orc_ev2a"] = R.drawable.talent_orc_ev2a
+        m["talent_orc_ev2b"] = R.drawable.talent_orc_ev2b
+        m["talent_orc_ev2c"] = R.drawable.talent_orc_ev2c
+        m["talent_orc_ev2d"] = R.drawable.talent_orc_ev2d
+        m["talent_orc_ev3a"] = R.drawable.talent_orc_ev3a
+        m["talent_orc_ev3b"] = R.drawable.talent_orc_ev3b
+        m["talent_orc_ev3c"] = R.drawable.talent_orc_ev3c
+        m["talent_orc_ev3d"] = R.drawable.talent_orc_ev3d
+        m["talent_orc_for1"] = R.drawable.talent_orc_for1
+        m["talent_orc_for10"] = R.drawable.talent_orc_for10
+        m["talent_orc_for2"] = R.drawable.talent_orc_for2
+        m["talent_orc_for3"] = R.drawable.talent_orc_for3
+        m["talent_orc_for4"] = R.drawable.talent_orc_for4
+        m["talent_orc_for5"] = R.drawable.talent_orc_for5
+        m["talent_orc_for6"] = R.drawable.talent_orc_for6
+        m["talent_orc_for7"] = R.drawable.talent_orc_for7
+        m["talent_orc_for8"] = R.drawable.talent_orc_for8
+        m["talent_orc_for9"] = R.drawable.talent_orc_for9
+        m["talent_orc_leg1"] = R.drawable.talent_orc_leg1
+    }
+
+    private fun block6(m: MutableMap<String, Int>) {
+        m["talent_orc_leg2"] = R.drawable.talent_orc_leg2
+        m["talent_orc_leg3"] = R.drawable.talent_orc_leg3
+        m["talent_orc_leg4"] = R.drawable.talent_orc_leg4
+        m["talent_orc_leg5"] = R.drawable.talent_orc_leg5
+        m["talent_orc_leg6"] = R.drawable.talent_orc_leg6
+        m["talent_orc_leg7"] = R.drawable.talent_orc_leg7
+        m["talent_orc_leg8"] = R.drawable.talent_orc_leg8
+        m["talent_orc_leg9"] = R.drawable.talent_orc_leg9
+        m["talent_orc_san1"] = R.drawable.talent_orc_san1
+        m["talent_orc_san10"] = R.drawable.talent_orc_san10
+        m["talent_orc_san11"] = R.drawable.talent_orc_san11
+        m["talent_orc_san12"] = R.drawable.talent_orc_san12
+        m["talent_orc_san13"] = R.drawable.talent_orc_san13
+        m["talent_orc_san14"] = R.drawable.talent_orc_san14
+        m["talent_orc_san15"] = R.drawable.talent_orc_san15
+        m["talent_orc_san2"] = R.drawable.talent_orc_san2
+        m["talent_orc_san3"] = R.drawable.talent_orc_san3
+        m["talent_orc_san4"] = R.drawable.talent_orc_san4
+        m["talent_orc_san5"] = R.drawable.talent_orc_san5
+        m["talent_orc_san6"] = R.drawable.talent_orc_san6
+        m["talent_orc_san7"] = R.drawable.talent_orc_san7
+        m["talent_orc_san8"] = R.drawable.talent_orc_san8
+        m["talent_orc_san9"] = R.drawable.talent_orc_san9
+        m["talent_orc_som1"] = R.drawable.talent_orc_som1
+        m["talent_orc_som10"] = R.drawable.talent_orc_som10
+        m["talent_orc_som2"] = R.drawable.talent_orc_som2
+        m["talent_orc_som3"] = R.drawable.talent_orc_som3
+        m["talent_orc_som4"] = R.drawable.talent_orc_som4
+        m["talent_orc_som5"] = R.drawable.talent_orc_som5
+        m["talent_orc_som6"] = R.drawable.talent_orc_som6
+        m["talent_orc_som7"] = R.drawable.talent_orc_som7
+        m["talent_orc_som8"] = R.drawable.talent_orc_som8
+        m["talent_orc_som9"] = R.drawable.talent_orc_som9
         m["talent_tree_banner_1784843563984"] = R.drawable.talent_tree_banner_1784843563984
         m["wandering_merchant_1784845746333"] = R.drawable.wandering_merchant_1784845746333
         m["warcraft3_hud_panel_1784669998817"] = R.drawable.warcraft3_hud_panel_1784669998817

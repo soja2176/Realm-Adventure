@@ -30,12 +30,12 @@ object EldoriaMaterials {
         MaterialDef(
             id = "wood", name = "Madera de Roble", rarity = "COMÚN",
             description = "Tablón del Bosque Susurrante. Aguanta el golpe y perdona el error.",
-            imageResName = "", paletteKey = "VITAE"
+            imageResName = "mat_wood", paletteKey = "VITAE"
         ),
         MaterialDef(
             id = "herbs", name = "Hierbas Silvestres", rarity = "COMÚN",
             description = "Manojo de hoja amarga del Valle del Alba. Base de toda poción decente.",
-            imageResName = "", paletteKey = "VITAE"
+            imageResName = "mat_herbs", paletteKey = "VITAE"
         ),
         MaterialDef(
             id = "steel", name = "Acero Templado", rarity = "RARO",
@@ -45,12 +45,12 @@ object EldoriaMaterials {
         MaterialDef(
             id = "crystal", name = "Cristal Bruto", rarity = "RARO",
             description = "Fragmento sin pulir de las Nubes de Cristal. Guarda maná como una esponja.",
-            imageResName = "", paletteKey = "MANA"
+            imageResName = "mat_crystal", paletteKey = "MANA"
         ),
         MaterialDef(
             id = "mystic_silk", name = "Seda Mística", rarity = "RARO",
             description = "Hilada por arañas de la Arboleda Arcana. Repele los conjuros de bajo nivel.",
-            imageResName = "", paletteKey = "ARCANE"
+            imageResName = "mat_mystic_silk", paletteKey = "ARCANE"
         ),
         MaterialDef(
             id = "gold_ore", name = "Mena de Oro", rarity = "RARO",
@@ -60,7 +60,7 @@ object EldoriaMaterials {
         MaterialDef(
             id = "blood_gem", name = "Gema de Sangre", rarity = "ÉPICO",
             description = "Rubí que late despacio. Se dice que recuerda a quién perteneció la sangre.",
-            imageResName = "", paletteKey = "BLOOD"
+            imageResName = "mat_blood_gem", paletteKey = "BLOOD"
         ),
         MaterialDef(
             id = "dragon_scale", name = "Escama de Dragón", rarity = "ÉPICO",
@@ -70,22 +70,22 @@ object EldoriaMaterials {
         MaterialDef(
             id = "shadow_essence", name = "Esencia de Sombra", rarity = "ÉPICO",
             description = "Sombra condensada de la Ciénaga Maldita. Pesa mucho más de lo que debería.",
-            imageResName = "", paletteKey = "ARCANE"
+            imageResName = "mat_shadow_essence", paletteKey = "ARCANE"
         ),
         MaterialDef(
             id = "phoenix_feather", name = "Pluma de Fénix", rarity = "LEGENDARIO",
             description = "Sigue caliente siglos después de caer. Se usa para devolver lo que ya se perdió.",
-            imageResName = "", paletteKey = "EMBER"
+            imageResName = "mat_phoenix_feather", paletteKey = "EMBER"
         ),
         MaterialDef(
             id = "pure_crystal", name = "Cristal Puro", rarity = "LEGENDARIO",
             description = "Cristal sin una sola impureza, tallado por la presión del Vértice Umbrío.",
-            imageResName = "", paletteKey = "MANA"
+            imageResName = "mat_pure_crystal", paletteKey = "MANA"
         ),
         MaterialDef(
             id = "ancient_relic", name = "Reliquia Antigua", rarity = "LEGENDARIO",
             description = "Pieza de un artefacto anterior a los reinos. Nadie sabe qué hacía la máquina entera.",
-            imageResName = "", paletteKey = "GOLD"
+            imageResName = "mat_ancient_relic", paletteKey = "GOLD"
         ),
         MaterialDef(
             id = "infinite_diamond", name = "Diamante Infinito", rarity = "ARCANO",
@@ -97,17 +97,17 @@ object EldoriaMaterials {
         MaterialDef(
             id = "forge_ember", name = "Brasa de Forja", rarity = "ÉPICO",
             description = "Rescoldo robado de la fragua primordial. Mejora la calidad de todo lo que templa.",
-            imageResName = "", paletteKey = "EMBER"
+            imageResName = "mat_forge_ember", paletteKey = "EMBER"
         ),
         MaterialDef(
             id = "anima_shard", name = "Fragmento de Ánima", rarity = "LEGENDARIO",
             description = "Moneda de las expediciones: astilla de alma cristalizada al morir en el abismo.",
-            imageResName = "", paletteKey = "ARCANE"
+            imageResName = "mat_anima_shard", paletteKey = "ARCANE"
         ),
         MaterialDef(
             id = "sealed_key", name = "Llave Sellada", rarity = "ÉPICO",
             description = "Llave de hierro negro sin dientes visibles. Abre las salas de Puerta Sellada.",
-            imageResName = "", paletteKey = "IRON"
+            imageResName = "mat_sealed_key", paletteKey = "IRON"
         )
     )
 
