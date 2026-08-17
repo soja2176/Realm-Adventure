@@ -68,6 +68,8 @@ import com.example.ui.design.EldoriaBarTone
 import com.example.ui.design.EldoriaButton
 import com.example.ui.design.EldoriaButtonSize
 import com.example.ui.design.EldoriaChip
+import com.example.ui.combat.CombatActionBar
+import com.example.ui.combat.CombatPetSlot
 import com.example.ui.design.CombatFx
 import com.example.ui.design.EldoriaDamageFloater
 import com.example.ui.design.EldoriaSkillFx
@@ -247,6 +249,7 @@ fun ExpeditionCombatScreen(viewModel: GameViewModel) {
         ) {
             // ── cinta superior ───────────────────────────────────────────────
             ExpeditionCombatRibbon(
+                dungeonId = run.dungeonId,
                 depth = depth,
                 roomLabel = combat.expeditionRoomLabel.ifBlank { run.dungeonName },
                 torch = run.torch,
@@ -534,81 +537,33 @@ fun ExpeditionCombatScreen(viewModel: GameViewModel) {
                     }
                 }
 
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(Eldoria.S6),
-                    verticalAlignment = Alignment.Bottom
-                ) {
-                    ExpeditionActionSlot(
-                        label = "ATACAR",
-                        cost = "—",
-                        icon = Icons.Filled.SportsMartialArts,
-                        accent = Eldoria.BloodBright,
-                        enabled = combat.playerTurn,
-                        testTag = "combat_attack_button",
-                        onClick = { viewModel.executeBasicAttack() }
-                    )
-
-                    skills.take(4).forEach { skill ->
-                        ExpeditionActionSlot(
-                            label = skill.name,
-                            cost = "${skill.manaCost} MP",
-                            icon = if (skill.isUltimate) Icons.Filled.AutoAwesome else Icons.Filled.Bolt,
-                            accent = if (skill.isUltimate) Eldoria.ArcaneBright else Eldoria.ManaBright,
-                            enabled = combat.playerTurn && combat.playerCurrentMp >= skill.manaCost,
-                            testTag = "skill_${skill.id}",
-                            onClick = { viewModel.executeSkill(skill) }
-                        )
-                    }
-
-                    ExpeditionActionSlot(
-                        label = "BESTIA",
-                        cost = if (combat.petCooldown > 0) "${combat.petCooldown}t" else "lista",
-                        icon = Icons.Filled.Pets,
-                        accent = Eldoria.Vitae,
-                        enabled = combat.playerTurn && combat.petCooldown <= 0,
-                        testTag = "combat_pet_command_btn",
+                // La misma barra de cristales emplomados que la superficie. El
+                // descenso sólo añade el hueco de la bestia.
+                CombatActionBar(
+                    charClass = p.charClass,
+                    skills = skills,
+                    inventoryJson = p.inventoryJson,
+                    combatState = combat,
+                    onBasicAttack = { viewModel.executeBasicAttack() },
+                    onSkill = { skill -> viewModel.executeSkill(skill) },
+                    onPotion = { potionId -> viewModel.usePotionCombat(potionId) },
+                    onFlee = { viewModel.fleeCombat() },
+                    petSlot = CombatPetSlot(
+                        cooldown = combat.petCooldown,
                         onClick = { petMenuOpen = !petMenuOpen }
                     )
-
-                    ExpeditionActionSlot(
-                        label = "POCIÓN",
-                        cost = "x$potionCount",
-                        icon = Icons.Filled.LocalPharmacy,
-                        accent = Eldoria.VitaeBright,
-                        enabled = combat.playerTurn && potionCount > 0,
-                        testTag = "combat_potion_button",
-                        onClick = { viewModel.usePotionCombat() }
-                    )
-
-                    ExpeditionActionSlot(
-                        label = "HUIR",
-                        cost = "−½",
-                        icon = Icons.Filled.DirectionsRun,
-                        accent = Eldoria.IronEdge,
-                        enabled = combat.playerTurn,
-                        testTag = "combat_flee_button",
-                        onClick = { viewModel.fleeCombat() }
-                    )
-                }
+                )
             }
         }
 
-        // ── capas de luz ─────────────────────────────────────────────────────
-        EldoriaTorchLight(
-            modifier = Modifier.fillMaxSize(),
-            intensity = (0.25f + 0.75f * torchRatio).coerceIn(0f, 1f),
-            centerX = 0.5f,
-            centerY = 0.34f
-        )
+        // ── capa de ambiente ─────────────────────────────────────────────────
+        // Sin foco de antorcha: el halo que se abría y cerraba con la luz molestaba
+        // a la vista. Queda la caída de cenizas y un viñeteado fijo y suave.
         EldoriaVignette(
             modifier = Modifier.fillMaxSize(),
-            strength = (0.42f + (1f - torchRatio) * 0.4f).coerceIn(0f, 1f),
+            strength = 0.42f,
             centerBiasY = 0.38f
         )
-        EldoriaScanlines(modifier = Modifier.fillMaxSize(), alpha = 0.03f)
 
         // ── ventana de reacción ──────────────────────────────────────────────
         if (combat.reactionWindow) {
@@ -636,6 +591,7 @@ fun ExpeditionCombatScreen(viewModel: GameViewModel) {
 
 @Composable
 private fun ExpeditionCombatRibbon(
+    dungeonId: Int,
     depth: Int,
     roomLabel: String,
     torch: Int,
@@ -661,6 +617,9 @@ private fun ExpeditionCombatRibbon(
             .padding(horizontal = 11.dp, vertical = 8.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // El mismo emblema que en el mapa: la pelea no se despega del sitio.
+            ExpeditionDungeonEmblem(dungeonId = dungeonId, accent = accent, size = 26.dp)
+            Spacer(Modifier.width(Eldoria.S6))
             Text(
                 text = "PROFUNDIDAD ${depth + 1}",
                 style = EldoriaType.label,

@@ -4,6 +4,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -43,6 +44,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -51,12 +53,16 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.LaunchedEffect
 import com.example.data.content.EldoriaExpeditions
+import com.example.ui.art.EldoriaArt
 import com.example.ui.design.Eldoria
 import com.example.ui.design.EldoriaBarTone
 import com.example.ui.design.EldoriaButton
@@ -194,8 +200,58 @@ internal fun expeditionArchetypeName(archetype: String): String = when (archetyp
 // ──────────────────────────────────────────────────────────────────────────────
 
 /**
- * Cabecera de la expedición: nombre del destino, antorcha (el reloj real de la run),
- * vida y maná persistentes, fragmentos y bendiciones activas.
+ * Emblema del calabozo: su lámina de jefe dedicada dentro de un marco biselado.
+ * Si el destino no tiene lámina propia (el Abismo), cae a un glifo de llama para
+ * no dejar un hueco negro.
+ */
+@Composable
+internal fun ExpeditionDungeonEmblem(
+    dungeonId: Int,
+    accent: Color,
+    size: Dp,
+    modifier: Modifier = Modifier
+) {
+    val shape = CutCornerShape(6.dp)
+    val emblem = EldoriaArt.dungeonEmblem(dungeonId)
+    Box(
+        modifier = modifier
+            .size(size)
+            .clip(shape)
+            .background(Eldoria.Abyss)
+            .border(Eldoria.StrokeThin, accent.copy(alpha = 0.75f), shape),
+        contentAlignment = Alignment.Center
+    ) {
+        if (emblem != null) {
+            Image(
+                painter = painterResource(id = emblem),
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            // Velo inferior: el rótulo de al lado gana contraste sobre la lámina.
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(Color.Transparent, Eldoria.Abyss.copy(alpha = 0.55f))
+                        )
+                    )
+            )
+        } else {
+            Icon(
+                imageVector = Icons.Filled.LocalFireDepartment,
+                contentDescription = null,
+                tint = accent,
+                modifier = Modifier.size(size * 0.55f)
+            )
+        }
+    }
+}
+
+/**
+ * Cabecera de la expedición: emblema y nombre del destino, antorcha (el reloj real
+ * de la run), vida y maná persistentes, fragmentos y bendiciones activas.
  */
 @Composable
 internal fun ExpeditionHud(
@@ -212,7 +268,8 @@ internal fun ExpeditionHud(
     keys: Int,
     boonIds: List<String>,
     sealIds: List<String>,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    dungeonId: Int = 0
 ) {
     val accent = expeditionDepthAccent(depth)
     EldoriaPanel(
@@ -224,6 +281,10 @@ internal fun ExpeditionHud(
         filigree = true
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
+            // Emblema del destino: saber en qué calabozo estás de un vistazo, sin
+            // leer el rótulo.
+            ExpeditionDungeonEmblem(dungeonId = dungeonId, accent = accent, size = 42.dp)
+            Spacer(Modifier.width(Eldoria.S8))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = dungeonName.uppercase(),
@@ -397,7 +458,9 @@ internal fun ExpeditionNode(
     state: ExpeditionNodeState,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    testTag: String? = null
+    testTag: String? = null,
+    dungeonId: Int = 0,
+    roomId: Int = 0
 ) {
     val veiled = state == ExpeditionNodeState.Veiled
     val selectable = state == ExpeditionNodeState.Available
@@ -466,17 +529,53 @@ internal fun ExpeditionNode(
                 onClick = if (selectable) onClick else null,
                 testTag = testTag
             ) {
-                Icon(
-                    imageVector = if (veiled) Icons.AutoMirrored.Filled.Help else expeditionRoomIcon(kind),
-                    contentDescription = null,
-                    tint = when (state) {
-                        ExpeditionNodeState.Veiled -> Eldoria.Iron
-                        ExpeditionNodeState.Locked -> Eldoria.TextLow
-                        ExpeditionNodeState.Cleared -> Eldoria.SilverDeep
-                        else -> accent
-                    },
-                    modifier = Modifier.size(24.dp)
-                )
+                // Lámina real de la sala. Las de pelea enseñan una criatura del
+                // elenco de ESE calabozo en vez del mismo monigote de artes
+                // marciales en los dieciséis. Velada sigue siendo interrogante, y
+                // si no hay lámina se cae al icono vectorial de siempre.
+                val nodeArt = if (veiled) null
+                else remember(dungeonId, kind, roomId) {
+                    EldoriaArt.expeditionNodeArt(dungeonId, kind, roomId)
+                }
+
+                if (nodeArt != null) {
+                    Image(
+                        painter = painterResource(id = nodeArt),
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(CutCornerShape(4.dp))
+                            .alpha(
+                                when (state) {
+                                    ExpeditionNodeState.Locked -> 0.45f
+                                    ExpeditionNodeState.Cleared -> 0.35f
+                                    else -> 1f
+                                }
+                            )
+                    )
+                    // Las salas ya limpias se apagan hacia gris para que la vista
+                    // vaya sola a las que quedan por hacer.
+                    if (state == ExpeditionNodeState.Cleared) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Eldoria.Abyss.copy(alpha = 0.45f))
+                        )
+                    }
+                } else {
+                    Icon(
+                        imageVector = if (veiled) Icons.AutoMirrored.Filled.Help else expeditionRoomIcon(kind),
+                        contentDescription = null,
+                        tint = when (state) {
+                            ExpeditionNodeState.Veiled -> Eldoria.Iron
+                            ExpeditionNodeState.Locked -> Eldoria.TextLow
+                            ExpeditionNodeState.Cleared -> Eldoria.SilverDeep
+                            else -> accent
+                        },
+                        modifier = Modifier.size(24.dp)
+                    )
+                }
                 if (state == ExpeditionNodeState.Cleared) {
                     Canvas(modifier = Modifier.fillMaxSize()) {
                         val s = size.minDimension
@@ -624,8 +723,11 @@ internal fun ExpeditionReactionRing(
 ) {
     val anim = remember(deadline) { Animatable(0f) }
     val resolved = remember(deadline) { mutableStateOf(false) }
-    val perfectBand = if (assist) 0.13f else 0.075f
-    val goodBand = if (assist) 0.30f else 0.21f
+    // Bandas estrechas a propósito. Con la anterior (0.21) casi la mitad del aro
+    // contaba como bloqueo y pulsar en cualquier momento tardío salía bien: no
+    // había forma de fallar y el golpe enemigo dejó de dar miedo.
+    val perfectBand = if (assist) 0.075f else 0.045f
+    val goodBand = if (assist) 0.17f else 0.11f
     val target = 0.80f
 
     LaunchedEffect(deadline) {

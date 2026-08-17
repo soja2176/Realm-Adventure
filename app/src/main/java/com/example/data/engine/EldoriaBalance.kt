@@ -487,6 +487,31 @@ object EldoriaBalance {
         return min(damage, ceiling)
     }
 
+    /**
+     * Suelo de un golpe que ACIERTA. La contrapartida de [capHit].
+     *
+     * `damageThrough` es k/(k+defensa): tiende a cero, así que una armadura lo
+     * bastante grande dejaba todos los golpes básicos en 1 de daño y el combate
+     * se volvía inofensivo por mucho que el enemigo estuviera bien calibrado.
+     * Aquí se garantiza que un impacto SIEMPRE se nota, sin tocar la curva de
+     * armadura (que sigue premiando equiparse bien: la diferencia entre el suelo
+     * y el techo es de más de un orden de magnitud).
+     *
+     * No se aplica a lo que el jugador evita: esquivar y la parada perfecta
+     * anulan el golpe DESPUÉS, y eso debe seguir dejándolo en cero.
+     */
+    fun floorHit(damage: Int, heroMaxHp: Int, rarity: String): Int {
+        if (damage <= 0) return 0
+        val fraction = when (rarity.uppercase()) {
+            "UNIVERSAL" -> 0.025
+            "LEGENDARY" -> 0.020
+            "CHAMPION" -> 0.015
+            else -> 0.010
+        }
+        val floor = (heroMaxHp * fraction).roundToInt().coerceAtLeast(1)
+        return max(damage, floor)
+    }
+
     // ═══════════════════════════════════════════════════════════════════════
     //  DIAGNÓSTICO
     // ═══════════════════════════════════════════════════════════════════════

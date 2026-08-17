@@ -476,6 +476,16 @@ object EldoriaArt {
         m["cutscene_mage_1784895923135"] = R.drawable.cutscene_mage_1784895923135
         m["cutscene_rogue_1784895933260"] = R.drawable.cutscene_rogue_1784895933260
         m["cutscene_warrior_1784895909697"] = R.drawable.cutscene_warrior_1784895909697
+        // Láminas de las salas que no son pelea, del mapa del descenso.
+        m["room_tesoro"] = R.drawable.room_tesoro
+        m["room_hoguera"] = R.drawable.room_hoguera
+        m["room_santuario"] = R.drawable.room_santuario
+        m["room_trampa"] = R.drawable.room_trampa
+        m["room_mercader"] = R.drawable.room_mercader
+        m["room_evento"] = R.drawable.room_evento
+        m["room_puerta"] = R.drawable.room_puerta
+        m["room_vacio"] = R.drawable.room_vacio
+
         m["dg01_boss_hobgoblin"] = R.drawable.dg01_boss_hobgoblin
         m["dg01_goblin_asesino"] = R.drawable.dg01_goblin_asesino
         m["dg01_goblin_capataz"] = R.drawable.dg01_goblin_capataz
@@ -1456,4 +1466,82 @@ object EldoriaArt {
 
     fun dungeonKey(dungeonId: Int, rawName: String, isBoss: Boolean): String =
         DUNGEON[if (isBoss) "$dungeonId|BOSS" else "$dungeonId|$rawName"] ?: ""
+
+    /**
+     * Emblema de cada calabozo.
+     *
+     * La ficha del vestíbulo adivinaba la lámina a partir del nombre del jefe, y
+     * con eso diecisiete destinos compartían media docena de imágenes (el tercero
+     * llegaba a enseñar el retrato de un héroe pícaro). Cada calabozo tiene ya su
+     * propia lámina de jefe dedicada: esa es su cara.
+     *
+     * Devuelve null para el Abismo (101-104), que no tiene elenco propio; quien
+     * llame decide con qué lo sustituye.
+     */
+    fun dungeonEmblem(dungeonId: Int): Int? =
+        DUNGEON["$dungeonId|BOSS"]?.let { INDEX[it] }
+
+    /** Elenco de cada calabozo (los nueve subjefes), indexado por id de destino. */
+    private val DUNGEON_ROSTER: Map<Int, List<String>> by lazy {
+        DUNGEON.entries
+            .filterNot { it.key.endsWith("|BOSS") }
+            .groupBy { it.key.substringBefore('|').toIntOrNull() ?: 0 }
+            .mapValues { (_, entries) -> entries.map { it.value }.sorted() }
+    }
+
+    /**
+     * Lámina de una cuadrícula del mapa del descenso.
+     *
+     * Las salas de pelea enseñan una criatura REAL del elenco de ese calabozo en
+     * vez del monigote de artes marciales que salía en los dieciséis por igual;
+     * el jefe, su propia lámina; y el resto de salas, su icono pintado. La
+     * elección es estable por sala: el mismo nodo no cambia de bicho al
+     * recomponerse.
+     *
+     * Devuelve null cuando no hay lámina y quien llame debe seguir con el icono
+     * vectorial de siempre (el Abismo no tiene elenco propio).
+     */
+    fun expeditionNodeArt(dungeonId: Int, kind: String, roomId: Int): Int? {
+        val k = kind.uppercase()
+        return when (k) {
+            "JEFE" -> dungeonEmblem(dungeonId) ?: ABYSS_BOSS[dungeonId]
+            "COMBATE", "ELITE" -> {
+                // El Abismo no tiene elenco propio, pero sus enemigos SÍ salen del
+                // bestiario de Aetheria (`expeditionKingdomFor` manda todo id >= 13
+                // a ese reino), así que sus salas enseñan esa fauna en vez de caer
+                // al monigote vectorial.
+                val roster = DUNGEON_ROSTER[dungeonId].orEmpty().ifEmpty { ABYSS_ROSTER }
+                if (roster.isEmpty()) null
+                else INDEX[roster[Math.floorMod(roomId * 31 + k.hashCode(), roster.size)]]
+            }
+            else -> ROOM_KIND[k]?.let { INDEX[it] }
+        }
+    }
+
+    /** Cara de cada destino del Abismo, que no tiene lámina de jefe dedicada. */
+    private val ABYSS_BOSS: Map<Int, Int> = mapOf(
+        101 to R.drawable.img_enemy_mud_golem_1784386930907,
+        102 to R.drawable.enemy_automaton_1784850938702,
+        103 to R.drawable.enemy_lich_1784850885522,
+        104 to R.drawable.enemy_demon_1784903246195
+    )
+
+    /** Fauna de Aetheria: la que realmente sale en las salas del Abismo. */
+    private val ABYSS_ROSTER: List<String> by lazy {
+        INDEX.keys
+            .filter { it.startsWith("bestiary_aetheria_") && it.endsWith("_normal") }
+            .sorted()
+    }
+
+    /** Lámina propia de las salas que no son pelea. */
+    private val ROOM_KIND: Map<String, String> = mapOf(
+        "TESORO" to "room_tesoro",
+        "HOGUERA" to "room_hoguera",
+        "SANTUARIO" to "room_santuario",
+        "TRAMPA" to "room_trampa",
+        "MERCADER" to "room_mercader",
+        "EVENTO" to "room_evento",
+        "PUERTA" to "room_puerta",
+        "VACIO" to "room_vacio"
+    )
 }

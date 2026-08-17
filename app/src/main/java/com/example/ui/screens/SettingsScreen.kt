@@ -398,6 +398,9 @@ fun SettingsScreen(viewModel: GameViewModel) {
                 }
             }
 
+            // ─────────────── CONSOLA DEL ARCANISTA (desarrollo) ───────────────
+            DevConsoleSection(viewModel = viewModel, unlocked = settings.devUnlocked)
+
             Spacer(Modifier.height(Eldoria.S24))
             EldoriaButton(
                 text = "VOLVER AL MENÚ PRINCIPAL",

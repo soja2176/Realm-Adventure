@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -56,6 +59,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
@@ -999,9 +1003,20 @@ fun EldoriaSheet(
 ) {
     if (!visible) return
     val shape = RoundedCornerShape(topStart = Eldoria.R28, topEnd = Eldoria.R28)
+
+    // Los insets NO llegan a la ventana del Dialog (navigationBarsPadding() dentro
+    // mide 0), así que se leen AQUÍ, en la ventana de la Activity, y se aplican a
+    // mano abajo. Sin esto la barra de gestos se comía el último botón de la hoja.
+    val density = LocalDensity.current
+    val navBarInset = with(density) { WindowInsets.navigationBars.getBottom(this).toDp() }
+    val statusInset = with(density) { WindowInsets.statusBars.getTop(this).toDp() }
+
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
         Box(
             modifier = Modifier
@@ -1013,11 +1028,19 @@ fun EldoriaSheet(
             Column(
                 modifier = modifier
                     .fillMaxWidth()
+                    // El panel nunca se mete bajo la barra de estado aunque crezca.
+                    .padding(top = statusInset)
                     .pointerInput(Unit) { detectTapGestures { } }
                     .clip(shape)
                     .background(Eldoria.panelBrush())
                     .border(Eldoria.StrokeMed, edge.brush(), shape)
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    // El fondo llega al borde de la pantalla; el contenido no.
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 12.dp,
+                        bottom = 12.dp + navBarInset
+                    )
             ) {
                 Box(
                     modifier = Modifier

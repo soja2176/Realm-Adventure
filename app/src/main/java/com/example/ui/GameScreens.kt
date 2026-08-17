@@ -108,6 +108,7 @@ import com.example.ui.design.EldoriaEdge
 import com.example.ui.design.EldoriaEmberField
 import com.example.data.content.EldoriaPotions
 import com.example.ui.combat.PotionStack
+import com.example.ui.combat.CombatActionBar
 import com.example.ui.combat.CombatPotionDrawer
 import com.example.ui.combat.CombatBuffChips
 import com.example.ui.combat.basicAttackFor
@@ -259,7 +260,12 @@ fun getCharacterPortrait(race: String, cls: String, hasAdvancedClass: Boolean = 
     val c = cls.trim()
     val r = race.trim()
 
-    // 3-Stage Evolution Portraits (Lvl 20, Lvl 50, Lvl 100)
+    // Retratos por grado, del más alto al más bajo. El ORDEN importa: la
+    // ascensión sólo se puede hacer a partir del nivel 20, así que mientras el
+    // tramo «>= 20» estuvo por encima de `hasAdvancedClass` los cuatro retratos
+    // de clase avanzada eran inalcanzables y ascender no cambiaba nada.
+    // La ascensión pisa a la 1ª evolución, y las evoluciones 2ª y 3ª —que son
+    // arte de grado superior— siguen pisando a la ascensión.
     when {
         charLevel >= 100 -> {
             return when (c) {
@@ -277,6 +283,14 @@ fun getCharacterPortrait(race: String, cls: String, hasAdvancedClass: Boolean = 
                 else -> R.drawable.img_evo_clerigo_2_1784901568583
             }
         }
+        hasAdvancedClass -> {
+            return when (c) {
+                "Guerrero" -> R.drawable.img_hero_advanced_guerrero_1784856127764
+                "Mago" -> R.drawable.img_hero_advanced_mago_1784856138389
+                "Pícaro" -> R.drawable.img_hero_advanced_picaro_1784856148296
+                else -> R.drawable.img_hero_advanced_clerigo_1784856159204
+            }
+        }
         charLevel >= 20 -> {
             return when (c) {
                 "Guerrero" -> R.drawable.img_evo_guerrero_1_1784901448962
@@ -284,15 +298,6 @@ fun getCharacterPortrait(race: String, cls: String, hasAdvancedClass: Boolean = 
                 "Pícaro" -> R.drawable.img_evo_picaro_1_1784901516704
                 else -> R.drawable.img_evo_clerigo_1_1784901558922
             }
-        }
-    }
-
-    if (hasAdvancedClass) {
-        return when (c) {
-            "Guerrero" -> R.drawable.img_hero_advanced_guerrero_1784856127764
-            "Mago" -> R.drawable.img_hero_advanced_mago_1784856138389
-            "Pícaro" -> R.drawable.img_hero_advanced_picaro_1784856148296
-            else -> R.drawable.img_hero_advanced_clerigo_1784856159204
         }
     }
 
@@ -3942,188 +3947,21 @@ fun CombatScreen(viewModel: GameViewModel) {
                     }
                 }
             } else {
-                val inventory = GameJsonParser.listFromJson<Item>(p.inventoryJson)
-                val potionCount = inventory.count { it.type == "POTION" }
-                val classSkills = GameJsonParser.listFromJson<Skill>(p.skillsJson)
-
-                // El inventario guarda un Item POR UNIDAD, así que hay que
-                // agrupar para enseñar "Poción Menor ×7" y no siete filas.
-                val potionStacks = remember(p.inventoryJson) {
-                    inventory.filter { it.type == "POTION" }
-                        .map { EldoriaPotions.fromItem(it.id, it.name) }
-                        .groupingBy { it }
-                        .eachCount()
-                        .map { (spec, count) -> PotionStack(spec, count) }
-                        .sortedBy { it.spec.unlockLevel }
+                // Misma barra que el resto del juego: cristales emplomados,
+                // cajón de pociones y fichas de efecto. La comparte el descenso.
+                val classSkills = remember(p.skillsJson) {
+                    GameJsonParser.listFromJson<Skill>(p.skillsJson)
                 }
-                var potionDrawerOpen by remember { mutableStateOf(false) }
-                val heroAction = basicAttackFor(p.charClass)
-
-                // El contenedor de acciones es un Box, y un Box APILA a sus
-                // hijos: por eso la barra de habilidades se dibujaba ENCIMA del
-                // cajón de pociones en vez de debajo. La Column los ordena.
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-
-                // Efectos activos: sin esto un buff de cuatro turnos es
-                // invisible en cuanto pasa la línea del registro.
-                CombatBuffChips(
-                    regenTurns = combatState.regenTurns,
-                    damageTurns = combatState.damageBuffTurns,
-                    damagePotency = combatState.damageBuffPotency,
-                    evasionTurns = combatState.evasionTurns,
-                    evasionPotency = combatState.evasionPotency,
-                    wardTurns = combatState.wardTurns,
-                    wardPotency = combatState.wardPotency,
-                    modifier = Modifier.padding(bottom = 6.dp)
+                CombatActionBar(
+                    charClass = p.charClass,
+                    skills = classSkills,
+                    inventoryJson = p.inventoryJson,
+                    combatState = combatState,
+                    onBasicAttack = { viewModel.executeBasicAttack() },
+                    onSkill = { skill -> viewModel.executeSkill(skill) },
+                    onPotion = { potionId -> viewModel.usePotionCombat(potionId) },
+                    onFlee = { viewModel.fleeCombat() }
                 )
-
-                if (potionDrawerOpen) {
-                    CombatPotionDrawer(
-                        stacks = potionStacks,
-                        enabled = combatState.playerTurn,
-                        onPick = { spec ->
-                            potionDrawerOpen = false
-                            viewModel.usePotionCombat(spec.id)
-                        },
-                        onDismiss = { potionDrawerOpen = false },
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    )
-                }
-
-                // Stained Glass Frame HUD Panel Container
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF090A0E))
-                        .border(
-                            BorderStroke(
-                                2.dp,
-                                Brush.verticalGradient(
-                                    listOf(Color(0xFF8A9AAB), Color(0xFF3A424C), Color(0xFF1E222A))
-                                )
-                            ),
-                            shape = RoundedCornerShape(10.dp)
-                        )
-                ) {
-                    // Stained Glass Dark Action Bar Background Texture
-                    Image(
-                        painter = painterResource(id = R.drawable.gothic_skill_bar_bg_1784670759745),
-                        contentDescription = null,
-                        modifier = Modifier.matchParentSize(),
-                        contentScale = ContentScale.Crop,
-                        alpha = 0.55f
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        // 1. Basic Attack Slot (Crimson Stained Glass)
-                        // El golpe básico lleva el nombre y el icono de TU clase:
-                        // un Mago no "ataca físicamente" con un puño dibujado.
-                        StainedGlassSkillSlot(
-                            title = heroAction.label,
-                            badgeLabel = heroAction.badge,
-                            costText = "0",
-                            icon = heroAction.icon,
-                            glassTheme = when (p.charClass) {
-                                "Mago" -> SkillGlassTheme.PURPLE
-                                "Pícaro" -> SkillGlassTheme.TURQUOISE
-                                "Clérigo" -> SkillGlassTheme.AMBER
-                                else -> SkillGlassTheme.CRIMSON
-                            },
-                            enabled = combatState.playerTurn,
-                            testTag = "combat_attack_button",
-                            onClick = { viewModel.executeBasicAttack() },
-                            artKey = "action_basic_" + when (p.charClass) {
-                                "Mago" -> "mago"
-                                "Pícaro" -> "picaro"
-                                "Clérigo" -> "clerigo"
-                                else -> "guerrero"
-                            }
-                        )
-
-                        // 2. Class Skills — el color del cristal y el icono siguen
-                        // al ELEMENTO de la habilidad, el mismo que verás estallar
-                        // sobre el enemigo al pulsarla.
-                        classSkills.forEachIndexed { index, skill ->
-                            val isSkillEnabled = combatState.playerTurn && combatState.playerCurrentMp >= skill.manaCost
-                            val skillFx = combatFxForSkill(
-                                skillId = skill.id,
-                                healing = skill.healingMultiplier > 0.0,
-                                damaging = skill.damageMultiplier > 0.0
-                            )
-                            val skillTheme = when (skillFx) {
-                                CombatFx.BLOOD -> SkillGlassTheme.CRIMSON
-                                CombatFx.FIRE -> SkillGlassTheme.AMBER
-                                CombatFx.NECROTIC, CombatFx.POISON, CombatFx.HEAL -> SkillGlassTheme.EMERALD
-                                CombatFx.HOLY, CombatFx.WARCRY -> SkillGlassTheme.AMBER
-                                CombatFx.FROST -> SkillGlassTheme.TURQUOISE
-                                else -> SkillGlassTheme.PURPLE
-                            }
-                            val skillIcon = when (skillFx) {
-                                CombatFx.BLOOD -> Icons.Default.Gavel
-                                CombatFx.WARCRY -> Icons.Default.Shield
-                                CombatFx.ARCANE -> Icons.Default.AutoAwesome
-                                CombatFx.NECROTIC, CombatFx.FIRE -> Icons.Default.LocalFireDepartment
-                                CombatFx.POISON -> Icons.Default.Science
-                                CombatFx.SHADOW -> Icons.Default.VisibilityOff
-                                CombatFx.HOLY -> Icons.Default.WbSunny
-                                CombatFx.HEAL -> Icons.Default.Favorite
-                                CombatFx.FROST -> Icons.Default.AcUnit
-                                else -> Icons.Default.Bolt
-                            }
-
-                            StainedGlassSkillSlot(
-                                title = skill.name,
-                                badgeLabel = if (index == 0) "Sk 1" else "Sk 2",
-                                costText = "${skill.manaCost}",
-                                icon = skillIcon,
-                                glassTheme = skillTheme,
-                                enabled = isSkillEnabled,
-                                testTag = "skill_${skill.id}",
-                                onClick = { viewModel.executeSkill(skill) },
-                                artKey = "skill_${skill.id}"
-                            )
-                        }
-
-                        // 3. Potion Slot (Emerald Green Stained Glass)
-                        // Abre el zurrón en vez de beber a ciegas: con seis
-                        // frascos, ELEGIR cuál bebes es la jugada.
-                        StainedGlassSkillSlot(
-                            title = "Zurrón",
-                            badgeLabel = "${potionStacks.size} tipos",
-                            costText = "x$potionCount",
-                            icon = Icons.Default.LocalPharmacy,
-                            glassTheme = SkillGlassTheme.EMERALD,
-                            enabled = combatState.playerTurn && potionCount > 0,
-                            testTag = "combat_potion_button",
-                            onClick = { potionDrawerOpen = !potionDrawerOpen },
-                            artKey = "action_zurron"
-                        )
-
-                        // 4. Flee Slot (Dark Violet Stained Glass)
-                        StainedGlassSkillSlot(
-                            title = "Huir",
-                            badgeLabel = "Huir",
-                            costText = "",
-                            icon = Icons.Default.DirectionsRun,
-                            glassTheme = SkillGlassTheme.PURPLE,
-                            enabled = combatState.playerTurn,
-                            testTag = "combat_flee_button",
-                            onClick = { viewModel.fleeCombat() },
-                            artKey = "action_huir"
-                        )
-                    }
-                }
-                }
             }
         }
     }
@@ -4277,7 +4115,11 @@ fun CharacterScreen(viewModel: GameViewModel) {
                         glowPulse = p.hasAdvancedClass
                     ) {
                         Image(
-                            painter = painterResource(id = getCharacterPortrait(p.charRace, p.charClass, p.hasAdvancedClass)),
+                            // Sin `charLevel` esta ficha se saltaba las evoluciones y
+                            // enseñaba un retrato distinto al de la barra superior.
+                            painter = painterResource(
+                                id = getCharacterPortrait(p.charRace, p.charClass, p.hasAdvancedClass, p.charLevel)
+                            ),
                             contentDescription = "Portrait",
                             modifier = Modifier.fillMaxSize(),
                             contentScale = ContentScale.Crop

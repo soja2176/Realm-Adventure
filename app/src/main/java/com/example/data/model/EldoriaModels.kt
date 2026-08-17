@@ -162,7 +162,13 @@ data class GameSettings(
     val musicEnabled: Boolean = true, val sfxEnabled: Boolean = true, val hapticsEnabled: Boolean = true,
     val damageNumbers: Boolean = true, val embersEnabled: Boolean = true,
     val reactionAssist: Boolean = false, val autoCombatDefault: Boolean = false,
-    val screenShake: Boolean = true, val textScale: Int = 100
+    val screenShake: Boolean = true, val textScale: Int = 100,
+    /**
+     * Consola del arcanista desbloqueada con el código de desarrollador. Va al
+     * final y con default para que las partidas guardadas antes de existir el
+     * campo sigan deserializando sin él.
+     */
+    val devUnlocked: Boolean = false
 )
 
 data class RunStats(

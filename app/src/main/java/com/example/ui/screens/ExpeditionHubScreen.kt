@@ -58,6 +58,7 @@ import com.example.data.GameViewModel
 import com.example.data.Item
 import com.example.data.content.EldoriaExpeditions
 import com.example.data.model.DungeonBlueprint
+import com.example.ui.art.EldoriaArt
 import com.example.ui.design.Eldoria
 import com.example.ui.design.EldoriaBanner
 import com.example.ui.design.EldoriaButton
@@ -458,7 +459,12 @@ private fun ExpeditionDestinationCard(
                             .border(Eldoria.StrokeMed, edge.brush(), CutCornerShape(10.dp))
                     ) {
                         Image(
-                            painter = painterResource(id = getEnemyPortraitRes(blueprint.finalBossName, true)),
+                            // Emblema propio del destino. El fallback por nombre sólo
+                            // queda para el Abismo, que no tiene lámina dedicada.
+                            painter = painterResource(
+                                id = EldoriaArt.dungeonEmblem(blueprint.dungeonId)
+                                    ?: getEnemyPortraitRes(blueprint.finalBossName, true)
+                            ),
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             alpha = if (locked) 0.30f else 0.95f,

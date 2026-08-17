@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Diamond
+import androidx.compose.material.icons.filled.DirectionsWalk
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Inbox
@@ -81,6 +82,7 @@ fun ExpeditionRunScreen(viewModel: GameViewModel) {
     val run by viewModel.systems.expedition.collectAsState()
     val offer by viewModel.systems.expeditionOffer.collectAsState()
     val progress by viewModel.progressState.collectAsState()
+    val autoExpedition by viewModel.isAutoExpedition.collectAsState()
 
     var askAbandon by remember { mutableStateOf(false) }
 
@@ -157,6 +159,7 @@ fun ExpeditionRunScreen(viewModel: GameViewModel) {
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             ExpeditionHud(
+                dungeonId = run.dungeonId,
                 dungeonName = run.dungeonName,
                 depth = run.depth,
                 maxDepth = run.maxDepth,
@@ -198,6 +201,7 @@ fun ExpeditionRunScreen(viewModel: GameViewModel) {
                             currentRoomId = run.currentRoomId,
                             availableIds = run.availableRoomIds,
                             lit = lit,
+                            dungeonId = run.dungeonId,
                             onEnter = { id -> viewModel.systems.enterRoom(id) }
                         )
                     }
@@ -233,16 +237,28 @@ fun ExpeditionRunScreen(viewModel: GameViewModel) {
                         overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = if (run.availableRoomIds.isEmpty()) "Sin salidas: el descenso se cierra."
-                        else "Elige la siguiente sala.",
+                        text = when {
+                            run.availableRoomIds.isEmpty() -> "Sin salidas: el descenso se cierra."
+                            autoExpedition -> "Marcha automática en curso…"
+                            else -> "Elige la siguiente sala."
+                        },
                         style = EldoriaType.small,
-                        color = expeditionDepthAccent(run.depth),
+                        color = if (autoExpedition) Eldoria.Vitae else expeditionDepthAccent(run.depth),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
                 if (!run.finished) {
                     Spacer(Modifier.width(Eldoria.S8))
+                    EldoriaButton(
+                        text = if (autoExpedition) "DETENER" else "AUTOMÁTICO",
+                        onClick = { viewModel.toggleAutoExpedition() },
+                        tone = if (autoExpedition) EldoriaTone.Vitae else EldoriaTone.Arcane,
+                        size = EldoriaButtonSize.Small,
+                        icon = Icons.Filled.DirectionsWalk,
+                        testTag = "expedition_auto_btn"
+                    )
+                    Spacer(Modifier.width(Eldoria.S6))
                     EldoriaButton(
                         text = "ABANDONAR",
                         onClick = { askAbandon = true },
@@ -253,23 +269,24 @@ fun ExpeditionRunScreen(viewModel: GameViewModel) {
                     )
                 }
             }
+            if (autoExpedition && !run.finished) {
+                Spacer(Modifier.height(Eldoria.S4))
+                Text(
+                    text = "El piloto entra solo en las salas y pelea por ti. Se detiene cuando " +
+                        "haya que decidir algo y sigue en cuanto elijas.",
+                    style = EldoriaType.caption,
+                    color = Eldoria.TextLow
+                )
+            }
         }
 
-        // ── capas de luz (por encima del contenido) ──────────────────────────
-        EldoriaTorchLight(
-            modifier = Modifier.fillMaxSize(),
-            intensity = torchRatio,
-            centerX = 0.5f,
-            centerY = 0.46f
-        )
+        // ── capa de ambiente (por encima del contenido) ──────────────────────
+        // Sin foco de antorcha: molestaba a la vista y oscurecía el mapa según se
+        // consumía la luz. Queda la caída de cenizas y un viñeteado fijo y suave.
         EldoriaVignette(
             modifier = Modifier.fillMaxSize(),
-            strength = (0.45f + (1f - torchRatio) * 0.5f).coerceIn(0f, 1f),
+            strength = 0.45f,
             centerBiasY = 0.46f
-        )
-        EldoriaScanlines(
-            modifier = Modifier.fillMaxSize(),
-            alpha = 0.03f
         )
 
         // ── resumen final del descenso ───────────────────────────────────────
@@ -360,6 +377,7 @@ private fun ExpeditionMapRow(
     currentRoomId: Int,
     availableIds: List<Int>,
     lit: Boolean,
+    dungeonId: Int,
     onEnter: (Int) -> Unit
 ) {
     val accent = expeditionDepthAccent(depthIndex)
@@ -415,7 +433,9 @@ private fun ExpeditionMapRow(
                     label = room.label,
                     state = state,
                     onClick = { onEnter(room.id) },
-                    testTag = "expedition_room_${room.id}"
+                    testTag = "expedition_room_${room.id}",
+                    dungeonId = dungeonId,
+                    roomId = room.id
                 )
             }
         }

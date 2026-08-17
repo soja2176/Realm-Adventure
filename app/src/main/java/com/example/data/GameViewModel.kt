@@ -35,6 +35,7 @@ import com.example.data.content.TalentContext
 import com.example.data.content.TalentKind
 import com.example.data.content.TalentLoadout
 import com.example.data.engine.EldoriaHost
+import com.example.data.model.ExpeditionState
 import com.example.data.engine.EldoriaSystemsController
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -365,6 +366,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     private val _isAutoNavigation = MutableStateFlow(false)
     val isAutoNavigation: StateFlow<Boolean> = _isAutoNavigation.asStateFlow()
 
+    /** Marcha automática DENTRO del descenso (el mapa de salas, no el del mundo). */
+    private val _isAutoExpedition = MutableStateFlow(false)
+    val isAutoExpedition: StateFlow<Boolean> = _isAutoExpedition.asStateFlow()
+
     val allCharactersState: StateFlow<List<GameProgress>> = repository.allCharactersFlow
         .stateIn(
             scope = viewModelScope,
@@ -430,6 +435,50 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         )
     }
 
+    /**
+     * Marcha automática del descenso. Recorre el mapa de salas sola y deja que el
+     * combate automático resuelva lo que salga; se para cuando hay que decidir
+     * algo (una bendición, un evento) y sigue en cuanto elijas.
+     */
+    fun toggleAutoExpedition() {
+        val run = systems.expedition.value
+        if (!_isAutoExpedition.value && (!run.active || run.finished)) {
+            systems.showToast("🧭 No hay ningún descenso en curso.", "IRON")
+            return
+        }
+        _isAutoExpedition.value = !_isAutoExpedition.value
+        if (_isAutoExpedition.value) {
+            // Sin piloto de combate la marcha se quedaría clavada en la primera
+            // sala de pelea, así que van juntos.
+            if (!_isAutoCombat.value) _isAutoCombat.value = true
+            systems.showToast("🧭 Marcha automática: el descenso se recorre solo.", "GOLD")
+        } else {
+            systems.showToast("🧭 Marcha automática detenida.", "IRON")
+        }
+    }
+
+    /**
+     * Siguiente sala del piloto. Con la antorcha corta o el héroe tocado busca
+     * hoguera; si no, evita al jefe mientras queden otras salas, porque entrar al
+     * jefe es una decisión y no un paso más del camino.
+     */
+    private fun pickAutoExpeditionRoom(run: ExpeditionState): Int? {
+        val options = run.availableRoomIds.mapNotNull { id -> run.rooms.firstOrNull { it.id == id } }
+        if (options.isEmpty()) return null
+
+        val progress = _progressState.value
+        val hpPct = if (progress != null && progress.maxHp > 0) {
+            run.persistentHp.toDouble() / progress.maxHp
+        } else 1.0
+
+        if (run.torch <= 30 || hpPct < 0.45) {
+            options.firstOrNull { it.kind == EldoriaExpeditions.KIND_CAMPFIRE }?.let { return it.id }
+        }
+
+        val notBoss = options.filter { it.kind != EldoriaExpeditions.KIND_BOSS }
+        return (if (notBoss.isNotEmpty()) notBoss else options).random().id
+    }
+
     fun toggleAutoNavigation() {
         _isAutoNavigation.value = !_isAutoNavigation.value
         if (_isAutoNavigation.value && _screenState.value == GameScreen.WORLD_MAP && !isExploring && !_combatState.value.active) {
@@ -447,14 +496,30 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
     }
 
     /**
-     * E13 — El piloto automático se apaga en las salas serias de una expedición
-     * (ÉLITE y JEFE): ahí la ventana de reacción y las órdenes de la bestia deciden
-     * el combate, y dejarlo en manos de la IA sería regalar la run.
+     * El piloto automático ya no se apaga en las salas serias del descenso.
+     *
+     * Antes se bloqueaba en ÉLITE y JEFE porque el piloto no sabía responder a la
+     * ventana de reacción y se comía todos los golpes enteros. Ahora la resuelve
+     * él (ver [autoResolveReaction]), así que puede llevar la run completa. Se
+     * queda como gancho por si alguna sala futura tiene que ganarse a mano.
      */
-    private fun isAutoCombatBlocked(state: CombatState): Boolean {
-        if (!state.inExpedition) return false
-        val enemy = state.enemy ?: return false
-        return enemy.isBoss || enemy.rarity == "CHAMPION" || enemy.rarity == "UNIVERSAL"
+    private fun isAutoCombatBlocked(state: CombatState): Boolean = false
+
+    /**
+     * Parada automática. A propósito NO es perfecta: un piloto que desviase
+     * siempre haría del combate manual una tontería. Reparte paradas buenas la
+     * mayoría de las veces, alguna perfecta y algún fallo; la asistencia de
+     * reacción de los ajustes le mejora la mano, igual que al jugador.
+     */
+    private fun autoResolveReaction() {
+        val assisted = systems.settings.value.reactionAssist
+        val roll = Random.nextInt(100)
+        val quality = when {
+            roll < (if (assisted) 30 else 20) -> "PERFECTO"
+            roll < (if (assisted) 85 else 75) -> "BUENO"
+            else -> "FALLO"
+        }
+        executeReaction(quality)
     }
 
     /**
@@ -782,23 +847,21 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
         val blueprint = EldoriaExpeditions.blueprint(dungeonId)
         val levelReq = blueprint?.levelReq ?: 1
-        val heroLevel = progress.charLevel.coerceAtLeast(1)
         val safeDepth = depth.coerceAtLeast(0)
-        val monsterLevel = maxOf(
-            levelReq + safeDepth * 2,
-            heroLevel + safeDepth + (if (isBoss) 3 else 0)
-        ).coerceAtLeast(1)
+
+        // Planta equivalente del descenso, para poder usar la MISMA vara que el
+        // calabozo clásico. La profundidad y el tipo de sala deciden el escalón.
+        val stage = when {
+            isBoss -> 10
+            isElite -> (4 + safeDepth * 2).coerceIn(4, 9)
+            else -> (2 + safeDepth * 2).coerceIn(1, 8)
+        }
+        val monsterLevel = EldoriaDungeonBalance.enemyLevel(levelReq, stage)
 
         val rarity = when {
             isBoss -> "UNIVERSAL"
             isElite -> "CHAMPION"
             else -> "ELITE"
-        }
-
-        val (hpMult, atkMult, defMult) = when (rarity) {
-            "UNIVERSAL" -> Triple(3.8, 1.8, 1.55)
-            "CHAMPION" -> Triple(1.8, 1.35, 1.25)
-            else -> Triple(1.3, 1.15, 1.15)
         }
 
         val deco = systems.decorateEnemy(
@@ -808,19 +871,63 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             isBoss = isBoss
         )
 
-        val baseHp = 65.0 + (monsterLevel * 42.0) + (monsterLevel * monsterLevel * 0.95)
-        val baseAtk = 9.0 + (monsterLevel * 3.8) + (monsterLevel * 0.1)
-        val baseDef = 4.0 + (monsterLevel * 2.0)
+        // BALANCE ABSOLUTO. El descenso llevaba su propia fórmula por nivel
+        // (`9 + nivel * 3.8` de ataque) que no miraba la vida REAL del héroe: con
+        // el equipo bien montado el enemigo pegaba una milésima de tu barra y el
+        // calabozo se volvía un paseo. `buildEnemy` es la vara que ya usa el
+        // calabozo clásico y acota el golpe entre el 5 % y el 30 % de tu vida.
+        val built = EldoriaDungeonBalance.buildEnemy(
+            dungeonLevelReq = levelReq,
+            stage = stage,
+            actualHeroHp = progress.maxHp.coerceAtLeast(1),
+            hpMult = deco.hpMult.toDouble(),
+            atkMult = deco.atkMult.toDouble(),
+            defMult = deco.defMult.toDouble()
+        )
+        val enemyHp = built.hp.coerceAtLeast(1)
+        val enemyAtk = built.attack.coerceAtLeast(1)
+        val enemyDef = built.defense.coerceAtLeast(0)
 
-        val enemyHp = (baseHp * hpMult * (if (isBoss) 1.6 else 1.1) * deco.hpMult).toInt().coerceAtLeast(1)
-        val enemyAtk = (baseAtk * atkMult * (if (isBoss) 1.3 else 1.05) * deco.atkMult).toInt().coerceAtLeast(1)
-        val enemyDef = (baseDef * defMult * (if (isBoss) 1.25 else 1.05) * deco.defMult).toInt().coerceAtLeast(0)
+        // Identidad temática del destino. Cada calabozo anuncia una raza en su
+        // ficha del vestíbulo ("Goblins", "Naga", "Máquinas") y tiene su propio
+        // elenco de nueve subjefes con lámina propia; el descenso, en cambio,
+        // estaba sacando fauna aleatoria del REINO, así que en las Cavernas del
+        // Clan Goblin salían ciervos espectrales. Los 16 calabozos usan su
+        // elenco; el Abismo (101-104), que no tiene, se queda con el bestiario.
+        val roster = DUNGEONS_LIST.firstOrNull { it.id == dungeonId }
+        val themedRawName: String? = when {
+            roster == null -> null
+            isBoss -> roster.finalBossName
+            roster.subBosses.isEmpty() -> null
+            else -> {
+                val pool = roster.subBosses
+                val index = if (isElite) {
+                    // Las salas de élite tiran del tramo final del elenco.
+                    (pool.size / 2) + Random.nextInt((pool.size + 1) / 2)
+                } else {
+                    Random.nextInt(pool.size)
+                }
+                pool[index.coerceIn(0, pool.lastIndex)]
+            }
+        }
 
-        val displayName = when {
-            isBoss && !bossName.isNullOrBlank() -> "👑 $bossName"
-            isBoss -> "👑 ${deco.displayName}"
-            isElite -> "⭐ ${deco.displayName}"
+        val rawName = when {
+            isBoss && !bossName.isNullOrBlank() -> bossName
+            themedRawName != null -> themedRawName
             else -> deco.displayName
+        }
+        val displayName = when {
+            isBoss -> "👑 $rawName"
+            isElite -> "⭐ $rawName"
+            else -> rawName
+        }
+
+        // El artKey NUNCA se pasaba aquí: la UI tenía que adivinar el retrato a
+        // partir del nombre ya decorado y acababa enseñando otra criatura.
+        val enemyArtKey = if (themedRawName != null) {
+            EldoriaArt.dungeonKey(dungeonId, rawName, isBoss).ifBlank { deco.artKey }
+        } else {
+            deco.artKey
         }
 
         val enemy = Combatant(
@@ -834,7 +941,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             level = monsterLevel,
             isBoss = isBoss,
             rarity = rarity,
-            pet = generateEnemyPetIfNeeded(monsterLevel, rarity, isBoss)
+            pet = generateEnemyPetIfNeeded(monsterLevel, rarity, isBoss),
+            artKey = enemyArtKey
         )
 
         val maxHp = progress.maxHp.coerceAtLeast(1)
@@ -857,7 +965,10 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             victory = null,
             enemyArchetype = deco.archetype,
             enemyAffixes = deco.affixes,
-            enemySpeciesId = deco.speciesId,
+            // Con elenco temático no se registra especie: apuntar en el bestiario
+            // una criatura del reino que el jugador no ha visto es mentirle. El
+            // botín no depende de esto (cae al tramo por nivel).
+            enemySpeciesId = if (themedRawName != null) "" else deco.speciesId,
             petCooldown = 0,
             momentum = 0,
             inExpedition = true,
@@ -914,6 +1025,51 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
                         performAutoCombatTurn(currentState)
                     }
                 }
+            }
+        }
+
+        // Ventana de reacción en automático: sin esto el piloto se comía entero
+        // cada golpe telegrafiado y no podía con élites ni jefes.
+        viewModelScope.launch {
+            _combatState.collect { state ->
+                if (state.active && state.reactionWindow && state.victory == null && _isAutoCombat.value) {
+                    // Se toma su tiempo dentro de la ventana: reaccionar al
+                    // instante delataría que no hay nadie pulsando.
+                    kotlinx.coroutines.delay(reactionWindowMillis() / 2)
+                    val now = _combatState.value
+                    if (now.active && now.reactionWindow && now.victory == null && _isAutoCombat.value) {
+                        autoResolveReaction()
+                    }
+                }
+            }
+        }
+
+        // Marcha automática del descenso: entra sola de sala en sala.
+        viewModelScope.launch {
+            while (true) {
+                if (!_isAutoExpedition.value) {
+                    kotlinx.coroutines.delay(1200)
+                    continue
+                }
+                kotlinx.coroutines.delay(1100)
+                if (!_isAutoExpedition.value) continue
+
+                val run = systems.expedition.value
+                if (!run.active || run.finished) {
+                    if (_isAutoExpedition.value) {
+                        _isAutoExpedition.value = false
+                        systems.showToast("🧭 Marcha automática detenida: el descenso ha terminado.", "IRON")
+                    }
+                    continue
+                }
+                // El combate y las ofertas mandan: la marcha espera, no decide por
+                // ti una bendición permanente ni interrumpe una pelea.
+                if (_combatState.value.active) continue
+                if (systems.expeditionOffer.value != null) continue
+                if (_screenState.value != GameScreen.EXPEDITION) continue
+
+                val next = pickAutoExpeditionRoom(run) ?: continue
+                systems.enterRoom(next)
             }
         }
 
@@ -2953,6 +3109,15 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         else -> "💥"
     }
 
+    /** Ímpetu que cuesta una parada perfecta. Sin él, el tiempo perfecto sólo bloquea. */
+    private val PERFECT_PARRY_COST = 30
+
+    /**
+     * Lo que deja pasar un bloqueo normal. Antes era 0.5 —la mitad del golpe— y
+     * con una banda de acierto ancha eso volvía el combate inofensivo.
+     */
+    private val GOOD_PARRY_MITIGATION = 0.65f
+
     /** Duración de la ventana de reacción; la asistencia la alarga a 1600 ms. */
     private fun reactionWindowMillis(): Long =
         if (systems.settings.value.reactionAssist) 1600L else 1100L
@@ -3032,22 +3197,41 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         val tctx = talentContextOf(state, progress)
         val momentumMult = 1.0 + talents.value(TalentKind.IMPETU_GANANCIA, tctx)
 
-        when (grade) {
+        // La parada perfecta SE PAGA. Antes era gratis e ilimitada: bastaba con
+        // acertar el aro para anular el golpe y contraatacar todos los turnos, y
+        // el combate dejaba de tener riesgo. Ahora el ímpetu es su munición, así
+        // que compite con el daño que ese mismo ímpetu te da y no se puede
+        // encadenar indefinidamente.
+        val perfectAffordable = state.momentum >= PERFECT_PARRY_COST
+        val effectiveGrade = if (grade == "PERFECTO" && !perfectAffordable) "BUENO_SIN_IMPETU" else grade
+
+        when (effectiveGrade) {
             "PERFECTO" -> {
                 pendingReactionMitigation = 0f
                 pendingReactionCounter = true
                 counterDealt = counterAttackDamage(progress, enemy, state.momentum)
                 enemy.currentHp = maxOf(0, enemy.currentHp - counterDealt)
-                val gained = (25 * momentumMult).toInt()
-                momentum = (momentum + gained).coerceAtMost(100)
-                log = "🛡️ ¡PARADA PERFECTA! Desvías ${intentLabel(pendingEnemyMove).lowercase()} y contraatacas por $counterDealt de daño. (+$gained de ímpetu)"
+                momentum = (momentum - PERFECT_PARRY_COST).coerceAtLeast(0)
+                log = "🛡️ ¡PARADA PERFECTA! Desvías ${intentLabel(pendingEnemyMove).lowercase()} y " +
+                    "contraatacas por $counterDealt de daño. (−$PERFECT_PARRY_COST de ímpetu)"
                 SoundManager.playCriticalHit()
             }
+            "BUENO_SIN_IMPETU" -> {
+                // El tiempo era perfecto pero no había con qué pagarlo: se queda
+                // en bloqueo y el aviso explica por qué, que si no parece un fallo
+                // del juego.
+                pendingReactionMitigation = GOOD_PARRY_MITIGATION
+                val gained = (14 * momentumMult).toInt()
+                momentum = (momentum + gained).coerceAtMost(100)
+                log = "🛡️ Tiempo perfecto, pero te faltó ímpetu para la parada " +
+                    "(necesitas $PERFECT_PARRY_COST). Bloqueas y ganas +$gained de ímpetu."
+                SoundManager.playSwordSlash()
+            }
             "BUENO" -> {
-                pendingReactionMitigation = 0.5f
+                pendingReactionMitigation = GOOD_PARRY_MITIGATION
                 val gained = (10 * momentumMult).toInt()
                 momentum = (momentum + gained).coerceAtMost(100)
-                log = "🛡️ Bloqueas a tiempo: el golpe pierde la mitad de su fuerza. (+$gained de ímpetu)"
+                log = "🛡️ Bloqueas a tiempo: el golpe pierde fuerza. (+$gained de ímpetu)"
                 SoundManager.playSwordSlash()
             }
             else -> {
@@ -3261,8 +3445,13 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             fun resolve(multiplier: Double, floorHp: Double = 0.0, pen: Double = armorPen): Int {
                 val raw = ((baseDmg * multiplier * enrageMult).toInt() + (progress.maxHp * floorHp).toInt())
                 val hit = EldoriaBalance.mitigate(raw, playerDefense, enemy.level, pen)
-                // Techo: ningún golpe se lleva más de lo que su rareza permite.
-                return EldoriaBalance.capHit((hit * talentGuard * treeGuard * aegisGuard).toInt(), progress.maxHp, enemy.rarity)
+                val guarded = (hit * talentGuard * treeGuard * aegisGuard).toInt()
+                // Techo y suelo: ningún golpe se lleva más de lo que su rareza
+                // permite, y ninguno se queda en cosquillas por mucha armadura
+                // que lleves encima. Esquivar y la parada perfecta siguen
+                // anulándolo del todo: eso se aplica después.
+                val capped = EldoriaBalance.capHit(guarded, progress.maxHp, enemy.rarity)
+                return EldoriaBalance.floorHit(capped, progress.maxHp, enemy.rarity)
                     .coerceAtLeast(1)
             }
 
@@ -4393,7 +4582,12 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
         return baseRegen + itemRegen
     }
 
-    private fun generateProceduralItem(level: Int, isBoss: Boolean, rarityPreset: String? = null): Item {
+    private fun generateProceduralItem(
+        level: Int,
+        isBoss: Boolean,
+        rarityPreset: String? = null,
+        typePreset: String? = null
+    ): Item {
         val r = Random.Default
         val rarity = rarityPreset?.uppercase() ?: if (isBoss) {
             "UNIVERSAL"
@@ -4406,7 +4600,8 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
             }
         }
 
-        val type = listOf("HELMET", "WINGS", "WEAPON", "SHIELD", "ARMOR", "GLOVES", "BOOTS", "RING", "EARRING", "RELIC").random()
+        val type = typePreset?.uppercase()
+            ?: listOf("HELMET", "WINGS", "WEAPON", "SHIELD", "ARMOR", "GLOVES", "BOOTS", "RING", "EARRING", "RELIC").random()
         val prefix = when (rarity) {
             "UNIVERSAL" -> listOf("Celestial", "Infinito", "Omnipresente", "Sideral", "Cosmológico").random()
             "ARCANO" -> listOf("Secreto", "Esotérico", "Místico", "Inescrutable", "Eldritch").random()
@@ -5612,6 +5807,288 @@ class GameViewModel(private val repository: GameProgressRepository) : ViewModel(
 
     fun resetDailyCycle() {
         _dailyRewardState.value = DailyRewardState()
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
+    //  CONSOLA DEL ARCANISTA — herramientas de desarrollo
+    //
+    //  Todo lo de aquí abajo salta el balance a propósito: se desbloquea con
+    //  el código de la pantalla de ajustes y escribe en la misma fila de Room
+    //  que el juego normal, así que cada cambio se guarda y sobrevive al
+    //  cierre de la app. Nada de esto se llama desde el juego real.
+    // ═══════════════════════════════════════════════════════════════════════
+
+    /** Los diez huecos de equipo que el héroe puede llevar, en orden de muñeco. */
+    val devEquipSlots: List<String> = listOf(
+        "WEAPON", "SHIELD", "HELMET", "ARMOR", "GLOVES",
+        "BOOTS", "RING", "EARRING", "WINGS", "RELIC"
+    )
+
+    /** Rarezas del generador, de peor a mejor. */
+    val devRarities: List<String> = listOf("COMÚN", "RARO", "ÉPICO", "LEGENDARIO", "ARCANO", "UNIVERSAL")
+
+    /**
+     * Fija el nivel del héroe aplicando (o revirtiendo) las mismas ganancias que
+     * daría subir peleando: +1 a cada atributo, +5 puntos de stat y +1 de talento
+     * por nivel. Así el personaje queda idéntico a uno que hubiese llegado ahí
+     * jugando, y no con un nivel alto y los atributos de novato.
+     */
+    fun devSetLevel(target: Int) {
+        val progress = _progressState.value ?: return
+        val level = target.coerceIn(1, 500)
+        val delta = level - progress.charLevel
+        if (delta == 0) {
+            showNotification("El héroe ya está en el nivel $level.")
+            return
+        }
+        viewModelScope.launch {
+            val updated = progress.copy(
+                charLevel = level,
+                charExp = 0,
+                statStr = (progress.statStr + delta).coerceAtLeast(1),
+                statDex = (progress.statDex + delta).coerceAtLeast(1),
+                statInt = (progress.statInt + delta).coerceAtLeast(1),
+                statCon = (progress.statCon + delta).coerceAtLeast(1),
+                statPointsAvailable = (progress.statPointsAvailable + delta * 5).coerceAtLeast(0),
+                talentPointsAvailable = (progress.talentPointsAvailable + delta).coerceAtLeast(0)
+            )
+            val synced = syncMaxHpAndMp(updated)
+            saveProgressSynced(synced.copy(currentHp = synced.maxHp, currentMp = synced.maxMp))
+            showNotification("⚗️ Nivel fijado en $level (${if (delta > 0) "+$delta" else "$delta"}).")
+        }
+    }
+
+    fun devAddExp(amount: Int) {
+        val progress = _progressState.value ?: return
+        if (amount == 0) return
+        viewModelScope.launch {
+            val updated = progress.copy(charExp = (progress.charExp + amount).coerceAtLeast(0))
+            saveProgressSynced(updated)
+            showNotification("⚗️ EXP: ${updated.charExp} / ${getRequiredExpForLevel(updated.charLevel)}.")
+        }
+    }
+
+    fun devSetGold(amount: Int) {
+        val progress = _progressState.value ?: return
+        viewModelScope.launch {
+            val updated = progress.copy(charGold = amount.coerceIn(0, Int.MAX_VALUE))
+            saveProgressSynced(updated)
+            showNotification("⚗️ Oro fijado en ${formatGameNumber(updated.charGold)}.")
+        }
+    }
+
+    fun devAddGold(amount: Int) {
+        val progress = _progressState.value ?: return
+        val total = (progress.charGold.toLong() + amount).coerceIn(0L, Int.MAX_VALUE.toLong()).toInt()
+        devSetGold(total)
+    }
+
+    /** Escribe un atributo base directamente. El HP/MP máximo se recalcula solo. */
+    fun devSetAttribute(stat: String, value: Int) {
+        val progress = _progressState.value ?: return
+        val v = value.coerceIn(1, 9999)
+        viewModelScope.launch {
+            val updated = when (stat.uppercase()) {
+                "STR" -> progress.copy(statStr = v)
+                "DEX" -> progress.copy(statDex = v)
+                "INT" -> progress.copy(statInt = v)
+                "CON" -> progress.copy(statCon = v)
+                else -> return@launch
+            }
+            saveProgressSynced(syncMaxHpAndMp(updated))
+            showNotification("⚗️ ${stat.uppercase()} = $v.")
+        }
+    }
+
+    fun devGrantPoints(statPoints: Int, talentPoints: Int) {
+        val progress = _progressState.value ?: return
+        viewModelScope.launch {
+            val updated = progress.copy(
+                statPointsAvailable = (progress.statPointsAvailable + statPoints).coerceAtLeast(0),
+                talentPointsAvailable = (progress.talentPointsAvailable + talentPoints).coerceAtLeast(0)
+            )
+            saveProgressSynced(updated)
+            showNotification("⚗️ Puntos: ${updated.statPointsAvailable} de atributo · ${updated.talentPointsAvailable} de talento.")
+        }
+    }
+
+    fun devFullRestore() {
+        val progress = _progressState.value ?: return
+        viewModelScope.launch {
+            val synced = syncMaxHpAndMp(progress)
+            saveProgressSynced(synced.copy(currentHp = synced.maxHp, currentMp = synced.maxMp))
+            showNotification("⚗️ Vida y maná al máximo (${synced.maxHp} / ${synced.maxMp}).")
+        }
+    }
+
+    /**
+     * Mete el objeto en el hueco que le toca sin pasar por [equipItem]: esa exige
+     * `itemLevel <= charLevel` y aquí forjamos a propósito por encima del nivel.
+     * Lo que hubiera puesto vuelve al inventario, nunca se destruye.
+     */
+    private fun devEquipInto(progress: GameProgress, item: Item, inventory: MutableList<Item>): GameProgress {
+        val slotJson = GameJsonParser.toJson(item)
+        return when (item.type.uppercase()) {
+            "WEAPON" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedWeaponJson)?.let { inventory.add(it) }
+                progress.copy(equippedWeaponJson = slotJson)
+            }
+            "SHIELD" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedShieldJson)?.let { inventory.add(it) }
+                progress.copy(equippedShieldJson = slotJson)
+            }
+            "HELMET" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedHelmetJson)?.let { inventory.add(it) }
+                progress.copy(equippedHelmetJson = slotJson)
+            }
+            "ARMOR" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedArmorJson)?.let { inventory.add(it) }
+                progress.copy(equippedArmorJson = slotJson)
+            }
+            "GLOVES" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedGlovesJson)?.let { inventory.add(it) }
+                progress.copy(equippedGlovesJson = slotJson)
+            }
+            "BOOTS" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedBootsJson)?.let { inventory.add(it) }
+                progress.copy(equippedBootsJson = slotJson)
+            }
+            "RING" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedRingJson)?.let { inventory.add(it) }
+                progress.copy(equippedRingJson = slotJson)
+            }
+            "EARRING" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedEarringJson)?.let { inventory.add(it) }
+                progress.copy(equippedEarringJson = slotJson)
+            }
+            "WINGS" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedWingsJson)?.let { inventory.add(it) }
+                progress.copy(equippedWingsJson = slotJson)
+            }
+            "RELIC" -> {
+                GameJsonParser.fromJson<Item>(progress.equippedRelicJson)?.let { inventory.add(it) }
+                progress.copy(equippedRelicJson = slotJson)
+            }
+            else -> progress
+        }
+    }
+
+    /**
+     * Forja equipo a medida con el mismo generador que suelta el botín, pero
+     * eligiendo tipo, rareza y nivel en vez de dejarlo al azar.
+     */
+    fun devForgeItem(type: String, rarity: String, itemLevel: Int, count: Int = 1, equip: Boolean = false) {
+        val progress = _progressState.value ?: return
+        val qty = count.coerceIn(1, 20)
+        val lvl = itemLevel.coerceIn(1, 500)
+        viewModelScope.launch {
+            val inventory = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+            var updated = progress
+            var lastName = ""
+            repeat(qty) {
+                val forged = generateProceduralItem(
+                    level = lvl,
+                    isBoss = false,
+                    rarityPreset = rarity,
+                    typePreset = type
+                )
+                lastName = forged.name
+                // Sólo la última copia se equipa; el resto va al zurrón.
+                if (equip && it == qty - 1) {
+                    updated = devEquipInto(updated, forged, inventory)
+                } else {
+                    inventory.add(forged)
+                }
+            }
+            val finalProgress = syncMaxHpAndMp(
+                updated.copy(inventoryJson = GameJsonParser.listToJson(inventory.toList()))
+            )
+            saveProgressSynced(finalProgress)
+            SoundManager.playButtonClick()
+            showNotification(
+                if (equip) "⚗️ Forjado y equipado: $lastName (niv. $lvl, $rarity)."
+                else "⚗️ Forjadas $qty piezas: $lastName (niv. $lvl, $rarity)."
+            )
+        }
+    }
+
+    /** Un objeto por cada uno de los diez huecos, todos puestos de una vez. */
+    fun devForgeFullSet(rarity: String, itemLevel: Int) {
+        val progress = _progressState.value ?: return
+        val lvl = itemLevel.coerceIn(1, 500)
+        viewModelScope.launch {
+            val inventory = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+            var updated = progress
+            devEquipSlots.forEach { slot ->
+                val forged = generateProceduralItem(
+                    level = lvl,
+                    isBoss = false,
+                    rarityPreset = rarity,
+                    typePreset = slot
+                )
+                updated = devEquipInto(updated, forged, inventory)
+            }
+            val finalProgress = syncMaxHpAndMp(
+                updated.copy(inventoryJson = GameJsonParser.listToJson(inventory.toList()))
+            )
+            saveProgressSynced(finalProgress.copy(currentHp = finalProgress.maxHp, currentMp = finalProgress.maxMp))
+            SoundManager.playVictory()
+            showNotification("⚗️ Equipo completo $rarity de nivel $lvl puesto en los diez huecos.")
+        }
+    }
+
+    /** Frascos del catálogo, gratis y sin mirar el nivel de desbloqueo. */
+    fun devGrantPotions(potionId: String, quantity: Int) {
+        val progress = _progressState.value ?: return
+        val spec = EldoriaPotions.spec(potionId) ?: return
+        val qty = quantity.coerceIn(1, 99)
+        viewModelScope.launch {
+            val inventory = GameJsonParser.listFromJson<Item>(progress.inventoryJson).toMutableList()
+            val now = System.currentTimeMillis()
+            repeat(qty) { i ->
+                inventory.add(
+                    Item(
+                        // Mismo formato de id que `buyPotion`: el prefijo del catálogo
+                        // es lo que `usePotionCombat` mira para saber qué frasco es.
+                        id = "${spec.id}_${now}_${i}_${Random.nextInt(1000)}",
+                        name = spec.name,
+                        type = "POTION",
+                        rarity = spec.rarity,
+                        description = spec.description,
+                        itemLevel = spec.unlockLevel,
+                        imageResName = spec.artKey
+                    )
+                )
+            }
+            saveProgressSynced(progress.copy(inventoryJson = GameJsonParser.listToJson(inventory.toList())))
+            showNotification("⚗️ $qty × ${spec.name} al zurrón.")
+        }
+    }
+
+    /** Todos los materiales del catálogo a la vez, para no tocarlos de uno en uno. */
+    fun devGrantAllMaterials(quantity: Int) {
+        val qty = quantity.coerceIn(1, 999)
+        systems.grantMaterials(
+            com.example.data.content.EldoriaMaterials.ALL.associate { it.id to qty }
+        )
+    }
+
+    fun devGrantTorches(quantity: Int) {
+        systems.refillTorch(quantity.coerceIn(1, 99))
+    }
+
+    /** Abre los dieciséis calabozos del mapa sin tener que limpiarlos en orden. */
+    fun devUnlockAllDungeons() {
+        val progress = _progressState.value ?: return
+        viewModelScope.launch {
+            saveProgressSynced(progress.copy(highestUnlockedDungeon = 16))
+            showNotification("⚗️ Todos los calabozos desbloqueados.")
+        }
+    }
+
+    /** Enciende o apaga la consola. El estado vive en los ajustes de la partida. */
+    fun devSetUnlocked(unlocked: Boolean) {
+        systems.updateSettings(systems.settings.value.copy(devUnlocked = unlocked))
     }
 }
 
